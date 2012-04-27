@@ -98,6 +98,7 @@
 `define         EP1             5'd17
 `define         EP2             5'd18
 `define         EP3             5'd19
+`define         AXC             5'd20
 `define		MFTICK	7'd56
 `define		MFEPC	7'd57
 `define		MFTBA	7'd58
@@ -115,7 +116,7 @@
 `define 	ANDC	7'd11
 `define		NAND	7'd12
 `define		NOR		7'd13
-`define 	ENOR	7'd14
+`define 	XNOR	7'd14
 `define		MIN		7'd20
 `define		MAX		7'd21
 `define		MULU	7'd24
@@ -154,10 +155,10 @@
 `define 	SLE		7'd97
 `define 	SGT		7'd98
 `define 	SGE		7'd99
-`define 	SLO		7'd100
-`define 	SLS		7'd101
-`define 	SHI		7'd102
-`define 	SHS		7'd103
+`define 	SLTU	7'd100
+`define 	SLEU	7'd101
+`define 	SGTU	7'd102
+`define 	SGEU	7'd103
 `define 	SEQ		7'd104
 `define 	SNE		7'd105
 
@@ -398,6 +399,7 @@ reg rd_en;
 input [31:0] rd_data;
 input rd_empty;
 
+reg resetA;
 reg im;				// interrupt mask
 reg [1:0] rm;		// fp rounding mode
 reg [41:0] dIR;
@@ -418,7 +420,7 @@ reg [63:0] ea;
 reg [63:0] iadr_o;
 reg [31:0] idat;
 reg [4:0] cstate;
-reg wr_icache;
+//reg wr_icache;
 reg dccyc;
 wire [63:0] cdat;
 reg [63:0] wr_addr;
@@ -549,17 +551,18 @@ end
 //-----------------------------------------------------------------------------
 // Instruction Cache
 // 8kB
+// 
 //-----------------------------------------------------------------------------
 reg icaccess;
+wire wr_icache = !rd_empty & icaccess;
 
 Raptor64_icache_ram_x32 u1
 (
 	.clk(clk),
-	.icaccess(icaccess),
-	.ack_i(ack_i),
-	.adr_i(adr_o[12:0]),
-	.dat_i(dat_i),
-	.pc(ppc),
+	.wr(wr_icache),
+	.adr_i(iadr_o[12:0]),
+	.dat_i(rd_data),
+	.pc(pc_axc),
 	.insn(insn)
 );
 
@@ -574,18 +577,18 @@ initial begin
 end
 
 wire [64:13] tgout;
-assign tgout = {tvalid[ppc[12:6]],tmem[ppc[12:6]]};
+assign tgout = {tvalid[pc_axc[12:6]],tmem[pc_axc[12:6]]};
 assign ihit = (tgout=={1'b1,ppc[63:13]});
 
 
 //-----------------------------------------------------------------------------
 // Data Cache
+// No-allocate on write
 //-----------------------------------------------------------------------------
 reg dcaccess;
 wire dhit;
-wire [12:0] dtign;
+wire [13:0] dtign;
 wire [64:14] dtgout;
-reg dwe_o;
 reg wrhit;
 reg [7:0] dsel_o;
 reg [63:0] dadr_o;
@@ -609,7 +612,7 @@ syncRam512x64_1rw1r u11
 (
 	.wrst(1'b0),
 	.wclk(clk),
-	.wce(dcaccess && dadr_o[4:3]==2'b11),
+	.wce(dadr_o[4:2]==3'b111),
 	.we(wr_dcache),
 	.wadr(dadr_o[13:5]),
 	.i({14'h3FFF,dadr_o[63:14]}),
@@ -628,7 +631,6 @@ assign dhit = (dtgout=={1'b1,pea[63:14]});
 //-----------------------------------------------------------------------------
 
 reg [64:0] xData;
-wire isCacheElement = adr_o < 64'hFFFF0000_00000000;
 wire xisCacheElement = xData[63:52] != 12'hFFD;
 reg m1IsCacheElement;
 
@@ -1032,6 +1034,7 @@ case(xOpcode)
 		`EP1:			xData = EP[1];
 		`EP2:			xData = EP[2];
 		`EP3:			xData = EP[3];
+		`AXC:			xData = xAXC;
 		default:	xData = 65'd0;
 		endcase
 	`MFTICK:	xData = tick;
@@ -1054,17 +1057,17 @@ case(xOpcode)
 	`SLE:	xData = lt|eq;
 	`SGT:	xData = !(lt|eq);
 	`SGE:	xData = !lt;
-	`SLO:	xData = ltu;
-	`SLS:	xData = ltu|eq;
-	`SHI:	xData = !(ltu|eq);
-	`SHS:	xData = !ltu;
+	`SLTU:	xData = ltu;
+	`SLEU:	xData = ltu|eq;
+	`SGTU:	xData = !(ltu|eq);
+	`SGEU:	xData = !ltu;
 	`AND:	xData = a & b;
 	`OR:	xData = a | b;
 	`XOR:	xData = a ^ b;
 	`ANDC:	xData = a & ~b;
 	`NAND:	xData = ~(a & b);
 	`NOR:	xData = ~(a | b);
-	`ENOR:	xData = ~(a ^ b);
+	`XNOR:	xData = ~(a ^ b);
 	`MIN:	xData = lt ? a : b;
 	`MAX:	xData = lt ? b : a;
 	`MOVZ:	xData = b;
@@ -1215,8 +1218,9 @@ wire m2needWritePort = m2Opcode==`SW||m2Opcode==`SWC;
 wire m1needCmdPort = m1IsLoad && !m1IsCacheElement;
 wire m2needCmdPort = m2Opcode==`SH||m2Opcode==`SC||m2Opcode==`SB;
 wire m3needCmdPort = m3Opcode==`SW || m3Opcode==`SWC;
-wire m3needReadPort = m3IsLoad;
-wire m4needReadPort = m4Opcode==`LW || m4Opcode==`LWR;
+wire m2needReadPort = m2IsLoad;
+wire m3needReadPort = m3Opcode==`LW || m3Opcode==`LWR;
+//wire m4needReadPort = m4Opcode==`LW || m4Opcode==`LWR;
 
 // Stall for the write port
 wire StallM1 = (m1needWritePort && m2needWritePort) ||	// Write port collision
@@ -1226,14 +1230,14 @@ wire StallM1 = (m1needWritePort && m2needWritePort) ||	// Write port collision
 	icaccess || dcaccess								
 	;
 // M3 is using the command port
-wire StallM2 = m2needCmdPort & m3needCmdPort;
-wire StallM3 = m3needReadPort & m4needReadPort;
-wire advanceT = 1'b1;
+wire StallM2 = (m2needCmdPort & m3needCmdPort) | (m3needReadPort|icaccess|dcaccess);
+wire StallM3 = m3needReadPort & (icaccess|dcaccess);
+wire advanceT = !resetA;
 wire advanceW = advanceT;
-wire advanceM4 = advanceW & (m4needReadPort ? !rd_empty : 1'b1);
+wire advanceM4 = advanceW & (m4IsLoad ? !rd_empty : 1'b1);
 wire advanceM3 = advanceM4 &
 					(m3IsIO ? ack_i : 1'b1) &
-					(m3needReadPort ? !rd_empty : 1'b1) &
+					(m3IsLoad ? !rd_empty : 1'b1) &
 					!StallM3
 					;
 wire advanceM2 = advanceM3 & !StallM2;
@@ -1255,7 +1259,7 @@ wire advanceR = advanceX & !xStall & !m1Stall && !m2Stall && !m3Stall && !m4Stal
 wire advanceI = advanceR & ihit;
 
 wire triggerDCacheLoad = (m1IsLoad & m1IsCacheElement & !dhit) &&	// there is a miss
-						(!icaccess | dcaccess) && 	// caches are not active
+						!(icaccess | dcaccess) && 	// caches are not active
 						m2Opcode==`NOPI &&			// and the pipeline is free of memory-ops
 						m3Opcode==`NOPI &&
 						m4Opcode==`NOPI &&
@@ -1310,6 +1314,12 @@ if (rst_i) begin
 	adr_o <= 64'd0;
 	dat_o <= 64'd0;
 	dccyc <= 1'b0;
+	
+	cmd_en <= 1'b0;
+	cmd_instr <= 3'b001;
+	cmd_bl <= 6'd1;
+	cmd_byte_addr <= 30'd0;
+
 //	pc[0] <= 64'hFFFF_FFFF_FFFF_FFE0;
 	m1Opcode <= `NOPI;
 	m2Opcode <= `NOPI;
@@ -1361,6 +1371,10 @@ if (rst_i) begin
 	EP[1] <= 32'd0;
 	EP[2] <= 32'd0;
 	EP[3] <= 32'd0;
+	AXC <= 4'd0;
+	dAXC <= 4'd0;
+	xAXC <= 4'd0;
+	resetA <= 1'b1;
 end
 else begin
 
@@ -1442,10 +1456,12 @@ if (advanceM4) begin
 	m4Opcode <= `NOPI;
 	m4Data <= 64'd0;
 	m4clkoff <= 1'b0;
-	rd_en <= 1'b0;
 	m4Opcode <= `NOPI;
 	case(m4Opcode)
-	`LW,`LWR:	wData <= {rd_data,m4Data[31:0]};
+	`LW,`LWR:	begin
+					wData <= {rd_data,m4Data[31:0]};
+					rd_en <= 1'b0;	// only if LW/LWR
+				end
 	default:	wData <= m4Data;
 	endcase
 end
@@ -1455,7 +1471,6 @@ end
 // MEMORY:
 //---------------------------------------------------------
 if (advanceM3) begin
-	rd_en <= 1'b0;
 	m4Opcode <= m3Opcode;
 	m4Func <= m3Func;
 	m4irqf <= m3irqf;
@@ -1492,33 +1507,51 @@ if (advanceM3) begin
 			m4Data <= {32'd0,rd_data};
 		end
 	`LH:
+		begin
+		rd_en <= 1'b0;
 		m4Data <= {{32{rd_data[31]}},rd_data};
+		end
 	`LHU:
+		begin
+		rd_en <= 1'b0;
 		m4Data <= rd_data;
+		end
 	`LC:
+		begin
+		rd_en <= 1'b0;
 		case(m3Addr[1])
 		1'b0:	m4Data <= {{48{rd_data[15]}},rd_data[15:0]};
 		1'b1:	m4Data <= {{48{rd_data[31]}},rd_data[31:16]};
 		endcase
+		end
 	`LCU:
+		begin
+		rd_en <= 1'b0;
 		case(m3Addr[1])
 		1'b0:	m4Data <= {48'd0,rd_data[15:0]};
 		1'b1:	m4Data <= {48'd0,rd_data[31:16]};
 		endcase
+		end
 	`LB:
+		begin
+		rd_en <= 1'b0;
 		case(m3Addr[1:0])
 		2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
 		2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
 		2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
 		2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
 		endcase
+		end
 	`LBU:
+		begin
 		case(m3Addr[1:0])
 		2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
 		2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
 		2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
 		2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
 		endcase
+		rd_en <= 1'b0;
+		end
 	`SW,`SWC:
 		begin
 			cmd_en <= 1'b1;
@@ -2130,41 +2163,43 @@ end
 // - set special register defaults for some instructions
 //---------------------------------------------------------
 if (advanceI) begin
-	epcnt <= epcnt + 5'd1;
-	case(epcnt)
-	5'd0:	AXC <= EP[0][ 3: 0];
-	5'd1:	AXC <= EP[0][ 7: 4];
-	5'd2:	AXC <= EP[0][11: 8];
-	5'd3:	AXC <= EP[0][15:12];
-	5'd4:	AXC <= EP[0][19:16];
-	5'd5:	AXC <= EP[0][23:20];
-	5'd6:	AXC <= EP[0][27:24];
-	5'd7:	AXC <= EP[0][31:28];
-	5'd8:	AXC <= EP[1][ 3: 0];
-	5'd9:	AXC <= EP[1][ 7: 4];
-	5'd10:	AXC <= EP[1][11: 8];
-	5'd11:	AXC <= EP[1][15:12];
-	5'd12:	AXC <= EP[1][19:16];
-	5'd13:	AXC <= EP[1][23:20];
-	5'd14:	AXC <= EP[1][27:24];
-	5'd15:	AXC <= EP[1][31:28];
-	5'd16:	AXC <= EP[2][ 3: 0];
-	5'd17:	AXC <= EP[2][ 7: 4];
-	5'd18:	AXC <= EP[2][11: 8];
-	5'd19:	AXC <= EP[2][15:12];
-	5'd20:	AXC <= EP[2][19:16];
-	5'd21:	AXC <= EP[2][23:20];
-	5'd22:	AXC <= EP[2][27:24];
-	5'd23:	AXC <= EP[2][31:28];
-	5'd24:	AXC <= EP[3][ 3: 0];
-	5'd25:	AXC <= EP[3][ 7: 4];
-	5'd26:	AXC <= EP[3][11: 8];
-	5'd27:	AXC <= EP[3][15:12];
-	5'd28:	AXC <= EP[3][19:16];
-	5'd29:	AXC <= EP[3][23:20];
-	5'd30:	AXC <= EP[3][27:24];
-	5'd31:	AXC <= EP[3][31:28];
-	endcase
+	if (dOpcode[6:4]!=`IMM) begin
+		epcnt <= epcnt + 5'd1;
+		case(epcnt)
+		5'd0:	AXC <= EP[0][ 3: 0];
+		5'd1:	AXC <= EP[0][ 7: 4];
+		5'd2:	AXC <= EP[0][11: 8];
+		5'd3:	AXC <= EP[0][15:12];
+		5'd4:	AXC <= EP[0][19:16];
+		5'd5:	AXC <= EP[0][23:20];
+		5'd6:	AXC <= EP[0][27:24];
+		5'd7:	AXC <= EP[0][31:28];
+		5'd8:	AXC <= EP[1][ 3: 0];
+		5'd9:	AXC <= EP[1][ 7: 4];
+		5'd10:	AXC <= EP[1][11: 8];
+		5'd11:	AXC <= EP[1][15:12];
+		5'd12:	AXC <= EP[1][19:16];
+		5'd13:	AXC <= EP[1][23:20];
+		5'd14:	AXC <= EP[1][27:24];
+		5'd15:	AXC <= EP[1][31:28];
+		5'd16:	AXC <= EP[2][ 3: 0];
+		5'd17:	AXC <= EP[2][ 7: 4];
+		5'd18:	AXC <= EP[2][11: 8];
+		5'd19:	AXC <= EP[2][15:12];
+		5'd20:	AXC <= EP[2][19:16];
+		5'd21:	AXC <= EP[2][23:20];
+		5'd22:	AXC <= EP[2][27:24];
+		5'd23:	AXC <= EP[2][31:28];
+		5'd24:	AXC <= EP[3][ 3: 0];
+		5'd25:	AXC <= EP[3][ 7: 4];
+		5'd26:	AXC <= EP[3][11: 8];
+		5'd27:	AXC <= EP[3][15:12];
+		5'd28:	AXC <= EP[3][19:16];
+		5'd29:	AXC <= EP[3][23:20];
+		5'd30:	AXC <= EP[3][27:24];
+		5'd31:	AXC <= EP[3][31:28];
+		endcase
+	end
 //	AXC <= EP[epcnt[4:3]][{epcnt[2:0],2'b11}:{epcnt[2:0],2'b00}];
 	if (nmi_edge) begin
 		nmi_edge <= 1'b0;
@@ -2182,7 +2217,7 @@ if (advanceI) begin
 	end
 	else begin
 		dIR <= insn;
-		$display("Fetched pc=%h insn: %h", pc, insn);
+`include "insn_dump.v"
 	end
 	nopI <= 1'b0;
 	if (dOpcode[6:4]!=`IMM) begin
@@ -2203,6 +2238,15 @@ if (advanceI) begin
 		pc[AXC] <= fnIncPC(pc_axc);
 end
 
+//---------------------------------------------------------
+// Initialize program counters
+//---------------------------------------------------------
+if (resetA) begin
+	pc[xAXC] <= `RESET_VECTOR;
+	xAXC <= xAXC + 4'd1;
+	if (xAXC==4'hF)
+		resetA <= 1'b0;
+end
 
 //`include "RPSTAGE.v"
 //---------------------------------------------------------
@@ -2296,7 +2340,7 @@ if (advanceX) begin
 			end
 	`RET:	begin
 				pc[xAXC][63:2] <= b[63:2];
-				$display("returning to: %h", b);
+				$display("returning to: %h", {b,2'b00});
 				if (AXC==xAXC) begin
 					dpc[63:2] <= b[63:2];
 					dIR <= `NOP_INSN;
@@ -2477,104 +2521,66 @@ end
 //---------------------------------------------------------
 if (rst_i) begin
 	cstate <= IDLE;
-	wr_icache <= 1'b0;
+//	wr_icache <= 1'b0;
 	wr_dcache <= 1'b0;
 end
 else begin
 cmd_en <= 1'b0;				// allow this signal only to pulse for a single clock cycle
-wr_icache <= 1'b0;
+//wr_icache <= 1'b0;
 wr_dcache <= 1'b0;
 case(cstate)
 IDLE:
-	if (triggerDCacheLoad & !cmd_full) begin
-		dcaccess <= 1'b1;
-		// we can't do anything until the command buffer is available
-		cmd_en <= 1'b1;	// the command fifo should always be available
-		cmd_instr <= 3'b001;	// READ
-		cmd_byte_addr <= {pea[29:5],5'b00000};
-		dadr_o <= {pea[31:5],5'b00000};
-		cmd_bl <= 6'd8;	// Eight words per cache line
-		cstate <= DCACT;
-	end
-	else if (triggerICacheLoad & !cmd_full) begin
-		icaccess <= 1'b1;
-		// we can't do anything until the command buffer is available
-		cmd_en <= 1'b1;	// the command fifo should always be available
-		cmd_instr <= 3'b001;	// READ
-		cmd_byte_addr <= {ppc[29:5],5'b00000};
-		iadr_o <= {ppc[31:5],5'b00000};
-		cmd_bl <= 6'd8;	// Eight words per cache line
-		cstate <= ICACT;
+	// we can't do anything until the command buffer is available
+	// in theory the command fifo should always be available
+	if (!cmd_full) begin
+		if (triggerDCacheLoad) begin
+			dcaccess <= 1'b1;
+			cmd_en <= 1'b1;	
+			cmd_instr <= 3'b001;	// READ
+			cmd_byte_addr <= {pea[29:5],5'b00000};
+			dadr_o <= {pea[63:5],5'b00000};
+			cmd_bl <= 6'd8;	// Eight words per cache line
+			cstate <= DCACT;
+		end
+		else if (triggerICacheLoad) begin
+			icaccess <= 1'b1;
+			cmd_en <= 1'b1;	// the command fifo should always be available
+			cmd_instr <= 3'b001;	// READ
+			cmd_byte_addr <= {ppc[29:6],6'h00};
+			iadr_o <= {ppc[63:6],6'h00};
+			cmd_bl <= 6'd16;	// Sixteen words per cache line
+			cstate <= ICACT;
+		end
 	end
 	// Sometime after the read command is issued, the read fifo will begin to fill
 ICACT:
-	if (!rd_empty) begin
-		rd_en <= 1'b1;		// Data should be available on the next clock cycle
+	begin
+		rd_en <= 1'b1;
 		cstate <= ICACT0;
 	end
-ICACT0:	// Read word 0
+//ICACT0:	// Read word 0
 	// At this point it should not be necessary to check rd_empty
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b000;
-		cstate <= ICACT1;
-	end
-ICACT1:	// Read word 1
+//	if (!rd_empty) begin
+//		wr_icache <= 1'b1;
+//		idat <= rd_data;
+//		cstate <= ICACT1;
+//	end
+
+ICACT0:	// Read word 1-15
 	// Might have to wait for subsequent data to be available
 	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b001;
-		cstate <= ICACT2;
-	end
-ICACT2:	// Read word 2
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b010;
-		cstate <= ICACT3;
-	end
-ICACT3:	// Read word 3
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b011;
-		cstate <= ICACT4;
-	end
-ICACT4:	// Read word 4
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b100;
-		cstate <= ICACT5;
-	end
-ICACT5:	// Read word 5
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b101;
-		cstate <= ICACT6;
-	end
-ICACT6:	// Read word 6
-	if (!rd_empty) begin
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b110;
-		cstate <= ICACT7;
-	end
-ICACT7:	// Read word 7
-	if (!rd_empty) begin
-		rd_en <= 1'b0;
-		wr_icache <= 1'b1;
-		idat <= rd_data;
-		iadr_o[4:2] <= 3'b111;
-		tmem[iadr_o[12:5]] <= {1'b1,iadr_o[31:13]};	// This will cause ihit to go high
-		tvalid[iadr_o[12:5]] <= 1'b1;
-		cstate <= ICDLY;
+//		wr_icache <= 1'b1;
+//		idat <= rd_data;
+		iadr_o[5:2] <= iadr_o[5:2] + 4'h1;
+		if (iadr_o[5:2]==4'hF) begin
+			rd_en <= 1'b0;
+			tmem[iadr_o[12:6]] <= {1'b1,iadr_o[63:13]};	// This will cause ihit to go high
+			tvalid[iadr_o[12:6]] <= 1'b1;
+			cstate <= ICDLY;
+		end
 	end
 ICDLY:
-	// The fifo should have emptied out
+	// The fifo should have emptied out, if not we force it to empty
 	if (!rd_empty) begin
 		rd_en <= 1'b1;
 	end
@@ -2585,7 +2591,7 @@ ICDLY:
 	end
 	// Sometime after the read command is issued, the read fifo will begin to fill
 DCACT:
-	if (!rd_empty) begin
+	begin
 		rd_en <= 1'b1;		// Data should be available on the next clock cycle
 		cstate <= DCACT0;
 	end
@@ -2602,54 +2608,14 @@ DCACT1:	// Read word 1
 	if (!rd_empty) begin
 		wr_dcache <= 1'b1;
 		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b001;
-		cstate <= DCACT2;
-	end
-DCACT2:	// Read word 2
-	if (!rd_empty) begin
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b010;
-		cstate <= DCACT3;
-	end
-DCACT3:	// Read word 3
-	if (!rd_empty) begin
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b011;
-		cstate <= DCACT4;
-	end
-DCACT4:	// Read word 4
-	if (!rd_empty) begin
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b100;
-		cstate <= DCACT5;
-	end
-DCACT5:	// Read word 5
-	if (!rd_empty) begin
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b101;
-		cstate <= DCACT6;
-	end
-DCACT6:	// Read word 6
-	if (!rd_empty) begin
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b110;
-		cstate <= DCACT7;
-	end
-DCACT7:	// Read word 7
-	if (!rd_empty) begin
-		rd_en <= 1'b0;
-		wr_dcache <= 1'b1;
-		ddat <= rd_data;
-		dadr_o[4:2] <= 3'b111;
-		cstate <= DCDLY;
+		dadr_o[4:2] <= dadr_o[4:2]+3'd1;
+		if (dadr_o[4:2]==3'b111) begin
+			rd_en <= 1'b0;
+			cstate <= DCDLY;
+		end
 	end
 DCDLY:
-	// The fifo should have emptied out
+	// The fifo should have emptied out, if not, empty it out.
 	if (!rd_empty) begin
 		rd_en <= 1'b1;
 	end
