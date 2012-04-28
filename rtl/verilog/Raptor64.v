@@ -117,6 +117,7 @@
 `define		NAND	7'd12
 `define		NOR		7'd13
 `define 	XNOR	7'd14
+`define		ORC		7'd15
 `define		MIN		7'd20
 `define		MAX		7'd21
 `define		MULU	7'd24
@@ -420,6 +421,7 @@ reg [63:0] ea;
 reg [63:0] iadr_o;
 reg [31:0] idat;
 reg [4:0] cstate;
+reg dbranch_taken,xbranch_taken;
 //reg wr_icache;
 reg dccyc;
 wire [63:0] cdat;
@@ -822,6 +824,48 @@ endcase
 end
 endfunction
 
+wire [63:0] jmp_tgt = dOpcode[6:4]==`IMM ? {dIR[26:0],insn[34:0],2'b00} : {pc_axc[63:37],insn[34:0],2'b00};
+
+//---------------------------------------------------------
+// Branch history table.
+// The history table is updated by the EX stage
+//---------------------------------------------------------
+reg [2:0] gbl_branch_hist;
+reg [1:0] branch_history_table [255:0];
+wire [7:0] bht_wa = {xpc[5:0],gbl_branch_hist[2:1]};		// write address
+wire [7:0] bht_ra1 = {xpc[5:0],gbl_branch_hist[2:1]};		// read address (EX stage)
+wire [7:0] bht_ra2 = {pc_axc[5:0],gbl_branch_hist[2:1]};	// read address (IF stage)
+wire [1:0] bht_xbits = branch_history_table[bht_ra1];
+wire [1:0] bht_ibits = branch_history_table[bht_ra2];
+wire predict_taken = bht_ibits==2'd0 || bht_ibits==2'd1;
+
+wire isxRRBranch = xOpcode==`RR && (xFunc==`BRA || xFunc==`BRN || xFunc==`BEQ || xFunc==`BNE ||
+					xFunc==`BLT || xFunc==`BLE || xFunc==`BGT || xFunc==`BGE ||
+					xFunc==`BLTU || xFunc==`BLEU || xFunc==`BGTU || xFunc==`BGEU ||
+					xFunc==`BOR || xFunc==`BAND)
+				;
+wire isxBranchI = (xOpcode==`BRAI || xOpcode==`BRNI || xOpcode==`BEQI || xOpcode==`BNEI ||
+					xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
+					xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI)
+				;
+wire isxBranch = isxRRBranch || isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BRr;
+
+reg [1:0] xbits_new;
+
+always @(takb or bht_xbits)
+if (takb) begin
+	if (bht_xbits != 2'd1)
+		xbits_new <= bht_xbits + 2'd1;
+	else
+		xbits_new <= bht_xbits;
+end
+else begin
+	if (bht_xbits != 2'd2)
+		xbits_new <= bht_xbits - 2'd1;
+	else
+		xbits_new <= bht_xbits;
+end
+
 //---------------------------------------------------------
 // Evaluate branch conditions.
 //---------------------------------------------------------
@@ -1068,6 +1112,7 @@ case(xOpcode)
 	`NAND:	xData = ~(a & b);
 	`NOR:	xData = ~(a | b);
 	`XNOR:	xData = ~(a ^ b);
+	`ORC:	xData = a | ~b;
 	`MIN:	xData = lt ? a : b;
 	`MAX:	xData = lt ? b : a;
 	`MOVZ:	xData = b;
@@ -1319,6 +1364,9 @@ if (rst_i) begin
 	cmd_instr <= 3'b001;
 	cmd_bl <= 6'd1;
 	cmd_byte_addr <= 30'd0;
+	
+	rd_en <= 1'b0;
+	wr_en <= 1'b0;
 
 //	pc[0] <= 64'hFFFF_FFFF_FFFF_FFE0;
 	m1Opcode <= `NOPI;
@@ -2059,6 +2107,11 @@ if (advanceX) begin
 		end
 	default:	;
 	endcase
+	// Update the branch history
+	if (isxBranch) begin
+		gbl_branch_hist <= {gbl_branch_hist,takb};
+		branch_history_table[bht_wa] <= xbits_new;
+	end
 end
 
 //---------------------------------------------------------
@@ -2071,7 +2124,9 @@ if (advanceR) begin
 	xAXC <= dAXC;
 	xIR <= dIR;
 	xpc <= dpc;
-	if (dOpcode[6:4]!=`IMM)
+	xbranch_taken <= dbranch_taken;
+	dbranch_taken <= 1'b0;
+	if (dOpcode[6:4]!=`IMM)	// IMM is "sticky"
 		dIR <= `NOP_INSN;
 	dRa <= 9'd0;
 	dRb <= 9'd0;
@@ -2234,8 +2289,35 @@ if (advanceI) begin
 		pc[AXC] <= `ITLB_MissHandler;
 		tlbra <= pc_axc;
 	end
-	else
+	else begin
+		dbranch_taken <= 1'b0;
 		pc[AXC] <= fnIncPC(pc_axc);
+		case(insn[41:35])
+		`JMP,`CALL:
+			begin
+				dbranch_taken <= 1'b1;
+				pc[AXC] <= jmp_tgt;
+			end
+		`RR:
+			case(insn[6:0])
+			`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU:
+				if (predict_taken) begin
+					dbranch_taken <= 1'b1;
+					pc[AXC] <= {pc_axc[63:4] + {{44{insn[17]}},insn[17:2]},insn[1:0],2'b00};
+				end
+			endcase
+		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
+			begin
+				if (predict_taken) begin
+					dbranch_taken <= 1'b1;
+					pc[AXC] <= {pc_axc[63:4] + {{50{insn[29]}},insn[29:20]},insn[19:18],2'b00};
+				end
+			end
+		`TRAPcc:	if (predict_taken) begin pc[AXC] <= `TRAP_VECTOR; dbranch_taken <= 1'b1; end
+		`TRAPcci:	if (predict_taken) begin pc[AXC] <= `TRAP_VECTOR; dbranch_taken <= 1'b1; end
+		default:	;
+		endcase
+	end
 end
 
 //---------------------------------------------------------
@@ -2286,7 +2368,7 @@ if (advanceX) begin
 	`RR:
 		case(xFunc)
 		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR:
-			if (takb) begin
+			if (takb & !xbranch_taken) begin
 				pc[xAXC][63:4] <= xpc[63:4] + {{44{xIR[24]}},xIR[24:9]};
 				pc[xAXC][3:2] <= xIR[8:7];
 				if (xAXC==AXC) begin
@@ -2302,30 +2384,10 @@ if (advanceX) begin
 				end
 			end
 		endcase
-	`JMP:	begin
-				pc[xAXC] <= imm;
-				if (xAXC==AXC) begin
-					dpc <= imm;
-					dIR <= `NOP_INSN;
-				end
-				if (xAXC==dAXC) begin
-					xpc <= imm;
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
-	`CALL:	begin
-				pc[xAXC] <= imm;
-				if (AXC==xAXC) begin
-					dpc <= imm;
-					dIR <= `NOP_INSN;
-				end
-				if (dAXC==xAXC) begin
-					xpc <= imm;
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
+	// JMP and CALL change the program counter immediately in the IF stage.
+	// There's no work to do here. The pipeline does not need to be cleared.
+	`JMP:	;
+	`CALL:	;	
 	`JAL:	begin
 				pc[xAXC][63:2] <= a[63:2] + imm[63:2];
 				if (AXC==xAXC) begin
@@ -2353,18 +2415,20 @@ if (advanceX) begin
 			end
 	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 		if (takb) begin
-			pc[xAXC][63:4] <= xpc[63:4] + {{50{xIR[24]}},xIR[29:20]};
-			pc[xAXC][3:2] <= xIR[19:18];
-			if (AXC==xAXC) begin
-				dpc[63:4] <= xpc[63:4] + {{50{xIR[24]}},xIR[29:20]};
-				dpc[3:2] <= xIR[19:18];
-				dIR <= `NOP_INSN;
-			end
-			if (dAXC==xAXC) begin
-				xpc[63:4] <= xpc[63:4] + {{50{xIR[24]}},xIR[29:20]};
-				xpc[3:2] <= xIR[19:18];
-				xIR <= `NOP_INSN;
-				xRt <= 9'd0;
+			if (!xbranch_taken) begin
+				pc[xAXC][63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
+				pc[xAXC][3:2] <= xIR[19:18];
+				if (AXC==xAXC) begin
+					dpc[63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
+					dpc[3:2] <= xIR[19:18];
+					dIR <= `NOP_INSN;
+				end
+				if (dAXC==xAXC) begin
+					xpc[63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
+					xpc[3:2] <= xIR[19:18];
+					xIR <= `NOP_INSN;
+					xRt <= 9'd0;
+				end
 			end
 		end
 	`BRr:
@@ -2434,22 +2498,8 @@ if (advanceX) begin
 			end
 		endcase
 	`TRAPcc:
-		case(xFunc)
-		`TRAP:
-			begin
-				pc[xAXC] <= `TRAP_VECTOR;
-				if (AXC==xAXC) begin
-					dpc <= `TRAP_VECTOR;
-					dIR <= `NOP_INSN;
-				end
-				if (xAXC==dAXC) begin
-					xpc <= `TRAP_VECTOR;
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
-		`TEQ,`TNE,`TLT,`TLE,`TGT,`TGE,`TLO,`TLS,`THI,`THS:
-			if (takb) begin
+		if (takb) begin
+			if (!xbranch_taken) begin
 				pc[xAXC] <= `TRAP_VECTOR;
 				if (xAXC==AXC) begin
 					dpc <= `TRAP_VECTOR;
@@ -2461,11 +2511,10 @@ if (advanceX) begin
 					xRt <= 9'd0;
 				end
 			end
-		endcase
+		end
 	`TRAPcci:
-		case(xIR[29:25])
-		`TEQI,`TNEI,`TLTI,`TLEI,`TGTI,`TGEI,`TLOI,`TLSI,`THII,`THSI:
-			if (takb) begin
+		if (takb) begin
+			if (!xbranch_taken) begin
 				pc[xAXC] <= `TRAP_VECTOR;
 				if (xAXC==AXC) begin
 					dpc <= `TRAP_VECTOR;
@@ -2477,7 +2526,7 @@ if (advanceX) begin
 					xRt <= 9'd0;
 				end
 			end
-		endcase
+		end
 	default:	;
 	endcase
 end
