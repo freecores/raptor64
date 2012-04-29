@@ -28,14 +28,21 @@
 
 `define TLBMissPage		52'hFFFF_FFFF_FFFF_F
 `define ITLB_MissHandler	64'hFFFF_FFFF_FFFF_FFC0
+`define DTLB_MissHandler	64'hFFFF_FFFF_FFFF_FFB0
+
+`define GEN_TRAP_OFFSET		13'h0200
+`define DBZ_TRAP_OFFSET		13'h0050
+`define OFL_TRAP_OFFSET		13'h0070
 
 `define EX_NON		8'd0
 `define EX_RST		8'd1
 `define EX_NMI		8'd2
 `define EX_IRQ		8'd3
+`define EX_TRAP		8'd4
 `define EX_OFL		8'd16	// overflow
 `define EX_DBZ		8'd17	// divide by zero
 `define EX_TLBI		8'd19	// TLB exception - ifetch
+`define EX_TLBD		8'd20	// TLB exception - data
 
 `define EXCEPT_Int		5'd00
 `define EXCEPT_Mod		5'd01	// TLB modification
@@ -60,7 +67,9 @@
 `define MISC	7'd0
 `define		BRK		7'd0
 `define		IRQ		7'd1
+`define     FIP		7'd20
 `define		IRET	7'd32
+`define		ERET	7'd33
 `define 	WAIT	7'd40
 `define     TLBR	7'd50
 `define     TLBWI	7'd51
@@ -84,30 +93,36 @@
 `define		REDAND	7'd31
 `define     MFSPR	7'd40
 `define     MTSPR	7'd41
-`define         TLBIndex    	5'd01
-`define         TLBRandom		5'd02
-`define         PageTableAddr	5'd04
-`define         BadVAddr        5'd08
-`define         TLBPhysPage		5'd10
-`define         TLBVirtPage		5'd11
-`define			TLBPageMask		5'd12
-`define			TLBASID			5'd13
-`define         ASID			5'd14
-`define			Wired			5'd15
-`define         EP0             5'd16
-`define         EP1             5'd17
-`define         EP2             5'd18
-`define         EP3             5'd19
-`define         AXC             5'd20
-`define		MFTICK	7'd56
-`define		MFEPC	7'd57
+`define         TLBIndex    	6'd01
+`define         TLBRandom		6'd02
+`define         PageTableAddr	6'd04
+`define         BadVAddr        6'd08
+`define         TLBPhysPage		6'd10
+`define         TLBVirtPage		6'd11
+`define			TLBPageMask		6'd12
+`define			TLBASID			6'd13
+`define         ASID			6'd14
+`define			Wired			6'd15
+`define         EP0             6'd16
+`define         EP1             6'd17
+`define         EP2             6'd18
+`define         EP3             6'd19
+`define         AXC             6'd20
+`define			Tick			6'd21
+`define 		EPC				6'd22
+`define			CauseCode		6'd23
+`define			TBA				6'd24
+`define		OMG		7'd50
+`define 	CMG		7'd51
+`define		OMGI	7'd52
+`define 	CMGI	7'd53
 `define		MFTBA	7'd58
 `define		MTTBA	7'd59
-`define 	MTREGSET	7'd60
-`define		MFREGSET	7'd61
 `define RR	7'd2
-`define 	ADD		7'd4
-`define 	SUB		7'd5
+`define 	ADD		7'd2
+`define		ADDU	7'd3
+`define 	SUB		7'd4
+`define 	SUBU	7'd5
 `define 	CMP		7'd6
 `define 	CMPU	7'd7
 `define 	AND		7'd8
@@ -128,29 +143,14 @@
 `define		MOVZ	7'd30
 `define		MOVNZ	7'd31
 
-`define 	ASL		7'd40
-`define 	LSR		7'd41
+`define 	SHL		7'd40
+`define 	SHRU	7'd41
 `define		ROL		7'd42
 `define		ROR		7'd43
-`define		ASR		7'd44
+`define		SHR		7'd44
 `define 	ROLAM	7'd45
 
 `define		NOP		7'd60
-
-`define 	BLT		7'd80
-`define 	BGE		7'd81
-`define 	BLE		7'd82
-`define 	BGT		7'd83
-`define 	BLTU	7'd84
-`define 	BGEU	7'd85
-`define 	BLEU	7'd86
-`define 	BGTU	7'd87
-`define 	BEQ		7'd88
-`define 	BNE		7'd89
-`define		BRA		7'd90
-`define		BRN		7'd91
-`define		BAND	7'd92
-`define		BOR		7'd93
 
 `define 	SLT		7'd96
 `define 	SLE		7'd97
@@ -167,10 +167,10 @@
 `define     BCD_SUB 7'd111
 
 `define SHFTI	7'd3
-`define	ASLI		7'd0
-`define LSRI		7'd1
+`define	SHLI		7'd0
+`define SHRUI		7'd1
 `define ROLI		7'd2
-`define ASRI		7'd3
+`define SHRI		7'd3
 `define RORI		7'd4
 `define ROLAMI		7'd5
 `define BFINS		7'd8
@@ -179,46 +179,19 @@
 `define BFCHG		7'd11
 
 `define ADDI	7'd4
-`define SUBI	7'd5
-`define CMPI	7'd6
-`define CMPUI	7'd7
-`define ANDI	7'd8
-`define ORI		7'd9
-`define XORI	7'd10
+`define ADDUI	7'd5
+`define SUBI	7'd6
+`define CMPI	7'd7
+`define CMPUI	7'd8
+`define ANDI	7'd9
+`define ORI		7'd10
+`define XORI	7'd11
 
 `define MULUI	7'd12
 `define MULSI	7'd13
 `define DIVUI	7'd14
 `define DIVSI	7'd15
 
-`define BRr		7'd16
-`define 	BEQZ	5'd0
-`define		BNEZ	5'd1
-`define		BLTZ	5'd2
-`define		BLEZ	5'd3
-`define		BGTZ	5'd4
-`define 	BGEZ	5'd5
-`define		BRAZ	5'd6
-`define		BNR		5'd7
-`define 	BEQZD	5'd8
-`define		BNEZD	5'd9
-`define		BLTZD	5'd10
-`define		BLEZD	5'd11
-`define		BGTZD	5'd12
-`define 	BGEZD	5'd13
-`define		BRAD	5'd14
-`define 	BEQZR	5'd16
-`define		BNEZR	5'd17
-`define		BLTZR	5'd18
-`define		BLEZR	5'd19
-`define		BGTZR	5'd20
-`define 	BGEZR	5'd21
-`define 	BEQZRD	5'd24
-`define		BNEZRD	5'd25
-`define		BLTZRD	5'd26
-`define		BLEZRD	5'd27
-`define		BGTZRD	5'd28
-`define 	BGEZRD	5'd29
 `define TRAPcc	7'd17
 `define		TEQ		7'd0
 `define		TNE		7'd1
@@ -272,6 +245,7 @@
 `define SH		7'd50
 `define SW		7'd51
 `define SP		7'd52
+`define MEMNDX	7'd53
 `define SSH		7'd56
 `define SSW		7'd57
 `define SF		7'd58
@@ -289,18 +263,62 @@
 `define OUTH	7'd74
 `define OUTW	7'd75
 
-`define BEQI	7'd80
-`define BNEI	7'd81
-`define BLTI	7'd82
-`define BLEI	7'd83
-`define BGTI	7'd84
-`define BGEI	7'd85
-`define BLTUI	7'd86
-`define BLEUI	7'd87
-`define BGTUI	7'd88
-`define BGEUI	7'd89
+`define BLTI	7'd80
+`define BGEI	7'd81
+`define BLEI	7'd82
+`define BGTI	7'd83
+`define BLTUI	7'd84
+`define BGEUI	7'd85
+`define BLEUI	7'd86
+`define BGTUI	7'd87
+`define BEQI	7'd88
+`define BNEI	7'd89
 `define BRAI	7'd90
 `define BRNI	7'd91
+
+`define BTRI	7'd94
+`define 	BLTRI	5'd0
+`define 	BGERI	5'd1
+`define 	BLERI	5'd2
+`define 	BGTRI	5'd3
+`define 	BLTURI	5'd4
+`define 	BGEURI	5'd5
+`define 	BLEURI	5'd6
+`define 	BGTURI	5'd7
+`define 	BEQRI	5'd8
+`define 	BNERI	5'd9
+`define		BRARI	5'd10
+`define		BRNRI	5'd11
+`define		BANDRI	5'd12
+`define		BORRI	5'd13
+`define BTRR	7'd95
+`define 	BLT		5'd0
+`define 	BGE		5'd1
+`define 	BLE		5'd2
+`define 	BGT		5'd3
+`define 	BLTU	5'd4
+`define 	BGEU	5'd5
+`define 	BLEU	5'd6
+`define 	BGTU	5'd7
+`define 	BEQ		5'd8
+`define 	BNE		5'd9
+`define		BRA		5'd10
+`define		BRN		5'd11
+`define		BAND	5'd12
+`define		BOR		5'd13
+`define		BNR		5'd14
+`define 	BLTR	5'd16
+`define 	BGER	5'd17
+`define 	BLER	5'd18
+`define 	BGTR	5'd19
+`define 	BLTUR	5'd20
+`define 	BGEUR	5'd21
+`define 	BLEUR	5'd22
+`define 	BGTUR	5'd23
+`define 	BEQR	5'd24
+`define 	BNER	5'd25
+`define		BRAR	5'd26
+`define		BRNR	5'd27
 
 
 `define SLTI	7'd96
@@ -319,6 +337,8 @@
 `define NOPI	7'd111
 
 `define IMM		3'd7
+`define SETLO	7'b11110xx
+`define SETHI	7'b11111xx
 
 `define NOP_INSN	42'b1101111_000_00000000_00000000_00000000_00000000
 
@@ -355,6 +375,7 @@ input rst_i;
 input clk_i;
 input nmi_i;
 input irq_i;
+
 output [1:0] bte_o;
 reg [1:0] bte_o;
 output [2:0] cti_o;
@@ -366,15 +387,16 @@ reg stb_o;
 input ack_i;
 output we_o;
 reg we_o;
-output [7:0] sel_o;
-reg [7:0] sel_o;
+output [3:0] sel_o;
+reg [3:0] sel_o;
 output rsv_o;
 reg rsv_o;
-output [63:0] adr_o;
-reg [63:0] adr_o;
+output [31:0] adr_o;
+reg [31:0] adr_o;
 input [31:0] dat_i;
 output [31:0] dat_o;
 reg [31:0] dat_o;
+
 input sys_adv;
 input [63:5] sys_adr;
 
@@ -406,14 +428,15 @@ reg [1:0] rm;		// fp rounding mode
 reg [41:0] dIR;
 reg [41:0] xIR;
 reg [4:0] epcnt;
-reg [3:0] dAXC,AXC,xAXC;
+reg [3:0] dAXC,AXC,xAXC,m1AXC;
 reg [31:0] EP [3:0];
 reg [63:0] pc [15:0];
+reg [63:0] ErrorEPC,EPC[15:0];
 wire [63:0] pc_axc = pc[AXC];
 reg [63:0] dpc,m1pc,m2pc,m3pc,m4pc,wpc;
 reg [63:0] xpc;
 reg [63:0] tlbra;		// return address for a TLB exception
-reg [8:0] dRa,dRb;
+reg [8:0] dRa,dRb,dRc;
 reg [8:0] wRt,mRt,m1Rt,m2Rt,m3Rt,m4Rt,tRt,dRt;
 reg [8:0] xRt;
 reg [63:0] dImm;
@@ -422,6 +445,9 @@ reg [63:0] iadr_o;
 reg [31:0] idat;
 reg [4:0] cstate;
 reg dbranch_taken,xbranch_taken;
+reg [63:0] mutex_gate;
+reg [63:0] TBA;
+
 //reg wr_icache;
 reg dccyc;
 wire [63:0] cdat;
@@ -431,20 +457,34 @@ reg [3:0] regset;
 wire [63:0] rfoa,rfob;
 reg clk_en;
 reg cpu_clk_en;
-reg StatusEXL;		// 1= in exception processing
-reg StatusTLB;		// 1= in TLB miss handling
+reg [15:0] StatusERL;		// 1= in error processing
+reg [15:0] StatusEXL;		// 1= in exception processing
+reg [7:0] CauseCode[15:0];
 reg [7:0] ASID;		// address space identifier (process ID)
 integer n;
-reg [63:13] BadVAddr;
+reg [63:13] BadVAddr [15:0];
 reg [63:13] PageTableAddr;
 reg [24:13] TLBPageMask;
 reg [63:13] TLBVirtPage;
 reg [63:13] TLBPhysPage;
 reg [7:0] TLBASID;
+reg TLBG;
 reg [3:0] Index;
 reg [3:0] Random;
 reg [3:0] Wired;
 reg [15:0] IMatch,DMatch;
+
+function [63:0] fnIncPC;
+input [63:0] fpc;
+begin
+case(fpc[3:2])
+2'd0:	fnIncPC = {fpc[63:4],4'b0100};
+2'd1:	fnIncPC = {fpc[63:4],4'b1000};
+2'd2:	fnIncPC = {fpc[63:4]+60'd1,4'b0000};
+2'd3:	fnIncPC = {fpc[63:4]+60'd1,4'b0000};
+endcase
+end
+endfunction
 
 //-----------------------------------------------------------------------------
 // Instruction TLB
@@ -458,6 +498,17 @@ reg [63:13] ITLBPhysPage [15:0];
 reg [15:0] ITLBG;
 reg [7:0] ITLBASID [15:0];
 reg [15:0] ITLBValid;
+initial begin
+	for (n = 0; n < 16; n = n + 1)
+	begin
+		ITLBPageMask[n] = 0;
+		ITLBVirtPage[n] = 0;
+		ITLBPhysPage[n] = 0;
+		ITLBG[n] = 0;
+		ITLBASID[n] = 0;
+		ITLBValid[n] = 0;
+	end
+end
 always @*
 for (n = 0; n < 16; n = n + 1)
 	IMatch[n] = ((pc_axc[63:13]|ITLBPageMask[n])==(ITLBVirtPage[n]|ITLBPageMask[n])) &&
@@ -500,6 +551,17 @@ reg [63:13] DTLBPhysPage [15:0];
 reg [15:0] DTLBG;
 reg [7:0] DTLBASID [15:0];
 reg [15:0] DTLBValid;
+initial begin
+	for (n = 0; n < 16; n = n + 1)
+	begin
+		DTLBPageMask[n] = 0;
+		DTLBVirtPage[n] = 0;
+		DTLBPhysPage[n] = 0;
+		DTLBG[n] = 0;
+		DTLBASID[n] = 0;
+		DTLBValid[n] = 0;
+	end
+end
 always @(ea)
 for (n = 0; n < 16; n = n + 1)
 	DMatch[n] = ((ea[63:13]|DTLBPageMask[n])==(DTLBVirtPage[n]|DTLBPageMask[n])) &&
@@ -555,15 +617,15 @@ end
 // 8kB
 // 
 //-----------------------------------------------------------------------------
-reg icaccess;
-wire wr_icache = !rd_empty & icaccess;
+reg icaccess, iciaccess;
+wire wr_icache = (!rd_empty & icaccess) | (iciaccess & ack_i);
 
 Raptor64_icache_ram_x32 u1
 (
 	.clk(clk),
 	.wr(wr_icache),
 	.adr_i(iadr_o[12:0]),
-	.dat_i(rd_data),
+	.dat_i(icaccess ?rd_data : dat_i),
 	.pc(pc_axc),
 	.insn(insn)
 );
@@ -637,8 +699,10 @@ wire xisCacheElement = xData[63:52] != 12'hFFD;
 reg m1IsCacheElement;
 
 reg nopI;
+wire [6:0] iFunc = insn[6:0];
 wire [6:0] dFunc = dIR[6:0];
 wire [6:0] xFunc = xIR[6:0];
+wire [6:0] iOpcode = insn[41:35];
 wire [6:0] xOpcode = xIR[41:35];
 wire [6:0] dOpcode = dIR[41:35];
 reg [6:0] m1Opcode,m2Opcode,m3Opcode,m4Opcode;
@@ -648,7 +712,7 @@ reg [63:0] m2Addr,m3Addr,m4Addr;
 reg [63:0] tick;
 reg [63:0] tba;
 reg [63:0] exception_address,ipc;
-reg [63:0] a,b,imm;
+reg [63:0] a,b,c,imm,m1b;
 reg prev_ihit;
 reg rsf;
 reg [63:5] resv_address;
@@ -691,11 +755,11 @@ wire isDivi = xOpcode==`DIVSI || xOpcode==`DIVUI;
 wire isDiv = xOpcode==`DIVSI || xOpcode==`DIVUI || (xOpcode==`RR && (xFunc==`DIVS || xFunc==`DIVU));
 
 wire disRRShift = dOpcode==`RR && (
-	dFunc==`ASL || dFunc==`ROL || dFunc==`ASR ||
-	dFunc==`LSR || dFunc==`ROR || dFunc==`ROLAM
+	dFunc==`SHL || dFunc==`ROL || dFunc==`SHR ||
+	dFunc==`SHRU || dFunc==`ROR || dFunc==`ROLAM
 	);
 wire disRightShift = dOpcode==`RR && (
-	dFunc==`ASR || dFunc==`LSR || dFunc==`ROR
+	dFunc==`SHR || dFunc==`SHRU || dFunc==`ROR
 	);
 
 Raptor64Mult u18
@@ -826,10 +890,11 @@ endfunction
 
 wire [63:0] jmp_tgt = dOpcode[6:4]==`IMM ? {dIR[26:0],insn[34:0],2'b00} : {pc_axc[63:37],insn[34:0],2'b00};
 
-//---------------------------------------------------------
+//-----------------------------------------------------------------------------
 // Branch history table.
-// The history table is updated by the EX stage
-//---------------------------------------------------------
+// The history table is updated by the EX stage and read in
+// both the EX and IF stages.
+//-----------------------------------------------------------------------------
 reg [2:0] gbl_branch_hist;
 reg [1:0] branch_history_table [255:0];
 wire [7:0] bht_wa = {xpc[5:0],gbl_branch_hist[2:1]};		// write address
@@ -839,16 +904,11 @@ wire [1:0] bht_xbits = branch_history_table[bht_ra1];
 wire [1:0] bht_ibits = branch_history_table[bht_ra2];
 wire predict_taken = bht_ibits==2'd0 || bht_ibits==2'd1;
 
-wire isxRRBranch = xOpcode==`RR && (xFunc==`BRA || xFunc==`BRN || xFunc==`BEQ || xFunc==`BNE ||
-					xFunc==`BLT || xFunc==`BLE || xFunc==`BGT || xFunc==`BGE ||
-					xFunc==`BLTU || xFunc==`BLEU || xFunc==`BGTU || xFunc==`BGEU ||
-					xFunc==`BOR || xFunc==`BAND)
-				;
 wire isxBranchI = (xOpcode==`BRAI || xOpcode==`BRNI || xOpcode==`BEQI || xOpcode==`BNEI ||
 					xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
 					xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI)
 				;
-wire isxBranch = isxRRBranch || isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BRr;
+wire isxBranch = isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BTRI || xOpcode==`BTRR;
 
 reg [1:0] xbits_new;
 
@@ -866,9 +926,16 @@ else begin
 		xbits_new <= bht_xbits;
 end
 
-//---------------------------------------------------------
+// For simulation only, initialize the history table to zeros.
+// In the real world we don't care.
+initial begin
+	for (n = 0; n < 256; n = n + 1)
+		branch_history_table[n] = 0;
+end
+
+//-----------------------------------------------------------------------------
 // Evaluate branch conditions.
-//---------------------------------------------------------
+//-----------------------------------------------------------------------------
 wire signed [63:0] as = a;
 wire signed [63:0] bs = b;
 wire signed [63:0] imms = imm;
@@ -884,7 +951,7 @@ wire ltui = a < imm;
 
 always @(xOpcode or xFunc or a or eq or eqi or lt or lti or ltu or ltui or aeqz or beqz or rsf or xIR)
 case (xOpcode)
-`RR:
+`BTRR:
 	case(xFunc)
 	`BRA:	takb = 1'b1;
 	`BRN:	takb = 1'b0;
@@ -900,6 +967,17 @@ case (xOpcode)
 	`BGEU:	takb = !ltu;
 	`BOR:	takb = !aeqz || !beqz;
 	`BAND:	takb = !aeqz && !beqz;
+	`BNR:	takb = !rsf;
+	`BEQR:	takb = eq;
+	`BNER:	takb = !eq;
+	`BLTR:	takb = lt;
+	`BLER:	takb = lt|eq;
+	`BGTR:	takb = !(lt|eq);
+	`BGER:	takb = !lt;
+	`BLTUR:	takb = ltu;
+	`BLEUR:	takb = ltu|eq;
+	`BGTUR:	takb = !(ltu|eq);
+	`BGEUR:	takb = !ltu;
 	default:	takb = 1'b0;
 	endcase
 `BRAI:	takb = 1'b1;
@@ -914,6 +992,22 @@ case (xOpcode)
 `BLEUI:	takb = ltui|eqi;
 `BGTUI:	takb = !(ltui|eqi);
 `BGEUI:	takb = !ltui;
+`BTRI:
+	case(xIR[24:18])
+	`BRA:	takb = 1'b1;
+	`BRN:	takb = 1'b0;
+	`BEQ:	takb = eqi;
+	`BNE:	takb = !eqi;
+	`BLT:	takb = lti;
+	`BLE:	takb = lti|eqi;
+	`BGT:	takb = !(lti|eqi);
+	`BGE:	takb = !lti;
+	`BLTU:	takb = ltui;
+	`BLEU:	takb = ltui|eqi;
+	`BGTU:	takb = !(ltui|eqi);
+	`BGEU:	takb = !ltui;
+	default:	takb = 1'b0;
+	endcase
 `TRAPcc: 
 	case(xFunc)
 	`TEQ:	takb = eq;
@@ -942,45 +1036,14 @@ case (xOpcode)
 	`THSI:	takb = !ltui;
 	default:	takb = 1'b0;
 	endcase
-`BRr:
-	case(xIR[29:25])
-	`BRAZ:	takb = 1'b1;
-	`BEQZ:	takb = aeqz;
-	`BNEZ:	takb = !aeqz;
-	`BLTZ:	takb = a[63];
-	`BLEZ:	takb = a[63] || aeqz;
-	`BGTZ:	takb = !a[63] && !aeqz;
-	`BGEZ:	takb = !a[63];
-	`BRAD:	takb = 1;
-	`BNR:	takb = !rsf;
-	`BEQZD:	takb = a==64'd0;
-	`BNEZD:	takb = a!=64'd0;
-	`BLTZD:	takb = a[63];
-	`BLEZD:	takb = a[63] || aeqz;
-	`BGTZD:	takb = !a[63] && !aeqz;
-	`BGEZD:	takb = !a[63];
-	`BEQZR:	takb = a==64'd0;
-	`BNEZR:	takb = a!=64'd0;
-	`BLTZR:	takb = a[63];
-	`BLEZR:	takb = a[63] || aeqz;
-	`BGTZR:	takb = !a[63] && !aeqz;
-	`BGEZR:	takb = !a[63];
-	`BEQZRD:	takb = a==64'd0;
-	`BNEZRD:	takb = a!=64'd0;
-	`BLTZRD:	takb = a[63];
-	`BLEZRD:	takb = a[63] || aeqz;
-	`BGTZRD:	takb = !a[63] && !aeqz;
-	`BGEZRD:	takb = !a[63];
-	default:	takb = 1'b0;
-	endcase
 default:
 	takb = 1'b0;
 endcase
 
 
-//---------------------------------------------------------
+//-----------------------------------------------------------------------------
 // Datapath (ALU) operations.
-//---------------------------------------------------------
+//-----------------------------------------------------------------------------
 wire [6:0] cntlzo,cntloo;
 cntlz64 u12 ( .i(a),  .o(cntlzo) );
 cntlo64 u13 ( .i(a),  .o(cntloo) );
@@ -988,13 +1051,13 @@ cntlo64 u13 ( .i(a),  .o(cntloo) );
 reg [1:0] shftop;
 wire [63:0] shfto;
 always @(xFunc)
-	if (xFunc==`ASL)
+	if (xFunc==`SHL)
 		shftop = 2'b00;
 	else if (xFunc==`ROL || xFunc==`ROR)
 		shftop = 2'b01;
-	else if (xFunc==`LSR)
+	else if (xFunc==`SHRU)
 		shftop = 2'b10;
-	else if (xFunc==`ASR)
+	else if (xFunc==`SHR)
 		shftop = 2'b11;
 	else
 		shftop = 2'b01;
@@ -1012,18 +1075,6 @@ shiftAndMask u15
 	.mo(masko)
 );
 
-function [63:0] fnIncPC;
-input [63:0] fpc;
-begin
-case(fpc[3:2])
-2'd0:	fnIncPC = {fpc[63:4],4'b0100};
-2'd1:	fnIncPC = {fpc[63:4],4'b1000};
-2'd2:	fnIncPC = {fpc[63:4]+60'd1,4'b0000};
-2'd3:	fnIncPC = {fpc[63:4]+60'd1,4'b0000};
-endcase
-end
-endfunction
-
 always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	sqrt_out or cntlzo or cntloo or tick or ipc or tba or regset or
 	lt or eq or ltu or mult_out or lti or eqi or ltui or xIR or div_q or div_r or
@@ -1033,7 +1084,9 @@ always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 )
 case(xOpcode)
 `R:
-	case(xFunc)
+	casex(xFunc)
+	`SETLO:	xData = imm;
+	`SETHI:	xData = {imm[63:32],a[31:0]};
 	`COM:	xData = ~a;
 	`NOT:	xData = ~|a;
 	`NEG:	xData = -a;
@@ -1063,7 +1116,7 @@ case(xOpcode)
 	`SEXT32:	xData = {{32{a[31]}},a[31:0]};
 
 	`MFSPR:
-		case(xIR[34:30])
+		case(xIR[12:7])
 		`Wired:			xData = Wired;
 		`TLBIndex:		xData = Index;
 		`TLBRandom:		xData = Random;
@@ -1072,27 +1125,31 @@ case(xOpcode)
 		`TLBPageMask:	xData = {TLBPageMask,13'd0};
 		`TLBASID:		xData = TLBASID;
 		`PageTableAddr:	xData = {PageTableAddr,13'd0};
-		`BadVAddr:		xData = {BadVAddr,13'd0};
+		`BadVAddr:		xData = {BadVAddr[xAXC],13'd0};
 		`ASID:			xData = ASID;
 		`EP0:			xData = EP[0];
 		`EP1:			xData = EP[1];
 		`EP2:			xData = EP[2];
 		`EP3:			xData = EP[3];
 		`AXC:			xData = xAXC;
+		`Tick:			xData = tick;
+		`EPC:			xData = EPC[xAXC];
+		`CauseCode:		xData = CauseCode[xAXC];
+		`TBA:			xData = TBA;
 		default:	xData = 65'd0;
 		endcase
-	`MFTICK:	xData = tick;
-	`MFEPC:		xData = ipc;
-	`MFTBA:		xData = tba;
-	`MTTBA:		xData = a;
-	`MTREGSET:	xData = a;
-	`MFREGSET:	xData = regset;
+	`OMG:		xData = mutex_gate[a[5:0]];
+	`CMG:		xData = mutex_gate[a[5:0]];
+	`OMGI:		xData = mutex_gate[xIR[12:7]];
+	`CMGI:		xData = mutex_gate[xIR[12:7]];
 	default:	xData = 65'd0;
 	endcase
 `RR:
 	case(xFunc)
 	`ADD:	xData = a + b;
+	`ADDU:	xData = a + b;
 	`SUB:	xData = a - b;
+	`SUBU:	xData = a - b;
 	`CMP:	xData = lt ? 64'hFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
 	`CMPU:	xData = ltu ? 64'hFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
 	`SEQ:	xData = eq;
@@ -1123,11 +1180,11 @@ case(xOpcode)
 	`DIVU:	xData = div_q;
 	`MOD:	xData = div_r;
 
-	`ASL:	xData = shfto;
-	`LSR:	xData = shfto;
+	`SHL:	xData = shfto;
+	`SHRU:	xData = shfto;
 	`ROL:	xData = shfto;
 	`ROR:	xData = {a[0],a[63:1]};
-	`ASR:	xData = shfto;
+	`SHR:	xData = shfto;
 	`ROLAM:	xData = shfto & masko;
 
 	`BCD_ADD:	xData = bcdaddo;
@@ -1137,19 +1194,20 @@ case(xOpcode)
 	endcase
 `SHFTI:
 	case(xFunc)
-	`ASLI:	xData = shfto;
-	`LSRI:	xData = shfto;
+	`SHLI:	xData = shfto;
+	`SHRUI:	xData = shfto;
 	`ROLI:	xData = shfto;
 	`RORI:	xData = {a[0],a[63:1]};
-	`ASRI:	xData = shfto;
+	`SHRI:	xData = shfto;
 	`ROLAMI:	xData = shfto & masko;
-	`BFINS: 	for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? shfto[n] : b[n];
-	`BFSET: 	for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b1 : b[n];
-	`BFCLR: 	for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b0 : b[n];
-	`BFCHG: 	for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? ~b[n] : b[n];
+	`BFINS: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? shfto[n] : b[n]; xData[64] = 1'b0; end
+	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b1 : b[n]; xData[64] = 1'b0; end
+	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b0 : b[n]; xData[64] = 1'b0; end
+	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? ~b[n] : b[n]; xData[64] = 1'b0; end
 	default:	xData = 65'd0;
 	endcase
 `ADDI:	xData = a + imm;
+`ADDUI:	xData = a + imm;
 `SUBI:	xData = a - imm;
 `CMPI:	xData = lti ? 64'hFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
 `CMPUI:	xData = ltui ? 64'hFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
@@ -1178,6 +1236,8 @@ case(xOpcode)
 		xData = a + imm;
 `SW,`SH,`SC,`SB,`SWC:
 		xData = a + imm;
+`MEMNDX:
+		xData = a + b + imm;
 `BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BOR,`BAND:
 		xData = 64'd0;
 `TRAPcc:	xData = fnIncPC(xpc);
@@ -1189,6 +1249,9 @@ case(xOpcode)
 `FPZL:	xData = fpZLOut;
 default:	xData = 65'd0;
 endcase
+
+wire dbz_error = (xOpcode==`DIVSI||xOpcode==`DIVUI) && b==64'd0;
+wire ovr_error = (xOpcode==`ADDI || xOpcode==`SUBI) && (xData[64]!=xData[63]);
 
 wire xIsSqrt = xOpcode==`R && xFunc==`SQRT;
 wire xIsMult = (xOpcode==`RR && (xFunc==`MULU || xFunc==`MULS)) ||
@@ -1304,13 +1367,21 @@ wire advanceR = advanceX & !xStall & !m1Stall && !m2Stall && !m3Stall && !m4Stal
 wire advanceI = advanceR & ihit;
 
 wire triggerDCacheLoad = (m1IsLoad & m1IsCacheElement & !dhit) &&	// there is a miss
-						!(icaccess | dcaccess) && 	// caches are not active
+						!(icaccess | dcaccess | iciaccess) && 	// caches are not active
 						m2Opcode==`NOPI &&			// and the pipeline is free of memory-ops
 						m3Opcode==`NOPI &&
 						m4Opcode==`NOPI &&
 						wr_empty					// and the write buffer is empty
 						;
-wire triggerICacheLoad = !ihit & !triggerDCacheLoad;						;
+// Since IMM is "sticky" we have to check for it.
+wire triggerICacheLoad = !ihit & !triggerDCacheLoad &	// There is a miss
+						(dOpcode==`NOPI || dOpcode[6:4]==`IMM) &&			// and the pipeline is flushed
+						(xOpcode==`NOPI || xOpcode[6:4]==`IMM) &&
+						m1Opcode==`NOPI &&
+						m2Opcode==`NOPI &&
+						m3Opcode==`NOPI &&
+						m4Opcode==`NOPI
+						;
 
 wire xWillLoadStore = (xIsLoad||xIsStore) & advanceX;
 wire stallCacheLoad = xWillLoadStore;
@@ -1322,7 +1393,7 @@ reg prev_nmi,nmi_edge;
 // Register file.
 //---------------------------------------------------------
 
-syncRam512x64_1rw2r u5
+syncRam512x64_1rw3r u5
 (
 	.wrst(1'b0),
 	.wclk(clk),
@@ -1337,16 +1408,23 @@ syncRam512x64_1rw2r u5
 	.rcea(advanceR),
 	.radra(dRa),
 	.roa(rfoa),
-	
+
 	.rrstb(1'b0),
 	.rclkb(~clk),
 	.rceb(advanceR),
 	.radrb(dRb),
-	.rob(rfob)
+	.rob(rfob),
+
+	.rrstc(1'b0),
+	.rclkc(~clk),
+	.rcec(advanceR),
+	.radrc(dRc),
+	.roc(rfoc)
 );
 
 
 reg m1clkoff,m2clkoff,m3clkoff,m4clkoff,wclkoff;
+reg dFip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
 
 always @(posedge clk)
 if (rst_i) begin
@@ -1396,6 +1474,13 @@ if (rst_i) begin
 	m2irqf <= 1'b0;
 	m3irqf <= 1'b0;
 	m4irqf <= 1'b0;
+	wFip <= 1'b0;
+	m4Fip <= 1'b0;
+	m3Fip <= 1'b0;
+	m2Fip <= 1'b0;
+	m1Fip <= 1'b0;
+	xFip <= 1'b0;
+	dFip <= 1'b0;
 	dirqf <= 1'b0;
 	tick <= 32'd0;
 	cstate <= IDLE;
@@ -1412,20 +1497,32 @@ if (rst_i) begin
 	clk_en <= 1'b1;
 	Random <= 4'hF;
 	Wired <= 4'd0;
-	StatusTLB <= 1'b0;
-	StatusEXL <= 1'b0;
+	StatusEXL <= 16'b0;
 	epcnt <= 5'd0;
-	EP[0] <= 32'd0;
-	EP[1] <= 32'd0;
-	EP[2] <= 32'd0;
-	EP[3] <= 32'd0;
+	EP[0] <= 32'h00000000;
+	EP[1] <= 32'h00000000;
+	EP[2] <= 32'h00000000;
+	EP[3] <= 32'h00000000;
 	AXC <= 4'd0;
 	dAXC <= 4'd0;
 	xAXC <= 4'd0;
 	resetA <= 1'b1;
+	gbl_branch_hist <= 3'b000;
 end
 else begin
 
+//---------------------------------------------------------
+// Initialize program counters
+//---------------------------------------------------------
+if (resetA) begin
+	pc[xAXC] <= `RESET_VECTOR;
+	xAXC <= xAXC + 4'd1;
+	if (xAXC==4'hF)
+		resetA <= 1'b0;
+end
+
+cmd_en <= 1'b0;				// allow this signal only to pulse for a single clock cycle
+wr_en <= 1'b0;					// allow this signal to only pulse for a single cycle
 if (Random==Wired)
 	Random <= 4'hF;
 else
@@ -1462,6 +1559,7 @@ end
 //---------------------------------------------------------
 if (advanceW) begin
 	textype <= wextype;
+	wextype <= `EX_NON;
 	tRt <= wRt;
 	tData <= wData;
 //	regfile[wRt] <= wData;	<- regfile.v
@@ -1476,7 +1574,6 @@ if (advanceW) begin
 		m4irqf <= 1'b0;
 		xirqf <= 1'b0;
 		dirqf <= 1'b0;
-		ipc <= wpc;
 		exception_type <= wextype;
 	end
 	clk_en <= 1'b1;
@@ -1487,6 +1584,15 @@ if (advanceW) begin
 	m2clkoff <= 1'b0;
 	m3clkoff <= 1'b0;
 	m4clkoff <= 1'b0;
+	if (wFip) begin
+		wFip <= 1'b0;
+		m4Fip <= 1'b0;
+		m3Fip <= 1'b0;
+		m2Fip <= 1'b0;
+		m1Fip <= 1'b0;
+		xFip <= 1'b0;
+		dFip <= 1'b0;
+	end
 end
 
 //---------------------------------------------------------
@@ -1495,23 +1601,28 @@ end
 //---------------------------------------------------------
 if (advanceM4) begin
 	wirqf <= m4irqf;
+	wFip <= m4Fip;
 	wextype <= m4extype;
 	wRt <= m4Rt;
 	wpc <= m4pc;
 	wclkoff <= m4clkoff;
 	wData <= m4Data;
+
 	m4Rt <= 9'd0;
 	m4Opcode <= `NOPI;
 	m4Data <= 64'd0;
 	m4clkoff <= 1'b0;
 	m4Opcode <= `NOPI;
-	case(m4Opcode)
-	`LW,`LWR:	begin
-					wData <= {rd_data,m4Data[31:0]};
-					rd_en <= 1'b0;	// only if LW/LWR
-				end
-	default:	wData <= m4Data;
-	endcase
+	m4extype <= `EX_NON;
+	if (m4extype==`EX_NON) begin
+		case(m4Opcode)
+		`LW,`LWR:	begin
+						wData <= {rd_data,m4Data[31:0]};
+						rd_en <= 1'b0;	// only if LW/LWR
+					end
+		default:	wData <= m4Data;
+		endcase
+	end
 end
 
 
@@ -1522,10 +1633,12 @@ if (advanceM3) begin
 	m4Opcode <= m3Opcode;
 	m4Func <= m3Func;
 	m4irqf <= m3irqf;
+	m4Fip <= m3Fip;
 	m4extype <= m3extype;
 	m4Rt <= m3Rt;
 	m4pc <= m3pc;
 	m4clkoff <= m3clkoff;
+	
 	m3Rt <= 9'd0;
 	m3Opcode <= `NOPI;
 	m3Func <= 7'd0;
@@ -1534,81 +1647,84 @@ if (advanceM3) begin
 	m4Data <= m3Data;
 	m3Addr <= 64'd0;
 	m3Data <= 64'd0;
-	case(m3Opcode)
-	`INW:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			sel_o <= 4'h0;
-			m4Data <= {dat_i,m3Data[31:0]};
-		end
-	`OUTW:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			we_o <= 1'b0;
-			sel_o <= 4'h0;
-		end
-	`LW,`LWR:
-		begin
-			rd_en <= 1'b1;
-			m4Data <= {32'd0,rd_data};
-		end
-	`LH:
-		begin
-		rd_en <= 1'b0;
-		m4Data <= {{32{rd_data[31]}},rd_data};
-		end
-	`LHU:
-		begin
-		rd_en <= 1'b0;
-		m4Data <= rd_data;
-		end
-	`LC:
-		begin
-		rd_en <= 1'b0;
-		case(m3Addr[1])
-		1'b0:	m4Data <= {{48{rd_data[15]}},rd_data[15:0]};
-		1'b1:	m4Data <= {{48{rd_data[31]}},rd_data[31:16]};
+	m3extype <= `EX_NON;
+	if (m3extype==`EX_NON) begin
+		case(m3Opcode)
+		`INW:
+			begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				m4Data <= {dat_i,m3Data[31:0]};
+			end
+		`OUTW:
+			begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'h0;
+			end
+		`LW,`LWR:
+			begin
+				rd_en <= 1'b1;
+				m4Data <= {32'd0,rd_data};
+			end
+		`LH:
+			begin
+			rd_en <= 1'b0;
+			m4Data <= {{32{rd_data[31]}},rd_data};
+			end
+		`LHU:
+			begin
+			rd_en <= 1'b0;
+			m4Data <= rd_data;
+			end
+		`LC:
+			begin
+			rd_en <= 1'b0;
+			case(m3Addr[1])
+			1'b0:	m4Data <= {{48{rd_data[15]}},rd_data[15:0]};
+			1'b1:	m4Data <= {{48{rd_data[31]}},rd_data[31:16]};
+			endcase
+			end
+		`LCU:
+			begin
+			rd_en <= 1'b0;
+			case(m3Addr[1])
+			1'b0:	m4Data <= {48'd0,rd_data[15:0]};
+			1'b1:	m4Data <= {48'd0,rd_data[31:16]};
+			endcase
+			end
+		`LB:
+			begin
+			rd_en <= 1'b0;
+			case(m3Addr[1:0])
+			2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
+			2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
+			2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
+			2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
+			endcase
+			end
+		`LBU:
+			begin
+			case(m3Addr[1:0])
+			2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
+			2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
+			2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
+			2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
+			endcase
+			rd_en <= 1'b0;
+			end
+		`SW,`SWC:
+			begin
+				cmd_en <= 1'b1;
+				cmd_instr <= 3'b000;	// WRITE
+				cmd_bl <= 6'd2;			// 2-words
+				cmd_byte_addr <= {m3Addr[29:3],3'b000};
+			end
+		default:	;
 		endcase
-		end
-	`LCU:
-		begin
-		rd_en <= 1'b0;
-		case(m3Addr[1])
-		1'b0:	m4Data <= {48'd0,rd_data[15:0]};
-		1'b1:	m4Data <= {48'd0,rd_data[31:16]};
-		endcase
-		end
-	`LB:
-		begin
-		rd_en <= 1'b0;
-		case(m3Addr[1:0])
-		2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
-		2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
-		2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
-		2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
-		endcase
-		end
-	`LBU:
-		begin
-		case(m3Addr[1:0])
-		2'd0:	m4Data <= {{56{rd_data[7]}},rd_data[7:0]};
-		2'd1:	m4Data <= {{56{rd_data[15]}},rd_data[15:8]};
-		2'd2:	m4Data <= {{56{rd_data[23]}},rd_data[23:16]};
-		2'd3:	m4Data <= {{56{rd_data[31]}},rd_data[31:24]};
-		endcase
-		rd_en <= 1'b0;
-		end
-	`SW,`SWC:
-		begin
-			cmd_en <= 1'b1;
-			cmd_instr <= 3'b000;	// WRITE
-			cmd_bl <= 6'd2;			// 2-words
-			cmd_byte_addr <= {m3Addr[29:3],3'b000};
-		end
-	default:	;
-	endcase
+	end
 end
 
 //---------------------------------------------------------
@@ -1624,6 +1740,8 @@ if (advanceM2) begin
 	m3Rt <= m2Rt;
 	m3pc <= m2pc;
 	m3clkoff <= m2clkoff;
+	m3Fip <= m2Fip;
+	
 	m2Rt <= 9'd0;
 	m2Opcode <= `NOPI;
 	m2Func <= 7'd0;
@@ -1631,43 +1749,46 @@ if (advanceM2) begin
 	m2Data <= 64'd0;
 	m2clkoff <= 1'b0;
 	m2pc <= 64'd0;
-	case(m2Opcode)
-	`INW:
-		begin
-		stb_o <= 1'b1;
-		sel_o <= 4'hF;
-		adr_o <= {m2Addr[63:3],3'b100};
-		end
-	`OUTW:
-		begin
-		stb_o <= 1'b1;
-		we_o <= 1'b1;
-		sel_o <= 4'hF;
-		adr_o <= {m2Addr[63:3],3'b100};
-		dat_o <= m2Data[63:32];
-		end
-	// Load fifo with upper half of word
-	`SW,`SWC:
-		begin
-			wr_en <= 1'b1;
-			wr_data <= m2Data[63:32];
-			wr_mask <= 4'h0;
-			wr_addr <= {m2Addr[63:3],3'b100};
-		end
-	`SH,`SC,`SB:
-		begin
-			cmd_en <= 1'b1;
-			cmd_instr <= 3'b000;	// WRITE
-			cmd_bl <= 6'd1;			// 1-word
-			cmd_byte_addr <= {m2Addr[29:2],2'b00};
-		end
-	// Initiate read operation
-	`LW,`LWR,`LH,`LC,`LB,`LHU,`LBU,`LCU:
-		begin
-			rd_en <= 1'b1;
-		end
-	default:	;
-	endcase
+	m2extype <= `EX_NON;
+	if (m2extype==`EX_NON) begin
+		case(m2Opcode)
+		`INW:
+			begin
+			stb_o <= 1'b1;
+			sel_o <= 4'hF;
+			adr_o <= {m2Addr[63:3],3'b100};
+			end
+		`OUTW:
+			begin
+			stb_o <= 1'b1;
+			we_o <= 1'b1;
+			sel_o <= 4'hF;
+			adr_o <= {m2Addr[63:3],3'b100};
+			dat_o <= m2Data[63:32];
+			end
+		// Load fifo with upper half of word
+		`SW,`SWC:
+			begin
+				wr_en <= 1'b1;
+				wr_data <= m2Data[63:32];
+				wr_mask <= 4'h0;
+				wr_addr <= {m2Addr[63:3],3'b100};
+			end
+		`SH,`SC,`SB:
+			begin
+				cmd_en <= 1'b1;
+				cmd_instr <= 3'b000;	// WRITE
+				cmd_bl <= 6'd1;			// 1-word
+				cmd_byte_addr <= {m2Addr[29:2],2'b00};
+			end
+		// Initiate read operation
+		`LW,`LWR,`LH,`LC,`LB,`LHU,`LBU,`LCU:
+			begin
+				rd_en <= 1'b1;
+			end
+		default:	;
+		endcase
+	end
 end
 
 wrhit <= 1'b0;
@@ -1688,6 +1809,8 @@ if (advanceM1) begin
 	m2Rt <= m1Rt;
 	m2pc <= m1pc;
 	m2clkoff <= m1clkoff;
+	m2Fip <= m1Fip;
+
 	m1Rt <= 9'd0;
 	m1Opcode <= `NOPI;
 	m1Func <= 7'd0;
@@ -1695,258 +1818,266 @@ if (advanceM1) begin
 	m1clkoff <= 1'b0;
 	m1pc <= 64'd0;
 	m1IsCacheElement <= 1'b0;
-	case(m1Opcode)
-	`MISC:
-		case(m1Func)
-		`TLBR:
+	m1extype <= `EX_NON;
+
+	if (m1extype == `EX_NON) begin
+		case(m1Opcode)
+		`MISC:
+			case(m1Func)
+			`TLBR:
+				begin
+					TLBPageMask <= ITLBPageMask[i];
+					TLBVirtPage <= ITLBVirtPage[i];
+					TLBPhysPage <= ITLBPhysPage[i];
+					TLBASID <= ITLBASID[i];
+					TLBG <= ITLBG[i];
+				end
+			`TLBWI,`TLBWR:
+				begin
+					ITLBValid[i] <= 1'b1;
+					ITLBVirtPage[i] <= TLBVirtPage;
+					ITLBPhysPage[i] <= TLBPhysPage;
+					ITLBPageMask[i] <= TLBPageMask;
+					ITLBASID[i] <= TLBASID;
+					DTLBValid[i] <= 1'b1;
+					DTLBVirtPage[i] <= TLBVirtPage;
+					DTLBPhysPage[i] <= TLBPhysPage;
+					DTLBPageMask[i] <= TLBPageMask;
+					DTLBASID[i] <= TLBASID;
+				end
+			endcase
+		`INW:
 			begin
-				TLBVirtPage <= ITLBVirtPage[i];
-				TLBPhysPage <= ITLBPhysPage[i];
+				stb_o <= 1'b0;
+				m2Data <= {32'd0,dat_i};
 			end
-		`TLBWI,`TLBWR:
+		`INH:
 			begin
-				ITLBValid[i] <= 1'b1;
-				ITLBVirtPage[i] <= TLBVirtPage;
-				ITLBPhysPage[i] <= TLBPhysPage;
-				ITLBPageMask[i] <= TLBPageMask;
-				ITLBASID[i] <= TLBASID;
-				DTLBValid[i] <= 1'b1;
-				DTLBVirtPage[i] <= TLBVirtPage;
-				DTLBPhysPage[i] <= TLBPhysPage;
-				DTLBPageMask[i] <= TLBPageMask;
-				DTLBASID[i] <= TLBASID;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'd0;
+				m2Data <= {{32{dat_i[31]}},dat_i[31: 0]};
 			end
-		endcase
-	`INW:
-		begin
-			stb_o <= 1'b0;
-			m2Data <= {32'd0,dat_i};
-		end
-	`INH:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			sel_o <= 4'd0;
-			m2Data <= {{32{dat_i[31]}},dat_i[31: 0]};
-		end
-	`INCH:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			sel_o <= 4'd0;
-			case(sel_o)
-			4'b0011:	m2Data <= {{48{dat_i[15]}},dat_i[15: 0]};
-			4'b1100:	m2Data <= {{48{dat_i[31]}},dat_i[31:16]};
-			default:	m2Data <= 64'hDEADDEADDEADDEAD;			
-			endcase
-		end
-	`INB:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			sel_o <= 4'd0;
-			case(sel_o)
-			4'b0001:	m2Data <= {{56{dat_i[ 7]}},dat_i[ 7: 0]};
-			4'b0010:	m2Data <= {{56{dat_i[15]}},dat_i[15: 8]};
-			4'b0100:	m2Data <= {{56{dat_i[23]}},dat_i[23:16]};
-			4'b1000:	m2Data <= {{56{dat_i[31]}},dat_i[31:24]};
-			default:	m2Data <= 64'hDEADDEADDEADDEAD;
-			endcase
-		end
-	`OUTW:
-		begin
-			stb_o <= 1'b0;
-			we_o <= 1'b0;
-			sel_o <= 4'd0;
-		end
-	`OUTH,`OUTC,`OUTB:
-		begin
-			cyc_o <= 1'b0;
-			stb_o <= 1'b0;
-			we_o <= 1'b0;
-			sel_o <= 4'd0;
-		end
-	`LW:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:3],3'b000};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			m2Data <= cdat;
-		end
-	`LWR:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:3],3'b000};
-			rsv_o <= 1'b1;
-			resv_address <= pea[63:5];
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			m2Data <= cdat;
-			rsv_o <= 1'b1;
-			resv_address <= pea[63:5];
-		end
-	`LH:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			if (pea[1])
-				m2Data <= {{32{cdat[31]}},cdat[31:0]};
-			else
-				m2Data <= {{32{cdat[63]}},cdat[63:32]};
-		end
-	`LHU:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			if (pea[1])
-				m2Data <= {32'd0,cdat};
-			else
-				m2Data <= {32'd0,cdat[63:32]};
-		end
-	`LC:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			case(pea[2:1])
-			2'd0:	m2Data <= {{48{cdat[15]}},cdat[15:0]};
-			2'd1:	m2Data <= {{48{cdat[31]}},cdat[31:16]};
-			2'd2:	m2Data <= {{48{cdat[47]}},cdat[47:32]};
-			2'd3:	m2Data <= {{48{cdat[63]}},cdat[63:48]};
-			endcase
-		end
-	`LCU:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			case(pea[2:1])
-			2'd0:	m2Data <= {48'd0,cdat[15: 0]};
-			2'd1:	m2Data <= {48'd0,cdat[31:16]};
-			2'd2:	m2Data <= {48'd0,cdat[47:32]};
-			2'd3:	m2Data <= {48'd0,cdat[63:48]};
-			endcase
-		end
-	`LB:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			case(pea[2:0])
-			3'b000:	m2Data <= {{56{cdat[ 7]}},cdat[ 7: 0]};
-			3'b001:	m2Data <= {{56{cdat[15]}},cdat[15: 8]};
-			3'b010:	m2Data <= {{56{cdat[23]}},cdat[23:16]};
-			3'b011:	m2Data <= {{56{cdat[31]}},cdat[31:24]};
-			3'b100:	m2Data <= {{56{cdat[39]}},cdat[39:32]};
-			3'b101:	m2Data <= {{56{cdat[47]}},cdat[47:40]};
-			3'b110:	m2Data <= {{56{cdat[55]}},cdat[55:48]};
-			3'b111:	m2Data <= {{56{cdat[63]}},cdat[63:56]};
-			endcase
-		end
-	`LBU:
-		if (!m1IsCacheElement) begin
-			cmd_en <= 1'b1;
-			cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[63:2],2'b00};
-		end
-		else if (dhit) begin
-			m2Opcode <= `LDONE;
-			case(pea[2:0])
-			3'b000:	m2Data <= {56'd0,cdat[ 7: 0]};
-			3'b001:	m2Data <= {56'd0,cdat[15: 8]};
-			3'b010:	m2Data <= {56'd0,cdat[23:16]};
-			3'b011:	m2Data <= {56'd0,cdat[31:23]};
-			3'b100:	m2Data <= {56'd0,cdat[39:32]};
-			3'b101:	m2Data <= {56'd0,cdat[47:40]};
-			3'b110:	m2Data <= {56'd0,cdat[55:48]};
-			3'b111:	m2Data <= {56'd0,cdat[63:56]};
-			endcase
-		end
-	`SW,`SH:
-		begin
-			wrhit <= dhit;
-			wr_en <= 1'b1;
-			wr_data <= b[31:0];
-			wr_mask <= 4'h0;
-			wr_addr <= {pea[63:3],3'b000};
-			m2Addr <= {pea[63:3],3'b000};
-			if (resv_address==pea[63:5])
-				resv_address <= 59'd0;
-		end
-	`SC:
-		begin
-			wrhit <= dhit;
-			wr_en <= 1'b1;
-			wr_data <= {2{b[15:0]}};
-			wr_mask <= pea[1] ? 4'b0011 : 4'b1100;
-			wr_addr <= {pea[63:2],2'b00};
-			m2Addr <= {pea[63:2],2'b00};
-			if (resv_address==pea[63:5])
-				resv_address <= 59'd0;
-		end
-	`SB:
-		begin
-			wrhit <= dhit;
-			wr_en <= 1'b1;
-			wr_data <= {4{b[7:0]}};
-			wr_addr <= {pea[63:2],2'b00};
-			m2Addr <= {pea[63:2],2'b00};
-			case(pea[1:0])
-			2'd0:	wr_mask <= 4'b1110;
-			2'd1:	wr_mask <= 4'b1101;
-			2'd2:	wr_mask <= 4'b1011;
-			2'd3:	wr_mask <= 4'b0111;
-			endcase
-			if (resv_address==pea[63:5])
-				resv_address <= 59'd0;
-		end
-	`SWC:
-		begin
-			rsf <= 1'b0;
-			if (resv_address==pea[63:5]) begin
+		`INCH:
+			begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'd0;
+				case(sel_o)
+				4'b0011:	m2Data <= {{48{dat_i[15]}},dat_i[15: 0]};
+				4'b1100:	m2Data <= {{48{dat_i[31]}},dat_i[31:16]};
+				default:	m2Data <= 64'hDEADDEADDEADDEAD;			
+				endcase
+			end
+		`INB:
+			begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'd0;
+				case(sel_o)
+				4'b0001:	m2Data <= {{56{dat_i[ 7]}},dat_i[ 7: 0]};
+				4'b0010:	m2Data <= {{56{dat_i[15]}},dat_i[15: 8]};
+				4'b0100:	m2Data <= {{56{dat_i[23]}},dat_i[23:16]};
+				4'b1000:	m2Data <= {{56{dat_i[31]}},dat_i[31:24]};
+				default:	m2Data <= 64'hDEADDEADDEADDEAD;
+				endcase
+			end
+		`OUTW:
+			begin
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'd0;
+			end
+		`OUTH,`OUTC,`OUTB:
+			begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'd0;
+			end
+		`LW:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:3],3'b000};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				m2Data <= cdat;
+			end
+		`LWR:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:3],3'b000};
+				rsv_o <= 1'b1;
+				resv_address <= pea[63:5];
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				m2Data <= cdat;
+				rsv_o <= 1'b1;
+				resv_address <= pea[63:5];
+			end
+		`LH:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				if (pea[1])
+					m2Data <= {{32{cdat[31]}},cdat[31:0]};
+				else
+					m2Data <= {{32{cdat[63]}},cdat[63:32]};
+			end
+		`LHU:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				if (pea[1])
+					m2Data <= {32'd0,cdat};
+				else
+					m2Data <= {32'd0,cdat[63:32]};
+			end
+		`LC:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				case(pea[2:1])
+				2'd0:	m2Data <= {{48{cdat[15]}},cdat[15:0]};
+				2'd1:	m2Data <= {{48{cdat[31]}},cdat[31:16]};
+				2'd2:	m2Data <= {{48{cdat[47]}},cdat[47:32]};
+				2'd3:	m2Data <= {{48{cdat[63]}},cdat[63:48]};
+				endcase
+			end
+		`LCU:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				case(pea[2:1])
+				2'd0:	m2Data <= {48'd0,cdat[15: 0]};
+				2'd1:	m2Data <= {48'd0,cdat[31:16]};
+				2'd2:	m2Data <= {48'd0,cdat[47:32]};
+				2'd3:	m2Data <= {48'd0,cdat[63:48]};
+				endcase
+			end
+		`LB:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				case(pea[2:0])
+				3'b000:	m2Data <= {{56{cdat[ 7]}},cdat[ 7: 0]};
+				3'b001:	m2Data <= {{56{cdat[15]}},cdat[15: 8]};
+				3'b010:	m2Data <= {{56{cdat[23]}},cdat[23:16]};
+				3'b011:	m2Data <= {{56{cdat[31]}},cdat[31:24]};
+				3'b100:	m2Data <= {{56{cdat[39]}},cdat[39:32]};
+				3'b101:	m2Data <= {{56{cdat[47]}},cdat[47:40]};
+				3'b110:	m2Data <= {{56{cdat[55]}},cdat[55:48]};
+				3'b111:	m2Data <= {{56{cdat[63]}},cdat[63:56]};
+				endcase
+			end
+		`LBU:
+			if (!m1IsCacheElement) begin
+				cmd_en <= 1'b1;
+				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[63:2],2'b00};
+			end
+			else if (dhit) begin
+				m2Opcode <= `LDONE;
+				case(pea[2:0])
+				3'b000:	m2Data <= {56'd0,cdat[ 7: 0]};
+				3'b001:	m2Data <= {56'd0,cdat[15: 8]};
+				3'b010:	m2Data <= {56'd0,cdat[23:16]};
+				3'b011:	m2Data <= {56'd0,cdat[31:23]};
+				3'b100:	m2Data <= {56'd0,cdat[39:32]};
+				3'b101:	m2Data <= {56'd0,cdat[47:40]};
+				3'b110:	m2Data <= {56'd0,cdat[55:48]};
+				3'b111:	m2Data <= {56'd0,cdat[63:56]};
+				endcase
+			end
+		`SW,`SH:
+			begin
 				wrhit <= dhit;
 				wr_en <= 1'b1;
-				wr_data <= b[31:0];
+				wr_data <= m1b[31:0];
 				wr_mask <= 4'h0;
 				wr_addr <= {pea[63:3],3'b000};
 				m2Addr <= {pea[63:3],3'b000};
-				resv_address <= 59'd0;
-				rsf <= 1'b1;
+				if (resv_address==pea[63:5])
+					resv_address <= 59'd0;
 			end
-			else
-				m2Opcode <= `NOPI;
-		end
-	endcase
+		`SC:
+			begin
+				$display("Storing char to %h, ea=%h",pea,ea);
+				wrhit <= dhit;
+				wr_en <= 1'b1;
+				wr_data <= {2{m1b[15:0]}};
+				wr_mask <= pea[1] ? 4'b0011 : 4'b1100;
+				wr_addr <= {pea[63:2],2'b00};
+				m2Addr <= {pea[63:2],2'b00};
+				if (resv_address==pea[63:5])
+					resv_address <= 59'd0;
+			end
+		`SB:
+			begin
+				wrhit <= dhit;
+				wr_en <= 1'b1;
+				wr_data <= {4{m1b[7:0]}};
+				wr_addr <= {pea[63:2],2'b00};
+				m2Addr <= {pea[63:2],2'b00};
+				case(pea[1:0])
+				2'd0:	wr_mask <= 4'b1110;
+				2'd1:	wr_mask <= 4'b1101;
+				2'd2:	wr_mask <= 4'b1011;
+				2'd3:	wr_mask <= 4'b0111;
+				endcase
+				if (resv_address==pea[63:5])
+					resv_address <= 59'd0;
+			end
+		`SWC:
+			begin
+				rsf <= 1'b0;
+				if (resv_address==pea[63:5]) begin
+					wrhit <= dhit;
+					wr_en <= 1'b1;
+					wr_data <= m1b[31:0];
+					wr_mask <= 4'h0;
+					wr_addr <= {pea[63:3],3'b000};
+					m2Addr <= {pea[63:3],3'b000};
+					resv_address <= 59'd0;
+					rsf <= 1'b1;
+				end
+				else
+					m2Opcode <= `NOPI;
+			end
+		endcase
+	end
 end
 
 //---------------------------------------------------------
@@ -1958,12 +2089,14 @@ end
 //---------------------------------------------------------
 if (advanceX) begin
 	m1irqf <= xirqf;
+	m1Fip <= xFip;
 	m1extype <= xextype;
 	m1Opcode <= xOpcode;
 	m1Func <= xFunc;
 	m1Rt <= xRt;
 	m1Data <= xData;
 	m1IsCacheElement <= xisCacheElement;
+	m1AXC <= xAXC;
 	if (xOpcode==`MOVZ && !aeqz) begin
 		m1Rt <= 9'd0;
 		m1Data <= 64'd0;
@@ -1977,6 +2110,7 @@ if (advanceX) begin
 	a <= 64'd0;
 	b <= 64'd0;
 	imm <= 64'd0;
+	xextype <= `EX_NON;
 	if (xOpcode[6:4]!=`IMM) begin
 		xIR <= `NOP_INSN;
 	end
@@ -1998,7 +2132,7 @@ if (advanceX) begin
 	`R:
 		case(xFunc)
 		`MTSPR:
-			case(xIR[29:25])
+			case(xIR[12:7])
 			`Wired:			Wired <= xData[3:0];
 			`ASID:			ASID <= xData[7:0];
 			`TLBIndex:		Index <= xData[3:0];
@@ -2007,14 +2141,20 @@ if (advanceX) begin
 			`TLBPageMask:	TLBPageMask <= xData[24:13];
 			`TLBASID:		TLBASID <= xData[7:0];
 			`PageTableAddr:	PageTableAddr <= xData[63:13];
-			`BadVAddr:		BadVAddr <= xData[63:13];
-			`EP0:			EP[0] <= xData[31:0];
+			`BadVAddr:		BadVAddr[xAXC] <= xData[63:13];
+			`EP0:			EP[0] <= {xData[31:4],4'd0};
 			`EP1:			EP[1] <= xData[31:0];
 			`EP2:			EP[2] <= xData[31:0];
 			`EP3:			EP[3] <= xData[31:0];
+			`EPC:			EPC[xAXC] <= xData;
+			`TBA:			TBA <= xData;
 			default:	;
 			endcase
 		`MTTBA:	tba <= {xData[63:2],2'b00};
+		`OMG:	mutex_gate[a[5:0]] <= 1'b1;
+		`CMG:	mutex_gate[a[5:0]] <= 1'b0;
+		`OMGI:	mutex_gate[xIR[12:7]] <= 1'b1;
+		`CMGI:	mutex_gate[xIR[12:7]] <= 1'b0;
 		default:	;
 		endcase
 	`CALL:	m1Data <= fnIncPC(xpc);
@@ -2099,11 +2239,19 @@ if (advanceX) begin
 			dat_o <= {4{b[7:0]}};
 			end
 	`LB,`LBU,`LC,`LCU,`LH,`LHU,`LW,`LWR,`SW,`SH,`SC,`SB,`SWC:
+			begin
+			m1b <= b;
 			ea <= xData;
+			end
+	`MEMNDX:
+			begin
+			m1Opcode <= xFunc;
+			m1b <= c;
+			ea <= xData;
+			end
 	`DIVSI,`DIVUI:
 		if (b==64'd0) begin
-			if (xextype == 8'h00)
-				xextype <= `EX_DBZ;
+			xextype <= `EX_DBZ;
 		end
 	default:	;
 	endcase
@@ -2120,16 +2268,20 @@ end
 //---------------------------------------------------------
 if (advanceR) begin
 	xirqf <= dirqf;
+	xFip <= dFip;
 	xextype <= dextype;
 	xAXC <= dAXC;
 	xIR <= dIR;
 	xpc <= dpc;
 	xbranch_taken <= dbranch_taken;
 	dbranch_taken <= 1'b0;
+	dextype <= `EX_NON;
 	if (dOpcode[6:4]!=`IMM)	// IMM is "sticky"
 		dIR <= `NOP_INSN;
 	dRa <= 9'd0;
 	dRb <= 9'd0;
+
+	// Result forward muxes
 	casex(dRa)
 	9'bxxxx00000:	a <= 64'd0;
 	xRt:	a <= xData;
@@ -2154,22 +2306,37 @@ if (advanceR) begin
 	endcase
 	if (dOpcode==`SHFTI)
 		case(dFunc)
-		`ROLI,`ASLI,`ROLAMI:	b <= {58'd0,dIR[24:19]};
-		`RORI,`ASRI,`LSRI:		b <= {58'd0,~dIR[24:19]+6'd1};
+		`RORI:		b <= {58'd0,~dIR[24:19]+6'd1};
+		default:	b <= {58'd0,dIR[24:19]};
 		endcase
+	casex(dRc)
+	9'bxxxx00000:	c <= 64'd0;
+	xRt:	c <= xData;
+	m1Rt:	c <= m1Data;
+	m2Rt:	c <= m2Data;
+	m3Rt:	c <= m3Data;
+	m4Rt:	c <= m4Data;
+	wRt:	c <= wData;
+	tRt:	c <= tData;
+	default:	c <= rfoc;
+	endcase
+
+	// Set the target register
 	case(dOpcode)
-	`RR:
-		case(dFunc)
-		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BRA,`BRN,`BAND,`BOR:
-			xRt <= 9'd0;
-		default:	xRt <= {dAXC,dIR[24:20]};
-		endcase
-	`RET:	xRt <= {dAXC,dIR[24:20]};
-	`BRr:	xRt <= 9'd0;
-	`TRAPcc:	xRt <= {dAXC,5'd30};
-	`TRAPcci:	xRt <= {dAXC,5'd30};
+	`RR:		xRt <= {dAXC,dIR[24:20]};
+	`BTRI:		xRt <= 9'd0;
+	`BTRR:		xRt <= 9'd0;
+	`TRAPcc:	xRt <= 9'd0;
+	`TRAPcci:	xRt <= 9'd0;
 	`JMP:		xRt <= 9'd00;
 	`CALL:		xRt <= {dAXC,5'd31};
+	`RET:		xRt <= {dAXC,dIR[24:20]};
+	`MEMNDX:
+		case(dFunc)
+		`SW,`SH,`SC,`SB,`OUTW,`OUTH,`OUTC,`OUTB:
+				xRt <= 9'd0;
+		default:	xRt <= {dAXC,dIR[24:20]};
+		endcase
 	`SW,`SH,`SC,`SB,`OUTW,`OUTH,`OUTC,`OUTB:
 				xRt <= 9'd0;
 	`NOPI:		xRt <= 9'd0;
@@ -2177,30 +2344,27 @@ if (advanceR) begin
 				xRt <= 9'd0;
 	default:	xRt <= {dAXC,dIR[29:25]};
 	endcase
+	if (dOpcode[6:4]==`IMM)
+		xRt <= 9'd0;
+
+	// Set immediate value
 	if (xOpcode[6:4]==`IMM) begin
 		imm <= {xIR[38:0],dIR[24:0]};
 	end
 	else
 		case(dOpcode)
+		`BTRI:	imm <= {{44{dIR[19]}},dIR[19:0]};
 		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 			imm <= {{46{dIR[17]}},dIR[17:0]};
-		`SHFTI:
-			case(dFunc)
-			`RORI,`ASRI,`LSRI:
-				imm <= {58'd0,~dIR[24:19]+6'd1};
-			default:	imm <= {58'd0,dIR[24:19]};
-			endcase
 		`ANDI:	imm <= {39'h7FFFFFFFFF,dIR[24:0]};
 		`ORI:	imm <= {39'h0000000000,dIR[24:0]};
 		`XORI:	imm <= {39'h0000000000,dIR[24:0]};
-		`JMP:	imm <= {dpc[63:37],dIR[34:0],2'b00};
-		`CALL:	imm <= {dpc[63:37],dIR[34:0],2'b00};
 		`RET:	imm <= {44'h00000000000,dIR[19:0]};
+		`MEMNDX:	imm <= {{51{dIR[19]}},dIR[19:7]};
 		default:	imm <= {{39{dIR[24]}},dIR[24:0]};
 		endcase
-	if (dOpcode[6:4]==`IMM)
-		xRt <= 9'd0;
 	case(dOpcode)
+
 	`MISC:
 		case(dFunc)
 		`SEI:	im <= 1'b1;
@@ -2218,7 +2382,8 @@ end
 // - set special register defaults for some instructions
 //---------------------------------------------------------
 if (advanceI) begin
-	if (dOpcode[6:4]!=`IMM) begin
+	dextype <= `EX_NON;
+	if (iOpcode[6:4]!=`IMM) begin
 		epcnt <= epcnt + 5'd1;
 		case(epcnt)
 		5'd0:	AXC <= EP[0][ 3: 0];
@@ -2267,7 +2432,10 @@ if (advanceI) begin
 		dIR <= `NOP_INSN;
 		dextype <= `EX_IRQ;
 	end
-	else if (dirqf) begin
+	// Are we filling the pipeline with NOP's as a result of a previous
+	// hardware interrupt ?
+	else if (dirqf|dFip) begin
+		AXC <= 4'd0;
 		dIR <= `NOP_INSN;
 	end
 	else begin
@@ -2281,30 +2449,37 @@ if (advanceI) begin
 	dAXC <= AXC;
 	dRa <= {AXC,insn[34:30]};
 	dRb <= {AXC,insn[29:25]};
+	dRc <= {AXC,insn[24:20]};
 	if (ITLBMiss) begin
-		dextype <= `EX_TLBI;
-		StatusTLB <= 1'b1;
-		StatusEXL <= 1'b1;
-		BadVAddr <= pc_axc[63:13];
+		CauseCode[AXC] <= `EX_TLBI;
+		StatusEXL[AXC] <= 1'b1;
+		BadVAddr[AXC] <= pc_axc[63:13];
 		pc[AXC] <= `ITLB_MissHandler;
-		tlbra <= pc_axc;
+		EPC[AXC] <= pc_axc;
 	end
 	else begin
 		dbranch_taken <= 1'b0;
 		pc[AXC] <= fnIncPC(pc_axc);
-		case(insn[41:35])
+		case(iOpcode)
+		`MISC:
+			case(iFunc)
+			`FIP:	dFip <= 1'b1;
+			default:	;
+			endcase
 		`JMP,`CALL:
 			begin
 				dbranch_taken <= 1'b1;
 				pc[AXC] <= jmp_tgt;
 			end
-		`RR:
-			case(insn[6:0])
-			`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU:
+		`BTRR:
+			case(insn[4:0])
+			`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR:
 				if (predict_taken) begin
+					$display("Taking predicted branch: %h",{pc_axc[63:4] + {{42{insn[24]}},insn[24:7]},insn[6:5],2'b00});
 					dbranch_taken <= 1'b1;
-					pc[AXC] <= {pc_axc[63:4] + {{44{insn[17]}},insn[17:2]},insn[1:0],2'b00};
+					pc[AXC] <= {pc_axc[63:4] + {{42{insn[24]}},insn[24:7]},insn[6:5],2'b00};
 				end
+			default:	;
 			endcase
 		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 			begin
@@ -2313,21 +2488,11 @@ if (advanceI) begin
 					pc[AXC] <= {pc_axc[63:4] + {{50{insn[29]}},insn[29:20]},insn[19:18],2'b00};
 				end
 			end
-		`TRAPcc:	if (predict_taken) begin pc[AXC] <= `TRAP_VECTOR; dbranch_taken <= 1'b1; end
-		`TRAPcci:	if (predict_taken) begin pc[AXC] <= `TRAP_VECTOR; dbranch_taken <= 1'b1; end
+		`TRAPcc:	if (predict_taken) begin pc[AXC] <= {TBA[63:13],`GEN_TRAP_OFFSET}; dbranch_taken <= 1'b1; end
+		`TRAPcci:	if (predict_taken) begin pc[AXC] <= {TBA[63:13],`GEN_TRAP_OFFSET}; dbranch_taken <= 1'b1; end
 		default:	;
 		endcase
 	end
-end
-
-//---------------------------------------------------------
-// Initialize program counters
-//---------------------------------------------------------
-if (resetA) begin
-	pc[xAXC] <= `RESET_VECTOR;
-	xAXC <= xAXC + 4'd1;
-	if (xAXC==4'hF)
-		resetA <= 1'b0;
 end
 
 //`include "RPSTAGE.v"
@@ -2342,47 +2507,61 @@ if (advanceX) begin
 	case(xOpcode)
 	`MISC:
 		case(xFunc)
-		`IRET:	begin
-					if (StatusTLB) begin
-						pc[xAXC] <= tlbra;
-						if (xAXC==AXC)
-							dpc[63:2] <= tlbra[63:2];
-						if (xAXC==dAXC)
-							xpc[63:2] <= tlbra[63:2];
-						StatusTLB <= 1'b0;
+		`ERET:	begin
+					if (StatusEXL[xAXC]) begin
+						pc[xAXC] <= EPC[xAXC];
+						if (xAXC==AXC) begin
+							dpc <= EPC[xAXC];
+							dIR <= `NOP_INSN;
+						end
+						if (xAXC==dAXC) begin
+							xpc <= EPC[xAXC];
+							xIR <= `NOP_INSN;
+							xRt <= 9'd0;
+						end
 					end
-					else if (StatusEXL) begin
-						pc[xAXC] <= ipc;
-						if (xAXC==AXC)
-							dpc[63:2] <= ipc[63:2];
-						if (xAXC==dAXC)
-							xpc[63:2] <= ipc[63:2];
-					end
-					StatusEXL <= 1'b0;
-					xIR <= `NOP_INSN;
-					dIR <= `NOP_INSN;
-					xRt <= 9'd0;
+					StatusEXL[xAXC] <= 1'b0;
 				end
 		default:	;
 		endcase
-	`RR:
-		case(xFunc)
-		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR:
+	`BTRR:
+		case(xIR[4:0])
+	// BEQ r1,r2,label
+		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR:
 			if (takb & !xbranch_taken) begin
-				pc[xAXC][63:4] <= xpc[63:4] + {{44{xIR[24]}},xIR[24:9]};
-				pc[xAXC][3:2] <= xIR[8:7];
+				$display("Taking branch %h",xpc[63:4] + {{42{xIR[24]}},xIR[24:7]});
+				pc[xAXC][63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
+				pc[xAXC][3:2] <= xIR[6:5];
 				if (xAXC==AXC) begin
-					dpc[63:4] <= xpc[63:4] + {{44{xIR[24]}},xIR[24:9]};
-					dpc[3:2] <= xIR[8:7];
+					dpc[63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
+					dpc[3:2] <= xIR[6:5];
 					dIR <= `NOP_INSN;
 				end
 				if (xAXC==dAXC) begin
-					xpc[63:4] <= xpc[63:4] + {{44{xIR[24]}},xIR[24:9]};
-					xpc[3:2] <= xIR[8:7];
+					xpc[63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
+					xpc[3:2] <= xIR[6:5];
 					xIR <= `NOP_INSN;
 					xRt <= 9'd0;
 				end
 			end
+	// BEQ r1,r2,r10
+		`BEQR,`BNER,`BLTR,`BLER,`BGTR,`BGER,`BLTUR,`BLEUR,`BGTUR,`BGEUR://,`BANDR,`BORR,`BNRR:
+			if (takb) begin
+				pc[xAXC][63:2] <= c[63:2];
+				pc[xAXC][1:0] <= 2'b00;
+				if (xAXC==AXC) begin
+					dpc[63:2] <= c[63:2];
+					dpc[1:0] <= 2'b00;
+					dIR <= `NOP_INSN;
+				end
+				if (dAXC==xAXC) begin
+					xpc[63:2] <= c[63:2];
+					xpc[1:0] <= 2'b00;
+					xIR <= `NOP_INSN;
+					xRt <= 9'd0;
+				end
+			end
+		default:	;
 		endcase
 	// JMP and CALL change the program counter immediately in the IF stage.
 	// There's no work to do here. The pipeline does not need to be cleared.
@@ -2413,6 +2592,24 @@ if (advanceX) begin
 					xRt <= 9'd0;
 				end
 			end
+	// BEQ r1,#3,r10
+	`BTRI:
+		if (takb) begin
+			pc[xAXC][63:2] <= b[63:2];
+			pc[xAXC][1:0] <= 2'b00;
+			if (xAXC==AXC) begin
+				dpc[63:2] <= b[63:2];
+				dpc[1:0] <= 2'b00;
+				dIR <= `NOP_INSN;
+			end
+			if (dAXC==xAXC) begin
+				xpc[63:2] <= b[63:2];
+				xpc[1:0] <= 2'b00;
+				xIR <= `NOP_INSN;
+				xRt <= 9'd0;
+			end
+		end
+	// BEQI r1,#3,label
 	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 		if (takb) begin
 			if (!xbranch_taken) begin
@@ -2431,82 +2628,19 @@ if (advanceX) begin
 				end
 			end
 		end
-	`BRr:
-		case(xIR[29:25])
-		`BRAZ:	
-			begin
-				pc[xAXC][63:4] <= xpc[63:4] + imm[63:4];
-				pc[xAXC][3:2] <= imm[3:2];
-				if (AXC==xAXC) begin
-					dpc[63:4] <= xpc[63:4] + imm[63:4];
-					dpc[3:2] <= imm[3:2];
-					dIR <= `NOP_INSN;
-				end
-				if (dAXC==xAXC) begin
-					xpc[63:4] <= xpc[63:4] + imm[63:4];
-					xpc[3:2] <= imm[3:2];
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
-		`BEQZ,`BNEZ,`BLTZ,`BLEZ,`BGTZ,`BGEZ,`BNR:
-			if (takb) begin
-				pc[xAXC][63:4] <= xpc[63:4] + imm[63:4];
-				pc[xAXC][3:2] <= imm[3:2];
-				if (AXC==xAXC) begin
-					dpc[63:4] <= xpc[63:4] + imm[63:4];
-					dpc[3:2] <= imm[3:2];
-					dIR <= `NOP_INSN;
-				end
-				if (dAXC==xAXC) begin
-					xpc[63:4] <= xpc[63:4] + imm[63:4];
-					xpc[3:2] <= imm[3:2];
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
-		`BRAD,`BEQZD,`BNEZD,`BLTZD,`BLEZD,`BGTZD,`BGEZD:
-			if (takb) begin
-				pc[xAXC][63:4] <= xpc[63:4] + imm[63:4];
-				pc[xAXC][3:2] <= imm[3:2];
-				if (AXC==xAXC) begin
-					dpc[63:4] <= xpc[63:4] + imm[63:4];
-					dpc[3:2] <= imm[3:2];
-					dIR <= `NOP_INSN;
-				end
-			end
-		`BEQZR,`BNEZR,`BLTZR,`BLEZR,`BGTZR,`BGEZR:
-			if (takb) begin
-				pc[xAXC][63:2] <= b[63:2];
-				if (xAXC==AXC) begin
-					dpc[63:2] <= b[63:2];
-					dIR <= `NOP_INSN;
-				end
-				if (dAXC==xAXC) begin
-					xpc[63:2] <= b[63:2];
-					xIR <= `NOP_INSN;
-					xRt <= 9'd0;
-				end
-			end
-		`BEQZRD,`BNEZRD,`BLTZRD,`BLEZRD,`BGTZRD,`BGEZRD:
-			if (takb) begin
-				pc[xAXC][63:2] <= b[63:2];
-				if (xAXC==AXC) begin
-					dpc[63:2] <= b[63:2];
-					dIR <= `NOP_INSN;
-				end
-			end
-		endcase
 	`TRAPcc:
 		if (takb) begin
+			StatusEXL[xAXC] <= 1'b1;
+			CauseCode[xAXC] <= `EX_TRAP;
+			EPC[xAXC] <= xpc;
 			if (!xbranch_taken) begin
-				pc[xAXC] <= `TRAP_VECTOR;
+				pc[xAXC] <= {TBA[63:13],`GEN_TRAP_OFFSET};
 				if (xAXC==AXC) begin
-					dpc <= `TRAP_VECTOR;
+					dpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 					dIR <= `NOP_INSN;
 				end
 				if (xAXC==dAXC) begin
-					xpc <= `TRAP_VECTOR;
+					xpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 					xIR <= `NOP_INSN;
 					xRt <= 9'd0;
 				end
@@ -2514,14 +2648,17 @@ if (advanceX) begin
 		end
 	`TRAPcci:
 		if (takb) begin
+			CauseCode[xAXC] <= `EX_TRAP;
+			StatusEXL[xAXC] <= 1'b1;
+			EPC[xAXC] <= xpc;
 			if (!xbranch_taken) begin
-				pc[xAXC] <= `TRAP_VECTOR;
+				pc[xAXC] <= {TBA[63:13],`GEN_TRAP_OFFSET};
 				if (xAXC==AXC) begin
-					dpc <= `TRAP_VECTOR;
+					dpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 					dIR <= `NOP_INSN;
 				end
 				if (xAXC==dAXC) begin
-					xpc <= `TRAP_VECTOR;
+					xpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 					xIR <= `NOP_INSN;
 					xRt <= 9'd0;
 				end
@@ -2529,8 +2666,90 @@ if (advanceX) begin
 		end
 	default:	;
 	endcase
+	if (dbz_error) begin
+		$display("Divide by zero error");
+		CauseCode[xAXC] <= `EX_DBZ;
+		StatusEXL[xAXC] <= 1'b1;
+		EPC[xAXC] <= xpc;
+		pc[xAXC] <= {TBA[63:13],`DBZ_TRAP_OFFSET};
+		if (xAXC==AXC) begin
+			dpc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
+			dIR <= `NOP_INSN;
+		end
+		if (xAXC==dAXC) begin
+			xpc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
+			xIR <= `NOP_INSN;
+			xRt <= 9'd0;
+		end
+	end
+	if (ovr_error) begin
+		$display("Overflow error");
+		CauseCode[xAXC] <= `EX_OFL;
+		StatusEXL[xAXC] <= 1'b1;
+		EPC[xAXC] <= xpc;
+		pc[xAXC] <= {TBA[63:13],`OFL_TRAP_OFFSET};
+		if (xAXC==AXC) begin
+			dpc <= {TBA[63:13],`OFL_TRAP_OFFSET};
+			dIR <= `NOP_INSN;
+		end
+		if (xAXC==dAXC) begin
+			xpc <= {TBA[63:13],`OFL_TRAP_OFFSET};
+			xIR <= `NOP_INSN;
+			xRt <= 9'd0;
+		end
+	end
 end
 
+//---------------------------------------------------------
+// MEMORY1 (M1') - part two:
+// Check for a TLB miss.
+//---------------------------------------------------------
+if (advanceM1) begin
+	if (m1IsLoad|m1IsStore) begin
+		if (DTLBMiss) begin
+			$display("DTLB miss on address: %h",ea);
+			m1extype <= `EX_TLBD;
+			CauseCode[m1AXC] <= `EX_TLBD;
+			StatusEXL[m1AXC] <= 1'b1;
+			BadVAddr[m1AXC] <= ea[63:13];
+			EPC[m1AXC] <= m1pc;
+			pc[m1AXC] <= `DTLB_MissHandler;
+			if (m1AXC==xAXC) begin
+				m1pc <= `DTLB_MissHandler;
+				m1Opcode <= `NOPI;
+				m1Rt <= 9'd0;
+			end
+			if (m1AXC==dAXC) begin
+				xpc <= `DTLB_MissHandler;
+				xIR <= `NOP_INSN;
+				xRt <= 9'd0;
+			end
+			if (m1AXC==AXC) begin
+				dpc <= `DTLB_MissHandler;
+				dIR <= `NOP_INSN;
+			end
+		end
+	end
+end
+
+//---------------------------------------------------------
+// MEMORY2 (M2')
+//---------------------------------------------------------
+if (advanceM2) begin
+end
+
+//---------------------------------------------------------
+// MEMORY4 (M3')
+//---------------------------------------------------------
+if (advanceM3) begin
+end
+
+//---------------------------------------------------------
+// MEMORY4 (M4')
+// - no exceptions
+//---------------------------------------------------------
+if (advanceM4) begin
+end
 
 //((xOpcode==`TRAPcci) && takb)
 //
@@ -2550,20 +2769,50 @@ end
 //	pc_src <= b;
 
 //---------------------------------------------------------
-// WRITEBACK - part two:
+// WRITEBACK (WB') - part two:
 // - vector to exception handler address
+// In the case of a hardware interrupt (NMI/IRQ) we know
+// the pipeline following the interrupt is filled with
+// NOP instructions. This means there is no need to 
+// invalidate the pipeline.
 //---------------------------------------------------------
 if (advanceW) begin
-	if (wirqf) begin
+	if (wextype!=`EX_NON) begin
 		case(wextype)
-		`EX_NON:	;	// Dont' vector without an exception!
-		`EX_RST:	pc[AXC] <= `RESET_VECTOR;
-		`EX_NMI:	pc[AXC] <= `NMI_VECTOR;
-		`EX_IRQ:	pc[AXC] <= `IRQ_VECTOR;
+		`EX_RST:	
+			begin
+			StatusEXL[0] <= 1'b1;
+			EPC[0] <= pc[0];
+			pc[0] <= `RESET_VECTOR;
+			AXC <= 4'd0;
+			end
+		`EX_NMI:
+			begin
+			StatusEXL[0] <= 1'b1;
+			EPC[0] <= pc[0];
+			pc[0] <= `NMI_VECTOR;
+			AXC <= 4'd0;
+			end
+		`EX_IRQ:
+			begin
+			StatusEXL[0] <= 1'b1;
+			EPC[0] <= pc[0];
+			pc[0] <= `IRQ_VECTOR;
+			AXC <= 4'd0;
+			end
 		default:	;//pc[63:2] <= exception_address[63:2];
 		endcase
 	end
 end
+
+
+//---------------------------------------------------------
+// Trailer (TR')
+// - no exceptions
+//---------------------------------------------------------
+if (advanceT) begin
+end
+
 
 //---------------------------------------------------------
 // Cache loader
@@ -2574,7 +2823,6 @@ if (rst_i) begin
 	wr_dcache <= 1'b0;
 end
 else begin
-cmd_en <= 1'b0;				// allow this signal only to pulse for a single clock cycle
 //wr_icache <= 1'b0;
 wr_dcache <= 1'b0;
 case(cstate)
@@ -2592,13 +2840,25 @@ IDLE:
 			cstate <= DCACT;
 		end
 		else if (triggerICacheLoad) begin
-			icaccess <= 1'b1;
-			cmd_en <= 1'b1;	// the command fifo should always be available
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {ppc[29:6],6'h00};
-			iadr_o <= {ppc[63:6],6'h00};
-			cmd_bl <= 6'd16;	// Sixteen words per cache line
-			cstate <= ICACT;
+			if (!ppc[63]) begin
+				icaccess <= 1'b1;
+				cmd_en <= 1'b1;	// the command fifo should always be available
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {ppc[29:6],6'h00};
+				iadr_o <= {ppc[63:6],6'h00};
+				cmd_bl <= 6'd16;	// Sixteen words per cache line
+				cstate <= ICACT;
+			end
+			else begin
+				iciaccess <= 1'b1;
+				bte_o <= 2'b00;			// linear burst
+				cti_o <= 3'b010;		// burst access
+				cyc_o <= 1'b1;
+				stb_o <= 1'b1;
+				adr_o <= {ppc[63:6],6'h00};
+				iadr_o <= {ppc[63:6],6'h00};
+				cstate <= ICACT1;
+			end
 		end
 	end
 	// Sometime after the read command is issued, the read fifo will begin to fill
@@ -2638,7 +2898,26 @@ ICDLY:
 		rd_en <= 1'b0;
 		cstate <= IDLE;
 	end
-	// Sometime after the read command is issued, the read fifo will begin to fill
+
+// WISHBONE burst accesses
+//
+ICACT1:
+	if (ack_i) begin
+		adr_o[5:2] <= adr_o[5:2] + 4'd1;
+		iadr_o[5:2] <= iadr_o[5:2] + 4'd1;
+		if (adr_o[5:2]==4'hE)
+			cti_o <= 3'b111;	// Last cycle ahead
+		if (adr_o[5:2]==4'hF) begin
+			cti_o <= 3'b000;	// back to non-burst mode
+			cyc_o <= 1'b0;
+			stb_o <= 1'b0;
+			tmem[iadr_o[12:6]] <= {1'b1,iadr_o[63:13]};	// This will cause ihit to go high
+			tvalid[iadr_o[12:6]] <= 1'b1;
+			iciaccess <= 1'b0;
+			cstate <= IDLE;
+		end
+	end
+
 DCACT:
 	begin
 		rd_en <= 1'b1;		// Data should be available on the next clock cycle
