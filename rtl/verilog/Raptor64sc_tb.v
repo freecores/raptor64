@@ -1,4 +1,4 @@
-module Raptor64_tb();
+module Raptor64sc_tb();
 parameter IDLE = 8'd1;
 parameter DOCMD = 8'd2;
 
