@@ -416,6 +416,7 @@ reg [41:0] xIR;
 reg [63:0] pc;
 reg [63:0] ErrorEPC,EPC,IPC;
 reg [63:0] dpc,m1pc,m2pc,m3pc,m4pc,wpc;
+reg dpcv,xpcv,m1pcv,m2pcv,m3pcv,m4pcv,wpcv;	// PC valid indicators
 reg [63:0] xpc;
 reg [63:0] tlbra;		// return address for a TLB exception
 reg [8:0] dRa,dRb,dRc;
@@ -1114,11 +1115,9 @@ always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	Wired or Index or Random or TLBPhysPage0 or TLBPhysPage1 or TLBVirtPage or TLBASID or
 	PageTableAddr or BadVAddr or ASID or TLBPageMask
 )
-case(xOpcode)
+casex(xOpcode)
 `R:
 	casex(xFunc)
-	`SETLO:	xData = imm;
-	`SETHI:	xData = {imm[63:32],a[31:0]};
 	`COM:	xData = ~a;
 	`NOT:	xData = ~|a;
 	`NEG:	xData = -a;
@@ -1501,6 +1500,11 @@ if (rst_i) begin
 	xFip <= 1'b0;
 	dFip <= 1'b0;
 	dirqf <= 1'b0;
+	dpcv <= 1'b0;
+	xpcv <= 1'b0;
+	m1pcv <= 1'b0;
+	m2pcv <= 1'b0;
+	wpcv <= 1'b0;
 	tick <= 32'd0;
 	cstate <= IDLE;
 	dImm <= 64'd0;
@@ -1579,8 +1583,8 @@ if (advanceW) begin
 	wextype <= `EX_NON;
 	tRt <= wRt;
 	tData <= wData;
-//	regfile[wRt] <= wData;	<- regfile.v
-	$display("Writing regfile[%d:%d] with %h", wRt[8:5],wRt[4:0], wData);
+	if (wRt!=5'd0)
+		$display("Writing regfile[%d:%d] with %h", wRt[8:5],wRt[4:0], wData);
 	wRt <= 9'd0;
 	wData <= 64'd0;
 	if (|whwxtype) begin
@@ -1620,6 +1624,7 @@ if (advanceM2) begin
 	wextype <= m2extype;
 	wRt <= m2Rt;
 	wpc <= m2pc;
+	wpcv <= m2pcv;
 	wclkoff <= m2clkoff;
 	wFip <= m2Fip;
 	
@@ -1754,6 +1759,7 @@ if (advanceM1) begin
 	m2extype <= m1extype;
 	m2Rt <= m1Rt;
 	m2pc <= m1pc;
+	m2pcv <= m1pcv;
 	m2clkoff <= m1clkoff;
 	m2Fip <= m1Fip;
 
@@ -2191,6 +2197,7 @@ if (advanceX) begin
 		m1Data <= 64'd0;
 	end
 	m1pc <= xpc;
+	m1pcv <= xpcv;
 	xRt <= 9'd0;
 	a <= 64'd0;
 	b <= 64'd0;
@@ -2374,6 +2381,7 @@ if (advanceR) begin
 	xextype <= dextype;
 	xIR <= dIR;
 	xpc <= dpc;
+	xpcv <= dpcv;
 	xbranch_taken <= dbranch_taken;
 	dbranch_taken <= 1'b0;
 	dextype <= `EX_NON;
@@ -2490,14 +2498,13 @@ if (advanceI) begin
 		dhwxtype <= 2'b01;
 		dIR <= `NOP_INSN;
 		dextype <= `EX_NMI;
-		IPC <= pc;
 	end
 	else if (irq_i & !im & !StatusHWI) begin
+		im <= 1'b1;
 		StatusHWI <= 1'b1;
 		dhwxtype <= 2'b10;
 		dIR <= `NOP_INSN;
 		dextype <= `EX_IRQ;
-		IPC <= pc;
 	end
 	// Are we filling the pipeline with NOP's as a result of a previous
 	// hardware interrupt ?
@@ -2513,6 +2520,7 @@ if (advanceI) begin
 	nopI <= 1'b0;
 	if (dOpcode[6:4]!=`IMM) begin
 		dpc <= pc;
+		dpcv <= 1'b1;
 	end
 	casex(iOpcode)
 	`SETLO:		dRa <= {AXC,insn[36:32]};
@@ -2582,22 +2590,23 @@ if (advanceX) begin
 		`IRET:
 			if (StatusHWI) begin
 				StatusHWI <= 1'b0;
+				im <= 1'b0;
 				pc <= IPC;
-				dpc <= IPC;
 				dIR <= `NOP_INSN;
-				xpc <= IPC;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		`ERET:
 			if (StatusEXL) begin
 				StatusEXL <= 1'b0;
 				pc <= EPC;
-				dpc <= EPC;
 				dIR <= `NOP_INSN;
-				xpc <= EPC;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		default:	;
 		endcase
@@ -2608,36 +2617,32 @@ if (advanceX) begin
 			if (!takb & xbranch_taken) begin
 				$display("Taking mispredicted branch %h",fnIncPC(xpc));
 				pc <= fnIncPC(xpc);
-				dpc <= fnIncPC(xpc);
-				xpc <= fnIncPC(xpc);
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 			else if (takb & !xbranch_taken) begin
 				$display("Taking branch %h.%h",{xpc[63:4] + {{42{xIR[24]}},xIR[24:7]},4'b0000},xIR[6:5]);
 				pc[63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
 				pc[3:2] <= xIR[6:5];
-				dpc[63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
-				dpc[3:2] <= xIR[6:5];
 				dIR <= `NOP_INSN;
-				xpc[63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};
-				xpc[3:2] <= xIR[6:5];
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 	// BEQ r1,r2,r10
 		`BEQR,`BNER,`BLTR,`BLER,`BGTR,`BGER,`BLTUR,`BLEUR,`BGTUR,`BGEUR://,`BANDR,`BORR,`BNRR:
 			if (takb) begin
 				pc[63:2] <= c[63:2];
 				pc[1:0] <= 2'b00;
-				dpc[63:2] <= c[63:2];
-				dpc[1:0] <= 2'b00;
 				dIR <= `NOP_INSN;
-				xpc[63:2] <= c[63:2];
-				xpc[1:0] <= 2'b00;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		default:	;
 		endcase
@@ -2649,33 +2654,31 @@ if (advanceX) begin
 		begin
 			pc[63:2] <= a[63:2] + imm[63:2];
 			dIR <= `NOP_INSN;
-			dpc[63:2] <= a[63:2] + imm[63:2];
-			xpc[63:2] <= a[63:2] + imm[63:2];
 			xIR <= `NOP_INSN;
 			xRt <= 9'd0;
+			xpcv <= 1'b0;
+			dpcv <= 1'b0;
 		end
 	`RET:
 		begin
 			$display("returning to: %h", {b,2'b00});
 			pc[63:2] <= b[63:2];
-			dpc[63:2] <= b[63:2];
 			dIR <= `NOP_INSN;
-			xpc[63:2] <= b[63:2];
 			xIR <= `NOP_INSN;
 			xRt <= 9'd0;
+			xpcv <= 1'b0;
+			dpcv <= 1'b0;
 		end
 	// BEQ r1,#3,r10
 	`BTRI:
 		if (takb) begin
 			pc[63:2] <= b[63:2];
 			pc[1:0] <= 2'b00;
-			dpc[63:2] <= b[63:2];
-			dpc[1:0] <= 2'b00;
 			dIR <= `NOP_INSN;
-			xpc[63:2] <= b[63:2];
-			xpc[1:0] <= 2'b00;
 			xIR <= `NOP_INSN;
 			xRt <= 9'd0;
+			xpcv <= 1'b0;
+			dpcv <= 1'b0;
 		end
 	// BEQI r1,#3,label
 	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
@@ -2683,24 +2686,22 @@ if (advanceX) begin
 			if (!xbranch_taken) begin
 				pc[63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
 				pc[3:2] <= xIR[19:18];
-				dpc[63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
-				dpc[3:2] <= xIR[19:18];
 				dIR <= `NOP_INSN;
-				xpc[63:4] <= xpc[63:4] + {{50{xIR[29]}},xIR[29:20]};
-				xpc[3:2] <= xIR[19:18];
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		end
 		else begin
 			if (xbranch_taken) begin
 				$display("Taking mispredicted branch %h",fnIncPC(xpc));
 				pc <= fnIncPC(xpc);
-				dpc <= fnIncPC(xpc);
-				xpc <= fnIncPC(xpc);
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		end
 	`TRAPcc,`TRAPcci:
@@ -2710,22 +2711,22 @@ if (advanceX) begin
 			EPC <= xpc;
 			if (!xbranch_taken) begin
 				pc <= {TBA[63:13],`GEN_TRAP_OFFSET};
-				dpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 				dIR <= `NOP_INSN;
-				xpc <= {TBA[63:13],`GEN_TRAP_OFFSET};
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		end
 		else begin
 			if (xbranch_taken) begin
 				$display("Taking mispredicted branch %h",fnIncPC(xpc));
 				pc <= fnIncPC(xpc);
-				dpc <= fnIncPC(xpc);
-				xpc <= fnIncPC(xpc);
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
 			end
 		end
 	default:	;
@@ -2737,11 +2738,11 @@ if (advanceX) begin
 		StatusEXL <= 1'b1;
 		EPC <= xpc;
 		pc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
-		dpc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
 		dIR <= `NOP_INSN;
-		xpc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
+		xpcv <= 1'b0;
+		dpcv <= 1'b0;
 	end
 	else if (ovr_error) begin
 		$display("Overflow error");
@@ -2749,11 +2750,11 @@ if (advanceX) begin
 		StatusEXL <= 1'b1;
 		EPC <= xpc;
 		pc <= {TBA[63:13],`OFL_TRAP_OFFSET};
-		dpc <= {TBA[63:13],`OFL_TRAP_OFFSET};
 		dIR <= `NOP_INSN;
-		xpc <= {TBA[63:13],`OFL_TRAP_OFFSET};
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
+		xpcv <= 1'b0;
+		dpcv <= 1'b0;
 	end
 	else if (priv_violation) begin
 		$display("Priviledge violation");
@@ -2761,11 +2762,11 @@ if (advanceX) begin
 		StatusEXL <= 1'b1;
 		EPC <= xpc;
 		pc <= {TBA[63:13],`PRIV_OFFSET};
-		dpc <= {TBA[63:13],`PRIV_OFFSET};
 		dIR <= `NOP_INSN;
-		xpc <= {TBA[63:13],`PRIV_OFFSET};
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
+		xpcv <= 1'b0;
+		dpcv <= 1'b0;
 	end
 end
 
@@ -2783,14 +2784,14 @@ if (advanceM1) begin
 			BadVAddr <= ea[63:13];
 			EPC <= m1pc;
 			pc <= `DTLB_MissHandler;
-			m1pc <= `DTLB_MissHandler;
 			m1Opcode <= `NOPI;
 			m1Rt <= 9'd0;
-			xpc <= `DTLB_MissHandler;
 			xIR <= `NOP_INSN;
 			xRt <= 9'd0;
-			dpc <= `DTLB_MissHandler;
 			dIR <= `NOP_INSN;
+			m1pcv <= 1'b0;
+			xpcv <= 1'b0;
+			dpcv <= 1'b0;
 		end
 	end
 end
@@ -2811,12 +2812,46 @@ end
 // 		Also, we have to wait until the WB stage before
 // vectoring so that the pc setting doesn't get trashed
 // by a branch or other exception.
+// 		Tricky because we have to find the first valid
+// PC to record in the IPC register. The interrupt might
+// have occurred in a branch shadow, in which case the
+// current PC isn't valid.
 //---------------------------------------------------------
 if (advanceW) begin
 	case(wextype)
-	`EX_RST:	pc <= `RESET_VECTOR;
-	`EX_NMI:	pc <= `NMI_VECTOR;
-	`EX_IRQ:	pc <= `IRQ_VECTOR;
+	`EX_RST:	begin
+				pc <= `RESET_VECTOR;
+				case(1'b1)
+				wpcv:	IPC <= wpc;
+				m2pcv:	IPC <= m2pc;
+				m1pcv: 	IPC <= m1pc;
+				xpcv:	IPC <= xpc;
+				dpcv:	IPC <= dpc;
+				default:	IPC <= pc;
+				endcase
+				end
+	`EX_NMI:	begin
+				pc <= `NMI_VECTOR;
+				case(1'b1)
+				wpcv:	IPC <= wpc;
+				m2pcv:	IPC <= m2pc;
+				m1pcv: 	IPC <= m1pc;
+				xpcv:	IPC <= xpc;
+				dpcv:	IPC <= dpc;
+				default:	IPC <= pc;
+				endcase
+				end
+	`EX_IRQ:	begin
+				pc <= `IRQ_VECTOR;
+				case(1'b1)
+				wpcv:	IPC <= wpc;
+				m2pcv:	IPC <= m2pc;
+				m1pcv: 	IPC <= m1pc;
+				xpcv:	IPC <= xpc;
+				dpcv:	IPC <= dpc;
+				default:	IPC <= pc;
+				endcase
+				end
 	default:	;
 	endcase
 end

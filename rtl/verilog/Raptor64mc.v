@@ -18,7 +18,8 @@
 //                                                                          
 // You should have received a copy of the GNU General Public License        
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
-//                                                                          
+//                                         
+// 33MHz / 35000 LUTs                            
 // ============================================================================
 //
 `define RESET_VECTOR	64'hFFFF_FFFF_FFFF_FFF0
@@ -33,12 +34,14 @@
 `define GEN_TRAP_OFFSET		13'h0200
 `define DBZ_TRAP_OFFSET		13'h0050
 `define OFL_TRAP_OFFSET		13'h0070
+`define PRIV_OFFSET			13'h0080
 
 `define EX_NON		8'd0
 `define EX_RST		8'd1
 `define EX_NMI		8'd2
 `define EX_IRQ		8'd3
 `define EX_TRAP		8'd4
+`define EX_PRIV		8'd8
 `define EX_OFL		8'd16	// overflow
 `define EX_DBZ		8'd17	// divide by zero
 `define EX_TLBI		8'd19	// TLB exception - ifetch
@@ -481,6 +484,43 @@ endcase
 end
 endfunction
 
+function [3:0] fnSel4;
+input [63:0] ad;
+begin
+case(ad[1:0])
+2'd0:	fnSel4 = 4'b0001;
+2'd1:	fnSel4 = 4'b0010;
+2'd2:	fnSel4 = 4'b0100;
+2'd3:	fnSel4 = 4'b1000;
+endcase
+end
+endfunction
+
+function [3:0] fnSel2;
+input [63:0] ad;
+begin
+case(ad[1:0])
+2'd0:	fnSel2 = 4'b0011;
+2'd1:	fnSel2 = 4'b0110;
+2'd2:	fnSel2 = 4'b1100;
+2'd3:	fnSel2 = 4'b1000;
+endcase
+end
+endfunction
+
+function [3:0] fnSel1;
+input [63:0] ad;
+begin
+case(ad[1:0])
+2'd0:	fnSel1 = 4'b1111;
+2'd1:	fnSel1 = 4'b1110;
+2'd2:	fnSel1 = 4'b1100;
+2'd3:	fnSel1 = 4'b1000;
+endcase
+end
+endfunction
+
+
 wire xKernelMode = StatusEXL[xAXC];
 
 //-----------------------------------------------------------------------------
@@ -493,7 +533,7 @@ reg [63:13] TLBPhysPage0;
 reg [63:13] TLBPhysPage1;
 reg [7:0] TLBASID;
 reg TLBG,TLBD,TLBValid;
-reg [3:0] Index;
+reg [31:0] Index;
 reg [3:0] Random;
 reg [3:0] Wired;
 
@@ -589,6 +629,11 @@ wire DTLBMiss = !unmappedDataArea & q[4];
 wire [63:0] pea;
 assign pea[63:13] = unmappedDataArea ? ea[63:13] : q[4] ? `TLBMissPage: DPFN;
 assign pea[12:0] = ea[12:0];
+
+wire m1DRAMBus = !pea[63];
+wire m2DRAMBus = !m2Addr[63];
+wire m3DRAMBus = !m3Addr[63];
+wire m4DRAMBus = !m4Addr[63];
 
 //-----------------------------------------------------------------------------
 // Clock control
@@ -713,7 +758,7 @@ reg [63:0] m2Addr,m3Addr,m4Addr;
 reg [63:0] tick;
 reg [63:0] tba;
 reg [63:0] exception_address,ipc;
-reg [63:0] a,b,c,imm,m1b;
+reg [63:0] a,b,c,imm,m1b,m2b,m3b;
 reg prev_ihit;
 reg rsf;
 reg [63:5] resv_address;
@@ -1085,7 +1130,7 @@ always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	Wired or Index or Random or TLBPhysPage0 or TLBPhysPage1 or TLBVirtPage or TLBASID or
 	PageTableAddr or BadVAddr or ASID or TLBPageMask
 )
-case(xOpcode)
+casex(xOpcode)
 `R:
 	casex(xFunc)
 	`SETLO:	xData = imm;
@@ -1276,17 +1321,14 @@ wire xIsDiv = (xOpcode==`RR && (xFunc==`DIVU || xFunc==`DIVS)) ||
 wire xIsLoad =
 	xOpcode==`LW || xOpcode==`LH || xOpcode==`LB || xOpcode==`LWR ||
 	xOpcode==`LHU || xOpcode==`LBU ||
-	xOpcode==`LC || xOpcode==`LCU ||
-	xOpcode==`INW || xOpcode==`INB || xOpcode==`INH || xOpcode==`INCH
+	xOpcode==`LC || xOpcode==`LCU
 	;
 wire xIsStore =
-	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC ||
-	xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTB || xOpcode==`OUTC
+	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC
 	;
 wire xIsSWC = xOpcode==`SWC;
-wire xIsIn = 
-	xOpcode==`INW || xOpcode==`INH || xOpcode==`INCH || xOpcode==`INB
-	;
+wire xIsIn = xOpcode==`INW || xOpcode==`INH || xOpcode==`INCH || xOpcode==`INB;
+wire xIsOut = xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTC || xOpcode==`OUTB;
 //wire mIsSWC = mOpcode==`SWC;
 
 //wire mIsLoad =
@@ -1298,16 +1340,10 @@ wire m1IsLoad =
 	m1Opcode==`LW || m1Opcode==`LH || m1Opcode==`LB || m1Opcode==`LC || m1Opcode==`LWR ||
 	m1Opcode==`LHU || m1Opcode==`LBU || m1Opcode==`LCU
 	;
-wire m1IsIn = 
-	m1Opcode==`INW || m1Opcode==`INH || m1Opcode==`INCH || m1Opcode==`INB
-	;
-wire m1IsStore =
-	m1Opcode==`SW || m1Opcode==`SH || m1Opcode==`SB || m1Opcode==`SC || m1Opcode==`SWC
-	;
-wire m1IsIO = 
-	m1IsIn ||
-	m1Opcode==`OUTW || m1Opcode==`OUTH || m1Opcode==`OUTC || m1Opcode==`OUTB
-	;
+wire m1IsIn = m1Opcode==`INW || m1Opcode==`INH || m1Opcode==`INCH || m1Opcode==`INB;
+wire m1IsStore = m1Opcode==`SW || m1Opcode==`SH || m1Opcode==`SB || m1Opcode==`SC || m1Opcode==`SWC;
+wire m2IsStore = m2Opcode==`SW || m2Opcode==`SH || m2Opcode==`SB || m2Opcode==`SC || m2Opcode==`SWC;
+wire m1IsIO = m1IsIn || m1Opcode==`OUTW || m1Opcode==`OUTH || m1Opcode==`OUTC || m1Opcode==`OUTB;
 wire m3IsIO = 
 	m3Opcode==`INW || m3Opcode==`INH || m3Opcode==`INCH || m3Opcode==`INB ||
 	m3Opcode==`OUTW || m3Opcode==`OUTH || m3Opcode==`OUTC || m3Opcode==`OUTB
@@ -1321,9 +1357,15 @@ wire m3IsLoad =
 	m3Opcode==`LW || m3Opcode==`LH || m3Opcode==`LB || m3Opcode==`LC || m3Opcode==`LWR ||
 	m3Opcode==`LHU || m3Opcode==`LBU || m3Opcode==`LCU
 	;
-wire m4IsLoad = m4Opcode==`LW || m4Opcode==`LWR
-	;
-
+wire m3IsLoadW = m3Opcode==`LW || m3Opcode==`LWR;
+wire m3IsStoreW = m3Opcode==`SW || m3Opcode==`SWC;
+wire m4IsLoadW = m4Opcode==`LW || m4Opcode==`LWR;
+wire m4IsLoad = m4Opcode==`LW || m4Opcode==`LWR;
+wire m4IsStoreW = m4Opcode==`SW || m4Opcode==`SWC;
+wire m2IsInW = m2Opcode==`INW;
+wire m3IsInW = m3Opcode==`INW;
+wire m3IsOutW = m3Opcode==`OUTW;
+wire m2IsOutW = m2Opcode==`OUTW;
 wire xIsFPLoo = xOpcode==`FPLOO;
 
 // Stall on SWC allows rsf flag to be loaded for the next instruction
@@ -1335,48 +1377,63 @@ wire m3Stall = ((m3IsLoad) && ((m3Rt==dRa)||(m3Rt==dRb)||(m3Rt==dRt)));// || mIs
 wire m4Stall = ((m4IsLoad) && ((m4Rt==dRa)||(m4Rt==dRb)||(m4Rt==dRt)));// || mIsSWC;
 wire eomc = dccyc ? dhit : cyc_o & !icaccess & !dcaccess ? ack_i : 1'b1;	// end of memory cycle
 
-wire m1needWritePort = m1Opcode==`SW || m1Opcode==`SWC || m1Opcode==`SH || m1Opcode==`SC || m1Opcode==`SB;
-wire m2needWritePort = m2Opcode==`SW||m2Opcode==`SWC;
-wire m1needCmdPort = m1IsLoad && !m1IsCacheElement;
-wire m2needCmdPort = m2Opcode==`SH||m2Opcode==`SC||m2Opcode==`SB;
-wire m3needCmdPort = m3Opcode==`SW || m3Opcode==`SWC;
-wire m2needReadPort = m2IsLoad;
-wire m3needReadPort = m3Opcode==`LW || m3Opcode==`LWR;
-//wire m4needReadPort = m4Opcode==`LW || m4Opcode==`LWR;
+wire xneedIOPort = xIsIn | xIsOut;
+wire m1needIOPort = (((m1IsLoad & !m1IsCacheElement)|m1IsStore) & !m1DRAMBus) || m1IsIO;
+wire m2needIOPort = (((m2IsLoad)|m2IsStore) & !m2DRAMBus) || m2IsInW || m2IsOutW;
+wire m3needIOPort = (((m3IsLoadW)|m3IsStoreW) & !m3DRAMBus) || m3IsInW || m3IsOutW;
+wire m4needIOPort = (((m4IsLoadW)|m4IsStoreW) & !m4DRAMBus);
+
+wire m1needWritePort = m1IsStore & m1DRAMBus;
+wire m2needWritePort = (m2Opcode==`SW||m2Opcode==`SWC) & m2DRAMBus;
+wire m2needReadPort = m2IsLoad & m2DRAMBus;
+wire m3needReadPort = (m3Opcode==`LW || m3Opcode==`LWR) & m3DRAMBus;
+wire m1needCmdPort = m1IsLoad && !m1IsCacheElement & m1DRAMBus;
+wire m2needCmdPort = (m2Opcode==`SH||m2Opcode==`SC||m2Opcode==`SB) & m2DRAMBus;
+wire m3needCmdPort = (m3Opcode==`SW || m3Opcode==`SWC) & m3DRAMBus;
 
 // Stall for the write port
 wire StallM1 = (m1needWritePort && m2needWritePort) ||	// Write port collision
-// Stall on the command port
-	(m1needCmdPort && (m2needCmdPort||m3needCmdPort)) ||	// SW,SWC are still using the wr port in M2
-// cache access is taking place
-	icaccess || dcaccess								
+	(m1needCmdPort && (m2needCmdPort||m3needCmdPort)) ||// Stall on the command port	// SW,SWC are still using the wr port in M2
+	(m1needIOPort && (m2needIOPort|m3needIOPort|m4needIOPort)) ||	// I/O port collision
+	icaccess || dcaccess		// cache access is taking place						
 	;
 // M3 is using the command port
-wire StallM2 = (m2needCmdPort & m3needCmdPort) | (m3needReadPort|icaccess|dcaccess);
-wire StallM3 = m3needReadPort & (icaccess|dcaccess);
+wire StallM2 = (m2needCmdPort && m3needCmdPort) ||
+				(m2needReadPort && m3needReadPort)||
+				(m2needIOPort && (m3needIOPort | m4needIOPort)) ||
+				icaccess||dcaccess
+				;
+wire StallM3 = 	(m3needIOPort & m4needIOPort) ||
+				icaccess||dcaccess
+				;
 wire advanceT = !resetA;
 wire advanceW = advanceT;
-wire advanceM4 = advanceW & (m4IsLoad ? !rd_empty : 1'b1);
-wire advanceM3 = advanceM4 &
-					(m3IsIO ? ack_i : 1'b1) &
-					(m3IsLoad ? !rd_empty : 1'b1) &
-					!StallM3
-					;
-wire advanceM2 = advanceM3 & !StallM2;
-wire advanceM1 = advanceM2
-					&
-					(m1IsIO ? ack_i : 1'b1) &
-					((m1IsLoad & !m1IsCacheElement) ? !cmd_full : 1'b1) &
-					((m1IsLoad & m1IsCacheElement) ? dhit : 1'b1) & 
-					(m1IsStore ? !wr_full : 1'b1) &
-					!StallM1
-					;
+wire advanceM4 = advanceW &&
+				(m4IsLoadW && m4DRAMBus ? !rd_empty : 1'b1) &&
+				(((m4IsLoadW|m4IsStoreW) && !m4DRAMBus) ? ack_i : 1'b1)
+				;
+wire advanceM3 = advanceM4 &&
+				(m3IsIO ? ack_i : 1'b1) &&
+				(m3IsLoad && m3DRAMBus ? !rd_empty : 1'b1) &&
+				!StallM3
+				;
+wire advanceM2 = advanceM3 && 
+				(((m2IsLoad|m2IsStore) && !m2DRAMBus) ? ack_i : 1'b1) &&
+				!StallM2
+				;
+wire advanceM1 = advanceM2 &&
+				(m1IsIO ? ack_i : 1'b1) &&
+				((m1IsLoad & !m1IsCacheElement) ? !cmd_full : 1'b1) &&
+				((m1IsLoad & m1IsCacheElement) ? dhit : 1'b1) &&
+				(m1IsStore ? !wr_full : 1'b1) &&
+				!StallM1
+				;
 wire advanceX = advanceM1 & !cyc_o & (
-					xIsSqrt ? sqrt_done :
-					xIsMult ? mult_done :
-					xIsDiv ? div_done :
-					xIsFPLoo ? fpLooDone :
-					1'b1);
+				xIsSqrt ? sqrt_done :
+				xIsMult ? mult_done :
+				xIsDiv ? div_done :
+				xIsFPLoo ? fpLooDone :
+				1'b1);
 wire advanceR = advanceX & !xStall & !m1Stall && !m2Stall && !m3Stall && !m4Stall;
 wire advanceI = advanceR & ihit;
 
@@ -1642,10 +1699,25 @@ if (advanceM4) begin
 	m4extype <= `EX_NON;
 	if (m4extype==`EX_NON) begin
 		case(m4Opcode)
-		`LW,`LWR:	begin
-						wData <= {rd_data,m4Data[31:0]};
-						rd_en <= 1'b0;	// only if LW/LWR
-					end
+		`LW,`LWR:
+			if (m4DRAMBus) begin
+				wData <= {rd_data,m4Data[31:0]};
+				rd_en <= 1'b0;	// only if LW/LWR
+			end
+			else begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'h0;
+				wData <= {dat_i,m4Data[31:0]};
+			end
+		`SW,`SWC:
+			if (!m4DRAMBus) begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'h0;
+			end
 		default:	wData <= m4Data;
 		endcase
 	end
@@ -1692,9 +1764,14 @@ if (advanceM3) begin
 				sel_o <= 4'h0;
 			end
 		`LW,`LWR:
-			begin
+			if (m3DRAMBus) begin
 				rd_en <= 1'b1;
 				m4Data <= {32'd0,rd_data};
+			end
+			else begin
+				stb_o <= 1'b1;
+				sel_o <= 4'hF;
+				adr_o <= {m3Addr[63:2]+60'd1,2'b00};
 			end
 		`LH:
 			begin
@@ -1743,11 +1820,18 @@ if (advanceM3) begin
 			rd_en <= 1'b0;
 			end
 		`SW,`SWC:
-			begin
+			if (m3DRAMBus) begin
 				cmd_en <= 1'b1;
 				cmd_instr <= 3'b000;	// WRITE
 				cmd_bl <= 6'd2;			// 2-words
 				cmd_byte_addr <= {m3Addr[29:3],3'b000};
+			end
+			else begin
+				stb_o <= 1'b1;
+				we_o <= 1'b1;
+				sel_o <= 4'hF;
+				adr_o <= {m3Addr[63:2]+60'd1,2'b00};
+				dat_o <= m3Data[63:32];
 			end
 		default:	;
 		endcase
@@ -1796,23 +1880,137 @@ if (advanceM2) begin
 			end
 		// Load fifo with upper half of word
 		`SW,`SWC:
-			begin
+			if (m2DRAMBus) begin
 				wr_en <= 1'b1;
 				wr_data <= m2Data[63:32];
 				wr_mask <= 4'h0;
 				wr_addr <= {m2Addr[63:3],3'b100};
 			end
+			else begin
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'h0;
+			end
 		`SH,`SC,`SB:
-			begin
+			if (m2DRAMBus) begin
 				cmd_en <= 1'b1;
 				cmd_instr <= 3'b000;	// WRITE
 				cmd_bl <= 6'd1;			// 1-word
 				cmd_byte_addr <= {m2Addr[29:2],2'b00};
 			end
+			else begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				we_o <= 1'b0;
+				sel_o <= 4'h0;
+				m3Opcode <= `NOPI;
+			end
 		// Initiate read operation
-		`LW,`LWR,`LH,`LC,`LB,`LHU,`LBU,`LCU:
-			begin
+		`LW,`LWR:
+			if (m2DRAMBus) begin
 				rd_en <= 1'b1;
+			end
+			else begin
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				m3Data <= dat_i;
+			end
+		`LH:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= {{32{dat_i[31]}},dat_i};
+				2'd1:	m3Data <= {{40{dat_i[31]}},dat_i[31:8]};
+				2'd2:	m3Data <= {{48{dat_i[31]}},dat_i[31:16]};
+				2'd3:	m3Data <= {{56{dat_i[31]}},dat_i[31:24]};
+				endcase
+			end
+		`LHU:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				m3Opcode <= `NOPI;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= dat_i;
+				2'd1:	m3Data <= dat_i[31: 8];
+				2'd2:	m3Data <= dat_i[31:16];
+				2'd3:	m3Data <= dat_i[31:24];
+				endcase
+			end
+
+		`LC:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				m3Opcode <= `NOPI;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= {{48{dat_i[15]}},dat_i[15:0]};
+				2'd1:	m3Data <= {{48{dat_i[23]}},dat_i[23:8]};
+				2'd2:	m3Data <= {{48{dat_i[31]}},dat_i[31:16]};
+				2'd3:	m3Data <= {{56{dat_i[31]}},dat_i[31:24]};
+				endcase
+			end
+
+		`LCU:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				m3Opcode <= `NOPI;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= dat_i[15:0];
+				2'd1:	m3Data <= dat_i[23:8];
+				2'd2:	m3Data <= dat_i[31:16];
+				2'd3:	m3Data <= dat_i[31:24];
+				endcase
+			end
+		`LB:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				m3Opcode <= `NOPI;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= {{56{dat_i[ 7]}},dat_i[ 7: 0]};
+				2'd1:	m3Data <= {{56{dat_i[15]}},dat_i[15: 8]};
+				2'd2:	m3Data <= {{56{dat_i[23]}},dat_i[23:16]};
+				2'd3:	m3Data <= {{56{dat_i[31]}},dat_i[31:24]};
+				endcase
+			end
+		`LBU:
+			if (m2DRAMBus) begin
+				rd_en <= 1'b1;
+			end
+			else begin
+				m3Opcode <= `NOPI;
+				cyc_o <= 1'b0;
+				stb_o <= 1'b0;
+				sel_o <= 4'h0;
+				case(m2Addr[1:0])
+				2'd0:	m3Data <= dat_i[ 7: 0];
+				2'd1:	m3Data <= dat_i[15: 8];
+				2'd2:	m3Data <= dat_i[23:16];
+				2'd3:	m3Data <= dat_i[31:24];
+				endcase
 			end
 		default:	;
 		endcase
@@ -1927,69 +2125,114 @@ if (advanceM1) begin
 				we_o <= 1'b0;
 				sel_o <= 4'd0;
 			end
+
 		`LW:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:3],3'b000};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:3],3'b000};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel1(pea);
+				end
 			end
 			else if (dhit) begin
 				m2Opcode <= `LDONE;
 				m2Data <= cdat;
 			end
+
 		`LWR:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:3],3'b000};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd2;			// 2-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:3],3'b000};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel1(pea);
+				end
 				rsv_o <= 1'b1;
 				resv_address <= pea[63:5];
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				m2Data <= cdat;
 				rsv_o <= 1'b1;
 				resv_address <= pea[63:5];
 			end
+
 		`LH:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel1(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				if (pea[1])
 					m2Data <= {{32{cdat[31]}},cdat[31:0]};
 				else
 					m2Data <= {{32{cdat[63]}},cdat[63:32]};
 			end
+
 		`LHU:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel1(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				if (pea[1])
 					m2Data <= {32'd0,cdat};
 				else
 					m2Data <= {32'd0,cdat[63:32]};
 			end
+
 		`LC:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel2(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				case(pea[2:1])
 				2'd0:	m2Data <= {{48{cdat[15]}},cdat[15:0]};
 				2'd1:	m2Data <= {{48{cdat[31]}},cdat[31:16]};
@@ -1997,15 +2240,24 @@ if (advanceM1) begin
 				2'd3:	m2Data <= {{48{cdat[63]}},cdat[63:48]};
 				endcase
 			end
+
 		`LCU:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel2(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				case(pea[2:1])
 				2'd0:	m2Data <= {48'd0,cdat[15: 0]};
 				2'd1:	m2Data <= {48'd0,cdat[31:16]};
@@ -2013,15 +2265,24 @@ if (advanceM1) begin
 				2'd3:	m2Data <= {48'd0,cdat[63:48]};
 				endcase
 			end
+
 		`LB:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel4(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				case(pea[2:0])
 				3'b000:	m2Data <= {{56{cdat[ 7]}},cdat[ 7: 0]};
 				3'b001:	m2Data <= {{56{cdat[15]}},cdat[15: 8]};
@@ -2033,15 +2294,24 @@ if (advanceM1) begin
 				3'b111:	m2Data <= {{56{cdat[63]}},cdat[63:56]};
 				endcase
 			end
+
 		`LBU:
 			if (!m1IsCacheElement) begin
-				cmd_en <= 1'b1;
-				cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
-				cmd_instr <= 3'b001;	// READ
-				cmd_byte_addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					cmd_en <= 1'b1;
+					cmd_bl <= 6'd1;			// 1-words (from 32-bit interface)
+					cmd_instr <= 3'b001;	// READ
+					cmd_byte_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel4(pea);
+				end
 			end
 			else if (dhit) begin
-				m2Opcode <= `LDONE;
+				m2Opcode <= `NOPI;
 				case(pea[2:0])
 				3'b000:	m2Data <= {56'd0,cdat[ 7: 0]};
 				3'b001:	m2Data <= {56'd0,cdat[15: 8]};
@@ -2053,54 +2323,83 @@ if (advanceM1) begin
 				3'b111:	m2Data <= {56'd0,cdat[63:56]};
 				endcase
 			end
+
 		`SW,`SH:
 			begin
 				if (!m1UnmappedDataArea & !q[4]) begin
 					tTLBD[q] <= 1'b1;
 				end
-				wrhit <= dhit;
-				wr_en <= 1'b1;
-				wr_data <= m1b[31:0];
-				wr_mask <= 4'h0;
-				wr_addr <= {pea[63:3],3'b000};
-				m2Addr <= {pea[63:3],3'b000};
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
+				wrhit <= dhit;
+				m2Addr <= {pea[63:1],2'b00};
+				if (m1DRAMBus) begin
+					wr_en <= 1'b1;
+					wr_data <= m1b[31:0];
+					wr_mask <= ~fnSel1(pea);
+					wr_addr <= {pea[63:3],3'b000};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					we_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel1(pea);
+					dat_o <= m1Data[31:0];
+				end
 			end
+
 		`SC:
 			begin
 				$display("Storing char to %h, ea=%h",pea,ea);
 				if (!m1UnmappedDataArea & !q[4]) begin
 					tTLBD[q] <= 1'b1;
 				end
-				wrhit <= dhit;
-				wr_en <= 1'b1;
-				wr_data <= {2{m1b[15:0]}};
-				wr_mask <= pea[1] ? 4'b0011 : 4'b1100;
-				wr_addr <= {pea[63:2],2'b00};
-				m2Addr <= {pea[63:2],2'b00};
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
+				wrhit <= dhit;
+				m2Addr <= {pea[63:1],1'b0};
+				if (m1DRAMBus) begin
+					wr_en <= 1'b1;
+					wr_data <= {2{m1b[15:0]}};
+					wr_mask <= ~fnSel2(pea);
+					wr_addr <= {pea[63:2],2'b00};
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					we_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel2(pea);
+					dat_o <= {2{m1Data[15:0]}};
+				end
 			end
+
 		`SB:
 			begin
 				if (!m1UnmappedDataArea & !q[4]) begin
 					tTLBD[q] <= 1'b1;
 				end
-				wrhit <= dhit;
-				wr_en <= 1'b1;
-				wr_data <= {4{m1b[7:0]}};
-				wr_addr <= {pea[63:2],2'b00};
-				m2Addr <= {pea[63:2],2'b00};
-				case(pea[1:0])
-				2'd0:	wr_mask <= 4'b1110;
-				2'd1:	wr_mask <= 4'b1101;
-				2'd2:	wr_mask <= 4'b1011;
-				2'd3:	wr_mask <= 4'b0111;
-				endcase
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
+				wrhit <= dhit;
+				m2Addr <= {pea[63:2],2'b00};
+				if (m1DRAMBus) begin
+					wr_en <= 1'b1;
+					wr_data <= {4{m1b[7:0]}};
+					wr_addr <= {pea[63:2],2'b00};
+					wr_mask <= ~fnSel4(pea);
+				end
+				else begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					we_o <= 1'b1;
+					adr_o <= pea;
+					sel_o <= fnSel4(pea);
+					dat_o <= {4{m1Data[7:0]}};
+				end
 			end
+
 		`SWC:
 			begin
 				rsf <= 1'b0;
@@ -2109,13 +2408,23 @@ if (advanceM1) begin
 						tTLBD[q] <= 1'b1;
 					end
 					wrhit <= dhit;
-					wr_en <= 1'b1;
-					wr_data <= m1b[31:0];
-					wr_mask <= 4'h0;
-					wr_addr <= {pea[63:3],3'b000};
 					m2Addr <= {pea[63:3],3'b000};
 					resv_address <= 59'd0;
 					rsf <= 1'b1;
+					if (m1DRAMBus) begin
+						wr_en <= 1'b1;
+						wr_data <= m1b[31:0];
+						wr_mask <= 4'h0;
+						wr_addr <= {pea[63:3],3'b000};
+					end
+					else begin
+						cyc_o <= 1'b1;
+						stb_o <= 1'b1;
+						we_o <= 1'b1;
+						adr_o <= pea;
+						sel_o <= fnSel1(pea);
+						dat_o <= m1Data[31:0];
+					end
 				end
 				else
 					m2Opcode <= `NOPI;
@@ -2163,6 +2472,8 @@ if (advanceX) begin
 	case(xOpcode)
 	`MISC:
 		case(xFunc)
+		`SEI:	im <= 1'b1;
+		`CLI:	im <= 1'b0;
 		`WAIT:	m1clkoff <= 1'b1;
 		`TLBP:	ea <= TLBVirtPage;
 		`TLBR,`TLBWI:
@@ -2179,30 +2490,32 @@ if (advanceX) begin
 		case(xFunc)
 		`MTSPR:
 			case(xIR[12:7])
-			`Wired:			Wired <= xData[3:0];
-			`ASID:			ASID <= xData[7:0];
-			`TLBIndex:		Index <= xData[3:0];
-			`TLBVirtPage:	TLBVirtPage <= xData[63:13];
-			`TLBPhysPage0:	TLBPhysPage0 <= xData[63:13];
-			`TLBPhysPage1:	TLBPhysPage1 <= xData[63:13];
-			`TLBPageMask:	TLBPageMask <= xData[24:13];
+			`Wired:			Wired <= a[3:0];
+			`ASID:			ASID <= a[7:0];
+			`TLBIndex:		Index <= a[3:0];
+			`TLBVirtPage:	TLBVirtPage <= a[63:13];
+			`TLBPhysPage0:	TLBPhysPage0 <= a[63:13];
+			`TLBPhysPage1:	TLBPhysPage1 <= a[63:13];
+			`TLBPageMask:	TLBPageMask <= a[24:13];
 			`TLBASID:		begin
-							TLBASID <= xData[15:8];
-							TLBD <= xData[1];
-							TLBValid <= xData[0];
-							TLBG <= xData[2];
+							TLBASID <= a[15:8];
+							TLBD <= a[1];
+							TLBValid <= a[0];
+							TLBG <= a[2];
 							end
-			`PageTableAddr:	PageTableAddr <= xData[63:13];
-			`BadVAddr:		BadVAddr[xAXC] <= xData[63:13];
-			`EP0:			EP[0] <= {xData[31:4],4'd0};
-			`EP1:			EP[1] <= xData[31:0];
-			`EP2:			EP[2] <= xData[31:0];
-			`EP3:			EP[3] <= xData[31:0];
-			`EPC:			EPC[xAXC] <= xData;
-			`TBA:			TBA <= xData;
+			`PageTableAddr:	PageTableAddr <= a[63:13];
+			`BadVAddr:		BadVAddr[xAXC] <= a[63:13];
+			`EP0:			begin
+							$display("Updating EP0=%h",{a[31:4],4'd0});
+							EP[0] <= {a[31:4],4'd0};
+							end
+			`EP1:			EP[1] <= a[31:0];
+			`EP2:			EP[2] <= a[31:0];
+			`EP3:			EP[3] <= a[31:0];
+			`EPC:			EPC[xAXC] <= a;
+			`TBA:			TBA <= a;
 			default:	;
 			endcase
-		`MTTBA:	tba <= {xData[63:2],2'b00};
 		`OMG:	mutex_gate[a[5:0]] <= 1'b1;
 		`CMG:	mutex_gate[a[5:0]] <= 1'b0;
 		`OMGI:	mutex_gate[xIR[12:7]] <= 1'b1;
@@ -2254,6 +2567,7 @@ if (advanceX) begin
 			sel_o <= 4'hF;
 			adr_o <= {xData[63:3],3'b000};
 			dat_o <= b[31:0];
+			m1Data <= b;
 			end
 	`OUTH:
 			begin
@@ -2292,13 +2606,13 @@ if (advanceX) begin
 			end
 	`LB,`LBU,`LC,`LCU,`LH,`LHU,`LW,`LWR,`SW,`SH,`SC,`SB,`SWC:
 			begin
-			m1b <= b;
+			m1Data <= b;
 			ea <= xData;
 			end
 	`MEMNDX:
 			begin
 			m1Opcode <= xFunc;
-			m1b <= c;
+			m1Data <= c;
 			ea <= xData;
 			end
 	`DIVSI,`DIVUI:
@@ -2375,8 +2689,8 @@ if (advanceR) begin
 
 	// Set the target register
 	casex(dOpcode)
-	`SETLO:		xRt <= {dAXC,dIR[36:32]};
-	`SETHI:		xRt <= {dAXC,dIR[36:32]};
+	`SETLO:		xRt <= {dAXC,dRa};
+	`SETHI:		xRt <= {dAXC,dRa};
 	`RR:		xRt <= {dAXC,dIR[24:20]};
 	`BTRI:		xRt <= 9'd0;
 	`BTRR:		xRt <= 9'd0;
@@ -2419,14 +2733,6 @@ if (advanceR) begin
 		`MEMNDX:	imm <= {{51{dIR[19]}},dIR[19:7]};
 		default:	imm <= {{39{dIR[24]}},dIR[24:0]};
 		endcase
-	case(dOpcode)
-
-	`MISC:
-		case(dFunc)
-		`SEI:	im <= 1'b1;
-		`CLI:	im <= 1'b0;
-		endcase
-	endcase
 		
 end
 
@@ -2489,6 +2795,7 @@ if (advanceI) begin
 		dextype <= `EX_NMI;
 	end
 	else if (irq_i & !im & !StatusHWI[AXC]) begin
+		im <= 1'b1;
 		StatusHWI[AXC] <= 1'b1;
 		IPC[AXC] <= pc_axc;
 		dirqf[AXC] <= 1'b1;
@@ -2804,6 +3111,22 @@ if (advanceX) begin
 			xRt <= 9'd0;
 		end
 	end
+	if (priv_violation) begin
+		$display("Privledge violation");
+		CauseCode[xAXC] <= `EX_PRIV;
+		StatusEXL[xAXC] <= 1'b1;
+		EPC[xAXC] <= xpc;
+		pc[xAXC] <= {TBA[63:13],`PRIV_OFFSET};
+		if (xAXC==AXC) begin
+			dpc <= {TBA[63:13],`PRIV_OFFSET};
+			dIR <= `NOP_INSN;
+		end
+		if (xAXC==dAXC) begin
+			xpc <= {TBA[63:13],`PRIV_OFFSET};
+			xIR <= `NOP_INSN;
+			xRt <= 9'd0;
+		end
+	end
 end
 
 //---------------------------------------------------------
@@ -2893,12 +3216,23 @@ IDLE:
 	if (!cmd_full) begin
 		if (triggerDCacheLoad) begin
 			dcaccess <= 1'b1;
-			cmd_en <= 1'b1;	
-			cmd_instr <= 3'b001;	// READ
-			cmd_byte_addr <= {pea[29:5],5'b00000};
-			dadr_o <= {pea[63:5],5'b00000};
-			cmd_bl <= 6'd8;	// Eight words per cache line
-			cstate <= DCACT;
+			if (pea[63]) begin
+				cmd_en <= 1'b1;	
+				cmd_instr <= 3'b001;	// READ
+				cmd_byte_addr <= {pea[29:5],5'b00000};
+				dadr_o <= {pea[63:5],5'b00000};
+				cmd_bl <= 6'd8;	// Eight words per cache line
+				cstate <= DCACT;
+			end
+			else begin
+				bte_o <= 2'b00;			// linear burst
+				cti_o <= 3'b010;		// burst access
+				cyc_o <= 1'b1;
+				stb_o <= 1'b1;
+				adr_o <= {pea[63:5],5'h00};
+				dadr_o <= {pea[63:5],5'h00};
+				cstate <= DCACT2;
+			end
 		end
 		else if (triggerICacheLoad) begin
 			if (!ppc[63]) begin
@@ -3003,6 +3337,23 @@ DCACT1:	// Read word 1
 			cstate <= DCDLY;
 		end
 	end
+// WISHBONE burst accesses
+//
+DCACT2:
+	if (ack_i) begin
+		adr_o[4:2] <= adr_o[4:2] + 3'd1;
+		dadr_o[4:2] <= dadr_o[4:2] + 3'd1;
+		if (adr_o[4:2]==3'h6)
+			cti_o <= 3'b111;	// Last cycle ahead
+		if (adr_o[4:2]==3'h7) begin
+			cti_o <= 3'b000;	// back to non-burst mode
+			cyc_o <= 1'b0;
+			stb_o <= 1'b0;
+			dcaccess <= 1'b0;
+			cstate <= IDLE;
+		end
+	end
+
 DCDLY:
 	// The fifo should have emptied out, if not, empty it out.
 	if (!rd_empty) begin
