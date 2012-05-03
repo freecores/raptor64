@@ -22,6 +22,9 @@
 			`COM:	$display("COM r%d,r%d",insn[29:25],insn[34:30]);
 			`ABS:	$display("ABS r%d,r%d",insn[29:25],insn[34:30]);
 			`SQRT:	$display("SQRT r%d,r%d",insn[29:25],insn[34:30]);
+			`MTSPR:	;
+//				case(insn[12:7])
+//				endcase
 			default:	;
 			endcase
 		`RR:
@@ -50,6 +53,7 @@
 			`BGEU:	$display("BGEU r%d,r%d,%h.%h)",insn[34:30],insn[29:25],{{44{insn[24]}},insn[24:9]},insn[8:7]);
 			default:	;
 			endcase
+		`SETLO:	$display("SETLO r%d,#%h",insn[36:32],{{32{insn[31]}},insn[31:0]});
 		`ADDI:	$display("ADDI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
 		`SUBI:	$display("SUBI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
 		`ANDI:	$display("ANDI r%d,r%d,#%d",insn[29:25],insn[34:30],{39'h7FFFFFFFFF,insn[24:0]});
@@ -61,6 +65,14 @@
 		`RET:	$display("RET R%d,R%d,#%h",insn[34:30],insn[29:25],{{39{insn[24]}},insn[24:0]});
 		`BEQI:	$display("BEQI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
 		`BNEI:	$display("BNEI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BLTI:	$display("BLTI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BLEI:	$display("BLEI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BGTI:	$display("BGTI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BGEI:	$display("BGEI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BLTUI:	$display("BLTUI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BLEUI:	$display("BLEUI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BGTUI:	$display("BGTUI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
+		`BGEUI:	$display("BGEUI r%d,#%d,%h.%h)",insn[34:30],insn[17:0],{{50{insn[29]}},insn[29:20]},insn[19:18]);
 		`NOPI:	$display("NOP");
 		`SB:	$display("SB r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`SC:	$display("SC r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
@@ -73,6 +85,6 @@
 		`LH:	$display("LH r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`LHU:	$display("LHU r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`LW:	$display("LW r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
-		7'b111xxxx:	$display("IMM %h", insn[38:0]);
+		7'b111xxxx:	$display("IMM %h", {insn[38:0],25'd0});
 		default:	;
 		endcase
