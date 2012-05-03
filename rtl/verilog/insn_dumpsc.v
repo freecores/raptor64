@@ -1,4 +1,4 @@
-		$display("Fetched pc=%h insn: %h", pc, insn);
+		$display("Fetched pc=%h.%h insn: %h", {pc[63:4],4'h0},pc[3:2], insn);
 		casex(insn[41:35])
 		`MISC:
 			begin
@@ -55,8 +55,11 @@
 			`BGEU:	$display("BGEU r%d,r%d,%h.%h)",insn[34:30],insn[29:25],{{44{insn[24]}},insn[24:7]},insn[6:5]);
 			default:	;
 			endcase
+		`SETLO:	$display("SETLO r%d,#%h", insn[36:32],{{32{insn[31]}},insn[31:0]});
 		`ADDI:	$display("ADDI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
+		`ADDUI:	$display("ADDUI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
 		`SUBI:	$display("SUBI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
+		`SUBUI:	$display("SUBUI r%d,r%d,#%d",insn[29:25],insn[34:30],{{39{insn[24]}},insn[24:0]});
 		`ANDI:	$display("ANDI r%d,r%d,#%d",insn[29:25],insn[34:30],{39'h7FFFFFFFFF,insn[24:0]});
 		`ORI:	$display("ORI  r%d,r%d,#%d",insn[29:25],insn[34:30],{39'd0,insn[24:0]});
 		`XORI:	$display("XORI r%d,r%d,#%d",insn[29:25],insn[34:30],{39'd0,insn[24:0]});
