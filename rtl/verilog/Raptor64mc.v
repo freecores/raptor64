@@ -315,6 +315,7 @@
 `define		BAND	5'd12
 `define		BOR		5'd13
 `define		BNR		5'd14
+`define		LOOP	5'd15
 `define 	BLTR	5'd16
 `define 	BGER	5'd17
 `define 	BLER	5'd18
@@ -1258,6 +1259,11 @@ casex(xOpcode)
 	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b1 : b[n]; xData[64] = 1'b0; end
 	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b0 : b[n]; xData[64] = 1'b0; end
 	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? ~b[n] : b[n]; xData[64] = 1'b0; end
+	default:	xData = 65'd0;
+	endcase
+`BTRR:
+	case(xIR[4:0])
+	`LOOP:		xData = b - 64'd1;
 	default:	xData = 65'd0;
 	endcase
 `SETLO:	xData = imm;
@@ -2693,7 +2699,11 @@ if (advanceR) begin
 	`SETHI:		xRt <= {dAXC,dRa};
 	`RR:		xRt <= {dAXC,dIR[24:20]};
 	`BTRI:		xRt <= 9'd0;
-	`BTRR:		xRt <= 9'd0;
+	`BTRR:
+		case(dIR[4:0])
+		`LOOP:	xRt <= {dAXC,dRb};
+		default: xRt <= 9'd0;
+		endcase
 	`TRAPcc:	xRt <= 9'd0;
 	`TRAPcci:	xRt <= 9'd0;
 	`JMP:		xRt <= 9'd00;
@@ -2849,7 +2859,7 @@ if (advanceI) begin
 			end
 		`BTRR:
 			case(insn[4:0])
-			`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR:
+			`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR,`LOOP,`BRA:
 				if (predict_taken) begin
 					$display("Taking predicted branch: %h",{pc_axc[63:4] + {{42{insn[24]}},insn[24:7]},insn[6:5],2'b00});
 					dbranch_taken <= 1'b1;
@@ -2917,7 +2927,7 @@ if (advanceX) begin
 	`BTRR:
 		case(xIR[4:0])
 	// BEQ r1,r2,label
-		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR:
+		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR,`BRA,`BRN,`LOOP:
 			if (takb & !xbranch_taken) begin
 				$display("Taking branch %h",xpc[63:4] + {{42{xIR[24]}},xIR[24:7]});
 				pc[xAXC][63:4] <= xpc[63:4] + {{42{xIR[24]}},xIR[24:7]};

@@ -53,6 +53,8 @@
 			`BLEU:	$display("BLEU r%d,r%d,%h.%h)",insn[34:30],insn[29:25],{{44{insn[24]}},insn[24:7]},insn[6:5]);
 			`BGTU:	$display("BGTU r%d,r%d,%h.%h)",insn[34:30],insn[29:25],{{44{insn[24]}},insn[24:7]},insn[6:5]);
 			`BGEU:	$display("BGEU r%d,r%d,%h.%h)",insn[34:30],insn[29:25],{{44{insn[24]}},insn[24:7]},insn[6:5]);
+			`BRA:	$display("BRA %h.%h)",{{44{insn[24]}},insn[24:7]},insn[6:5]);
+			`LOOP:	$display("LOOP r%d,%h.%h)",insn[29:25],{{44{insn[24]}},insn[24:7]},insn[6:5]);
 			default:	;
 			endcase
 		`SETLO:	$display("SETLO r%d,#%h", insn[36:32],{{32{insn[31]}},insn[31:0]});
