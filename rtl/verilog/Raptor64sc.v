@@ -3,7 +3,7 @@
 // All Rights Reserved.
 // robfinch<remove>@opencores.org
 //
-// Raptor64.v
+// Raptor64sc.v
 //  - 64 bit CPU
 //
 // This source file is free software: you can redistribute it and/or modify 
@@ -23,6 +23,7 @@
 //
 `define ADDRESS_RESERVATION	1
 `define RAS_PREDICTION		1
+//`define FLOATING_POINT		1
 //`define BTB					1
 //`define TLB		1
 //`define BRANCH_PREDICTION_SIMPLE	1
@@ -89,11 +90,14 @@
 `define     TLBWR	7'd52
 `define		CLI		7'd64
 `define 	SEI		7'd65
+`define		GRAN	7'd80
+`define		GRAFD	7'd82
 `define R		7'd1
 `define 	COM		7'd4
 `define		NOT		7'd5
 `define		NEG		7'd6
 `define		ABS		7'd7
+`define		SGN		7'd8
 `define		MOV		7'd9
 `define		SWAP	7'd13
 `define		CTLZ	7'd16
@@ -107,6 +111,7 @@
 `define		REDAND	7'd31
 `define     MFSPR	7'd40
 `define     MTSPR	7'd41
+`define         SR				6'd00
 `define         TLBIndex    	6'd01
 `define         TLBRandom		6'd02
 `define         PageTableAddr	6'd04
@@ -130,6 +135,10 @@
 `define			NON_ICACHE_SEG	6'd26
 `define			FPCR			6'd32
 `define			IPC				6'd33
+`define			RAND			6'd34
+`define			SRANDZ			6'd35
+`define			SRANDW			6'd36
+`define			INSNKEY			6'd37
 `define		OMG		7'd50
 `define 	CMG		7'd51
 `define		OMGI	7'd52
@@ -185,16 +194,16 @@
 `define     BCD_SUB 7'd111
 
 `define SHFTI	7'd3
-`define	SHLI		7'd0
-`define SHRUI		7'd1
-`define ROLI		7'd2
-`define SHRI		7'd3
-`define RORI		7'd4
-`define ROLAMI		7'd5
-`define BFINS		7'd8
-`define BFSET		7'd9
-`define BFCLR		7'd10
-`define BFCHG		7'd11
+`define		SHLI		5'd0
+`define 	SHRUI		5'd1
+`define 	ROLI		5'd2
+`define 	SHRI		5'd3
+`define 	RORI		5'd4
+`define 	ROLAMI		5'd5
+`define 	BFINS		5'd8
+`define 	BFSET		5'd9
+`define 	BFCLR		5'd10
+`define 	BFCHG		5'd11
 `define ADDI	7'd4
 `define ADDUI	7'd5
 `define SUBI	7'd6
@@ -211,18 +220,18 @@
 `define DIVSI	7'd16
 
 `define TRAPcc	7'd17
-`define		TEQ		7'd0
-`define		TNE		7'd1
-`define		TLT		7'd2
-`define		TGE		7'd3
-`define		TLE		7'd4
-`define		TGT		7'd5
-`define		TLTU	7'd6
-`define		TGEU	7'd7
-`define		TLEU	7'd8
-`define		TGTU	7'd9
-`define		TRAP	7'd10
-`define		TRN		7'd11
+`define		TEQ		5'd0
+`define		TNE		5'd1
+`define		TLT		5'd2
+`define		TGE		5'd3
+`define		TLE		5'd4
+`define		TGT		5'd5
+`define		TLTU	5'd6
+`define		TGEU	5'd7
+`define		TLEU	5'd8
+`define		TGTU	5'd9
+`define		TRAP	5'd10
+`define		TRN		5'd11
 `define TRAPcci	7'd18
 `define		TEQI	5'd0
 `define		TNEI	5'd1
@@ -267,6 +276,51 @@
 `define SW		7'd51
 `define SP		7'd52
 `define MEMNDX	7'd53
+`define 	LBX		6'd0
+`define 	LCX		6'd1
+`define 	LHX		6'd2
+`define 	LWX		6'd3
+`define 	LPX		6'd4
+`define 	LBUX	6'd5
+`define 	LCUX	6'd6
+`define 	LHUX	6'd7
+`define 	LSHX	6'd8
+`define 	LSWX	6'd9
+`define	 	LFX		6'd10
+`define 	LFDX	6'd11
+`define 	LFPX	6'd12
+`define 	LFDPX	6'd13
+`define 	LWRX	6'd14
+
+`define 	SBX		6'd16
+`define 	SCX		6'd17
+`define 	SHX		6'd18
+`define 	SWX		6'd19
+`define 	SPX		6'd20
+`define 	SSHX	6'd24
+`define 	SSWX	6'd25
+`define 	SFX		6'd26
+`define 	SFDX	6'd27
+`define 	SFPX	6'd28
+`define 	SFDPX	6'd29
+`define 	SWCX	6'd30
+
+`define 	INBX	6'd32
+`define 	INCX	6'd33
+`define 	INHX	6'd34
+`define 	INWX	6'd35
+`define 	INBUX	6'd36
+`define 	INCUX	6'd37
+`define 	INHUX	6'd38
+`define 	OUTBX	6'd40
+`define 	OUTCX	6'd41
+`define 	OUTHX	6'd42
+`define 	OUTWX	6'd43
+`define 	CACHEX	6'd44
+`define 	LEAX	6'd45
+`define 	LMX		6'd46
+`define 	SMX		6'd47
+
 `define SSH		7'd56
 `define SSW		7'd57
 `define SF		7'd58
@@ -286,7 +340,10 @@
 `define OUTC	7'd73
 `define OUTH	7'd74
 `define OUTW	7'd75
-
+`define CACHE	7'd76
+`define		INVIL	5'd0
+`define		INVIALL	5'd1
+`define LEA		7'd77
 `define LM		7'd78
 `define SM		7'd79
 
@@ -358,6 +415,22 @@
 `define SEQI	7'd104
 `define SNEI	7'd105
 
+`define FP		7'd108
+`define FDADD		6'd0
+`define FDSUB		6'd1
+`define FDMUL		6'd2
+`define FDDIV		6'd3
+`define FDCUN		6'd4
+`define FDI2F		6'd5
+`define FDF2I		6'd6
+`define FDF2D		6'd7
+`define FDD2F		6'd8
+`define FDCLT		6'b001100
+`define FDCEQ		6'b010100
+`define FDCLE		6'b011100
+`define FDCGT		6'b100100
+`define FDCNE		6'b101100
+`define FDCGE		6'b110100
 `define FPLOO	7'd109
 `define FPZL	7'd110
 `define NOPI	7'd111
@@ -423,10 +496,15 @@ reg [63:0] dat_o;
 input sys_adv;
 input [63:5] sys_adr;
 
+reg [5:0] fltctr;
+wire fltdone = fltctr==6'd0;
 reg resetA;
 reg im,bu_im;			// interrupt mask
 reg im1;			// temporary interrupt mask for LM/SM
 reg [1:0] rm;		// fp rounding mode
+reg FXE;			// fp exception enable
+wire KernelMode;
+wire [31:0] sr = {bu_im,15'd0,im,1'b0,KernelMode,FXE,12'b0};
 reg [41:0] dIR;
 reg [41:0] ndIR;
 wire [6:0] dOpcode = dIR[41:35];
@@ -454,11 +532,27 @@ reg dtinit;
 reg dcache_on;
 reg [63:32] nonICacheSeg;
 
-reg dccyc;
+reg [1:0] FPC_rm;
+reg FPC_SL;			// result is negative (and non-zero)
+reg FPC_SE;			// result is zero
+reg FPC_SG;			// result is positive (and non-zero)
+reg FPC_SI;			// result is infinite or NaN
+reg FPC_overx;
+reg fp_iop;
+reg fp_ovr;
+reg fp_uf;
+wire [31:0] FPC = {FPC_rm,1'b0,
+			9'd0,
+			FPC_SL,
+			FPC_SG,
+			FPC_SE,
+			FPC_SI,
+			16'd0
+			};
 wire [63:0] cdat;
 reg [63:0] wr_addr;
 reg [41:0] insn;
-wire [63:0] rfoa,rfob;
+wire [63:0] rfoa,rfob,rfoc;
 reg clk_en;
 reg cpu_clk_en;
 reg StatusERL;		// 1= in error processing
@@ -483,7 +577,7 @@ endcase
 end
 endfunction
 
-wire KernelMode = StatusEXL;
+assign KernelMode = StatusEXL|StatusHWI;
 
 //-----------------------------------------------------------------------------
 // TLB
@@ -609,13 +703,51 @@ else begin
 end
 
 //-----------------------------------------------------------------------------
-// Instruction Cache
+// Random number register:
+//
+// Uses George Marsaglia's multiply method.
+// Current method is to concatonate two 32 bit generators. This isn't a very
+// good way to do it.
+//-----------------------------------------------------------------------------
+reg [31:0] m_z1,m_z2;
+reg [31:0] m_w1,m_w2;
+reg [31:0] next_m_z1,next_m_z2;
+reg [31:0] next_m_w1,next_m_w2;
+
+always @(m_z1 or m_w1)
+begin
+	next_m_z1 <= (18'h36969 * m_z1[15:0]) + m_z1[31:16];
+	next_m_w1 <= (18'h18000 * m_w1[15:0]) + m_w1[31:16];
+end
+
+always @(m_z2 or m_w2)
+begin
+	next_m_z2 <= (18'h36969 * m_z2[15:0]) + m_z2[31:16];
+	next_m_w2 <= (18'h18000 * m_w2[15:0]) + m_w2[31:16];
+end
+
+wire [31:0] rand1 = {m_z1[15:0],16'd0} + m_w1;
+wire [31:0] rand2 = {m_z2[15:0],16'd0} + m_w2;
+wire [63:0] rand = {rand2,rand1};
+
+wire [10:0] bias = 11'h3FF;				// bias amount (eg 127)
+wire [10:0] xl = rand[62:53];
+wire sgn = 1'b0;								// floating point: always generate a positive number
+wire [10:0] exp = xl > bias-1 ? bias-1 : xl;	// 2^-1 otherwise number could be over 1
+wire [52:0] man = rand[52:0];					// a leading '1' will be assumed
+wire [63:0] randfd = {sgn,exp,man};
+reg [63:0] rando;
+
+//-----------------------------------------------------------------------------
+// Instruction Cache / Instruction buffer
 // 8kB
 // 
 //-----------------------------------------------------------------------------
 //reg lfdir;
-wire lfdir = ((dOpcode==`LM || dOpcode==`SM) && dIR[31:0]!=32'd0) &&	ndIR[31:0]!=32'd0;
-wire ldnop = ((dOpcode==`LM || dOpcode==`SM) && (dIR[31:0]==32'd0 || ndIR[31:0]==32'd0));
+wire lfdir = (((dOpcode==`LM || dOpcode==`SM) && dIR[31:0]!=32'd0) && ndIR[31:0]!=32'd0) ||
+				((dOpcode==`LP || dOpcode==`SP || dOpcode==`LFP || dOpcode==`SFP || dOpcode==`LFDP || dOpcode==`SFDP) && dIR[25]!=1'b1);
+wire ldnop = (((dOpcode==`LM || dOpcode==`SM) && (dIR[31:0]==32'd0 || ndIR[31:0]==32'd0)) ||
+				((dOpcode==`LP || dOpcode==`SP || dOpcode==`LFP || dOpcode==`SFP || dOpcode==`LFDP || dOpcode==`SFDP) && dIR[25]==1'b1));
 reg icaccess;
 reg ICacheOn;
 wire ibufrdy;
@@ -624,7 +756,10 @@ wire [127:0] insnbundle;
 reg [127:0] insnbuf0,insnbuf1;
 reg [63:4] ibuftag0,ibuftag1;
 wire isICached = ppc[63:32]!=nonICacheSeg;
+//wire isEncrypted = ppc[63:32]==encryptedArea;
 wire ICacheAct = ICacheOn & isICached;
+reg [41:0] insn1;
+reg [41:0] insnkey;
 
 Raptor64_icache_ram u1
 (
@@ -640,23 +775,26 @@ Raptor64_icache_ram u1
 always @(ppc or insnbundle or ICacheAct or insnbuf0 or insnbuf1 or ndIR or lfdir or ldnop)
 begin
 	casex({ldnop,lfdir,ICacheAct,ibuftag1==ppc[63:4],pc[3:2]})
-	6'b1xxxxx:	insn <= 42'h37800000000;
-	6'b01xxxx:	insn <= ndIR;
-	6'b001x00:	insn <= insnbundle[ 41: 0];
-	6'b001x01:	insn <= insnbundle[ 83:42];
-	6'b001x10:	insn <= insnbundle[125:84];
-	6'b001x11:	insn <= 42'h37800000000;	// NOP instruction
-	6'b000000:	insn <= insnbuf0[ 41: 0];
-	6'b000001:	insn <= insnbuf0[ 83:42];
-	6'b000010:	insn <= insnbuf0[125:84];
-	6'b000011:	insn <= 42'h37800000000;
-	6'b000100:	insn <= insnbuf1[ 41: 0];
-	6'b000101:	insn <= insnbuf1[ 83:42];
-	6'b000110:	insn <= insnbuf1[125:84];
-	6'b000111:	insn <= 42'h37800000000;
+	6'b1xxxxx:	insn1 <= 42'h37800000000;
+	6'b01xxxx:	insn1 <= ndIR;
+	6'b001x00:	insn1 <= insnbundle[ 41: 0];
+	6'b001x01:	insn1 <= insnbundle[ 83:42];
+	6'b001x10:	insn1 <= insnbundle[125:84];
+	6'b001x11:	insn1 <= 42'h37800000000;	// NOP instruction
+	6'b000000:	insn1 <= insnbuf0[ 41: 0];
+	6'b000001:	insn1 <= insnbuf0[ 83:42];
+	6'b000010:	insn1 <= insnbuf0[125:84];
+	6'b000011:	insn1 <= 42'h37800000000;
+	6'b000100:	insn1 <= insnbuf1[ 41: 0];
+	6'b000101:	insn1 <= insnbuf1[ 83:42];
+	6'b000110:	insn1 <= insnbuf1[125:84];
+	6'b000111:	insn1 <= 42'h37800000000;
 	endcase
 end
 
+// Decrypt the instruction set.
+always @(insn1,insnkey)
+	insn <= insn1 ^ insnkey;
 
 reg [63:13] tmem [127:0];
 reg [127:0] tvalid;
@@ -726,10 +864,13 @@ reg m1IsCacheElement;
 reg nopI;
 wire [6:0] iFunc = insn[6:0];
 wire [6:0] dFunc = dIR[6:0];
+wire [5:0] dFunc6 = dIR[5:0];
 wire [6:0] xFunc = xIR[6:0];
+wire [5:0] xFunc6 = xIR[5:0];
+wire [4:0] xFunc5 = xIR[4:0];
 wire [6:0] iOpcode = insn[41:35];
 wire [6:0] xOpcode = xIR[41:35];
-reg [6:0] m1Opcode,m2Opcode;
+reg [6:0] m1Opcode,m2Opcode,wOpcode;
 reg [6:0] m1Func,m2Func;
 reg [63:0] m1Data,m2Data,wData,tData;
 reg [63:0] m2Addr;
@@ -746,6 +887,8 @@ reg [7:0] dextype,m1extype,m2extype,wextype,textype,exception_type;
 reg [7:0] xextype;
 wire advanceX_edge;
 reg takb;
+
+
 
 wire [127:0] mult_out;
 wire [63:0] sqrt_out;
@@ -816,9 +959,14 @@ Raptor64Div u19
 	.done(div_done)
 );
 
+//-----------------------------------------------------------------------------
+// Floating point
+//-----------------------------------------------------------------------------
+
 wire [63:0] fpZLOut;
 wire [63:0] fpLooOut;
 wire fpLooDone;
+
 
 fpZLUnit #(64) u30 
 (
@@ -840,6 +988,136 @@ fpLOOUnit #(64) u31
 	.done(fpLooDone)
 );
 
+
+wire dcmp_result;
+wire [63:0] daddsub_result;
+wire [63:0] ddiv_result;
+wire [63:0] dmul_result;
+wire [63:0] i2f_result;
+wire [63:0] f2i_result;
+wire [63:0] f2d_result;
+wire [63:0] d2f_result;
+
+wire f2i_iop,fpmul_iop,fpdiv_iop,fpaddsub_iop,fpcmp_iop;
+wire f2i_ovr,fpmul_ovr,fpdiv_ovr,fpaddsub_ovr;
+wire fpmul_uf,fpaddsub_uf,fpdiv_uf;
+
+
+`ifdef FLOATING_POINT
+
+Raptor64_fpCmp u60
+(
+	.a(a), // input [63 : 0] a
+	.b(b), // input [63 : 0] b
+	.operation(xFunc6), // input [5 : 0] operation
+	.clk(clk), // input clk
+	.result(dcmp_result), // ouput [0 : 0] result
+	.invalid_op(fpcmp_iop)
+); // ouput invalid_op
+
+Raptor64_fpAddsub u61
+(
+	.a(a), // input [63 : 0] a
+	.b(b), // input [63 : 0] b
+	.operation(xFunc6), // input [5 : 0] operation
+	.clk(clk), // input clk
+	.result(daddsub_result), // ouput [63 : 0] result
+	.underflow(fpaddsub_uf), // ouput underflow
+	.overflow(fpaddsub_ovr), // ouput overflow
+	.invalid_op(fpaddsub_iop)
+); // ouput invalid_op
+
+Raptor64_fpDiv u62
+(
+	.a(a), // input [63 : 0] a
+	.b(b), // input [63 : 0] b
+	.clk(clk), // input clk
+	.result(ddiv_result), // ouput [63 : 0] result
+	.underflow(fpdiv_uf), // ouput underflow
+	.overflow(fpdiv_ovr), // ouput overflow
+	.invalid_op(fpdiv_iop), // ouput invalid_op
+	.divide_by_zero()
+); // ouput divide_by_zero
+
+Raptor64_fpMul u63
+(
+	.a(a), // input [63 : 0] a
+	.b(b), // input [63 : 0] b
+	.clk(clk), // input clk
+	.result(dmul_result), // ouput [63 : 0] result
+	.underflow(fpmul_uf), // ouput underflow
+	.overflow(fpmul_ovr), // ouput overflow
+	.invalid_op(fpmul_iop)
+); // ouput invalid_op
+
+Raptor64_fpItoF u64
+(
+	.a(a), // input [63 : 0] a
+	.clk(clk), // input clk
+	.result(i2f_result)
+); // ouput [63 : 0] result
+
+Raptor64_fpFtoI u65
+(
+	.a(a), // input [63 : 0] a
+	.clk(clk), // input clk
+	.result(f2i_result), // ouput [63 : 0] result
+	.overflow(f2i_ovr), // ouput overflow
+	.invalid_op(f2i_iop)
+); // ouput invalid_op
+
+`endif
+
+always @(posedge clk)
+if (rst_i) begin
+	fltctr <= 6'd0;
+end
+else begin
+	if (fltdone) begin
+		FPC_overx <= fp_ovr;
+	end
+	if (advanceX) begin
+		if (xOpcode==`FP) begin
+			if (xFunc[5:0]==6'b000000)	// FDADD
+				fltctr <= 6'd12;
+			else if (xFunc[5:0]==6'b000001)	// FDSUB
+				fltctr <= 6'd12;
+			else if (xFunc[5:0]==6'b000010)	// FDMUL
+				fltctr <= 6'd12;
+			else if (xFunc[5:0]==6'b000011)	// FDDIV
+				fltctr <= 6'd12;
+			else if (xFunc[5:0]==6'b000100)	// unordered
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b001100)	// less than
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b010100)	// equal
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b011100)	// less than or equal
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b100100)	// greater than
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b101100)	// not equal
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b110100)	// greater than or equal
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b000101)	// ItoFD
+				fltctr <= 6'd7;
+			else if (xFunc[5:0]==6'b000110)	// FFtoI
+				fltctr <= 6'd6;
+			else if (xFunc[5:0]==6'b000111)	// FtoD
+				fltctr <= 6'd2;
+			else if (xFunc[5:0]==6'b001000) // DtoF
+				fltctr <= 6'd2;
+			else
+				fltctr <= 6'd0;
+		end
+	end
+	else begin
+		if (fltctr > 6'd0)
+			fltctr <= fltctr - 6'd1;
+	end
+end
+		
 function [2:0] popcnt6;
 input [5:0] a;
 begin
@@ -1011,7 +1289,27 @@ wire signed [63:0] imms = imm;
 wire aeqz = a==64'd0;
 wire beqz = b==64'd0;
 wire immeqz = imm==64'd0;
-wire eq = a==b;
+
+wire eqb0 = a[ 7: 0]==b[ 7: 0];
+wire eqb1 = a[15: 8]==b[15: 8];
+wire eqb2 = a[23:16]==b[23:16];
+wire eqb3 = a[31:24]==b[31:24];
+wire eqb4 = a[39:32]==b[39:32];
+wire eqb5 = a[47:40]==b[47:40];
+wire eqb6 = a[55:48]==b[55:48];
+wire eqb7 = a[63:56]==b[63:56];
+
+wire eqc0 = eqb0 & eqb1;
+wire eqc1 = eqb2 & eqb3;
+wire eqc2 = eqb4 & eqb5;
+wire eqc3 = eqb6 & eqb7;
+
+wire eqh0 = eqc0 & eqc1;
+wire eqh1 = eqc2 & eqc3;
+
+wire eqw = eqh0 & eqh1;
+wire eq = eqw;
+
 wire eqi = a==imm;
 wire lt = $signed(a) < $signed(b);
 wire lti = as < imms;
@@ -1021,7 +1319,7 @@ wire ltui = a < imm;
 always @(xOpcode or xFunc or a or eq or eqi or lt or lti or ltu or ltui or aeqz or beqz or rsf or xIR)
 case (xOpcode)
 `BTRR:
-	case(xIR[4:0])
+	case(xFunc5)
 	`BRA:	takb = 1'b1;
 	`BRN:	takb = 1'b0;
 	`BEQ:	takb = eq;
@@ -1077,7 +1375,7 @@ case (xOpcode)
 	default:	takb = 1'b0;
 	endcase
 `TRAPcc: 
-	case(xFunc)
+	case(xFunc5)
 	`TEQ:	takb = eq;
 	`TNE:	takb = !eq;
 	`TLT:	takb = lt;
@@ -1118,20 +1416,37 @@ cntlo64 u13 ( .i(a),  .o(cntloo) );
 
 reg [1:0] shftop;
 wire [63:0] shfto;
-always @(xFunc)
-	if (xFunc==`SHL)
-		shftop = 2'b00;
-	else if (xFunc==`ROL || xFunc==`ROR)
-		shftop = 2'b01;
-	else if (xFunc==`SHRU)
-		shftop = 2'b10;
-	else if (xFunc==`SHR)
-		shftop = 2'b11;
-	else
-		shftop = 2'b01;
+reg [63:0] masko;
+//wire shl = (xOpcode==`RR && xFunc==`SHL) || (xOpcode==`SHFTI && xFunc==`SHLI);
+//wire shr = (xOpcode==`RR && xFunc==`SHR) || (xOpcode==`SHFTI && xFunc==`SHRI);
+//wire shru = (xOpcode==`RR && xFunc==`SHRU) || (xOpcode==`SHFTI && xFunc==`SHRUI);
+//wire rol = (xOpcode==`RR && xFunc==`ROL) || (xOpcode==`SHFTI && xFunc==`ROLI);
+//wire ror = (xOpcode==`RR && xFunc==`ROR) || (xOpcode==`SHFTI && xFunc==`RORI);
+//wire rolam = (xOpcode==`RR && xFunc==`ROLAM) || (xOpcode==`SHFTI && xFunc==`ROLAMI);
+//
+//always @(shl,shr,shru,rol,ror,rolam)
+//	if (shl) shftop = 2'b00;
+//	else if (rol | ror | rolam) shftop = 2'b01;
+//	else if (shru) shftop = 2'b10;
+//	else if (shr) shftop = 2'b11;
+//	else shftop = 2'b01;
 
-wire [63:0] masko;
-shiftAndMask u15
+wire [127:0] shlxo = {64'd0,a} << b[5:0];
+wire [127:0] shruxo = {a,64'd0} >> b[5:0];
+wire [63:0] shlo = shlxo[63:0];
+wire [63:0] shruo = shruxo[127:64];
+wire [63:0] rolo = {shlo[127:64]|shlo[63:0]};
+wire [63:0] roro = {shruo[127:64]|shruo[63:0]};
+wire [63:0] shro = ~(~a >> b[5:0]);
+// generate mask
+wire [5:0] mb = xIR[12:7];
+wire [5:0] me = xIR[18:13];
+integer nn;
+always @(mb or me or nn)
+	for (nn = 0; nn < 64; nn = nn + 1)
+		masko[nn] <= (nn >= mb) ^ (nn <= me) ^ (me >= mb);
+/*
+shiftAndMask #(64) u15
 (
 	.op(shftop),
 	.oz(1'b0),		// zero the output
@@ -1143,6 +1458,7 @@ shiftAndMask u15
 	.mo(masko)
 );
 
+*/
 always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	sqrt_out or cntlzo or cntloo or tick or ipc or tba or AXC or
 	lt or eq or ltu or mult_out or lti or eqi or ltui or xIR or div_q or div_r or
@@ -1160,6 +1476,7 @@ casex(xOpcode)
 	`NOT:	xData = ~|a;
 	`NEG:	xData = -a;
 	`ABS:	xData = a[63] ? -a : a;
+	`SGN:	xData = a[63] ? 65'h1FFFFFFFF_FFFFFFFF : aeqz ? 65'd0 : 65'd1;
 	`MOV:	xData = a;
 	`SQRT:	xData = sqrt_out;
 	`SWAP:	xData = {a[31:0],a[63:32]};
@@ -1213,7 +1530,11 @@ casex(xOpcode)
 		`TBA:			xData = TBA;
 		`AXC:			xData = xAXC;
 		`NON_ICACHE_SEG:	xData = nonICacheSeg;
-		`FPCR:			xData = {rm,30'd0};
+		`FPCR:			xData = FPC;
+		`RAND:			xData = rando;
+		`SRANDZ:		xData = {m_z2,m_z1};
+		`SRANDW:		xData = {m_w2,m_w1};
+		`INSNKEY:		xData = insnkey;
 		default:	xData = 65'd0;
 		endcase
 	`OMG:		xData = mutex_gate[a[5:0]];
@@ -1260,35 +1581,32 @@ casex(xOpcode)
 	`DIVS:	xData = div_q;
 	`DIVU:	xData = div_q;
 	`MOD:	xData = div_r;
-
-	`SHL:	xData = shfto;
-	`SHRU:	xData = shfto;
-	`ROL:	xData = shfto;
-	`ROR:	xData = {a[0],a[63:1]};
-	`SHR:	xData = shfto;
-	`ROLAM:	xData = shfto & masko;
-
+	`SHL:	xData = shlo;
+	`SHRU:	xData = shruo;
+	`ROL:	xData = rolo;
+	`ROR:	xData = roro;
+	`SHR:	xData = shro;
+	`ROLAM:	xData = rolo & masko;
 	`BCD_ADD:	xData = bcdaddo;
 	`BCD_SUB:	xData = bcdsubo;
-
 	default:	xData = 65'd0;
 	endcase
 `SHFTI:
-	case(xFunc)
-	`SHLI:	xData = shfto;
-	`SHRUI:	xData = shfto;
-	`ROLI:	xData = shfto;
-	`RORI:	xData = {a[0],a[63:1]};
-	`SHRI:	xData = shfto;
-	`ROLAMI:	xData = shfto & masko;
-	`BFINS: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? shfto[n] : b[n]; xData[64] = 1'b0; end
+	case(xFunc5)
+	`SHLI:	xData = shlo;
+	`SHRUI:	xData = shruo;
+	`ROLI:	xData = rolo;
+	`RORI:	xData = roro;
+	`SHRI:	xData = shro;
+	`ROLAMI:	xData = rolo & masko;
+	`BFINS: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? rolo[n] : b[n]; xData[64] = 1'b0; end
 	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b1 : b[n]; xData[64] = 1'b0; end
 	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b0 : b[n]; xData[64] = 1'b0; end
 	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? ~b[n] : b[n]; xData[64] = 1'b0; end
 	default:	xData = 65'd0;
 	endcase
 `BTRR:
-	case(xIR[4:0])
+	case(xFunc5)
 	`LOOP:	xData = b - 64'd1;
 	default:	xData = 64'd0;
 	endcase
@@ -1317,13 +1635,13 @@ casex(xOpcode)
 `SLEUI:	xData = ltui|eqi;
 `SGTUI:	xData = !(ltui|eqi);
 `SGEUI:	xData = !ltui;
-`INB,`INCH,`INH,`INW:
+`INB,`INCH,`INH,`INW,`INCU,`INHU,`INBU:
 		xData = a + imm;
 `OUTB,`OUTC,`OUTH,`OUTW:
 		xData = a + imm;
-`LW,`LH,`LC,`LB,`LHU,`LCU,`LBU,`LWR,`LF,`LFD:
+`LW,`LH,`LC,`LB,`LHU,`LCU,`LBU,`LWR,`LF,`LFD,`LP,`LFP,`LFDP,`LEA:
 		xData = a + imm;
-`SW,`SH,`SC,`SB,`SWC,`SF,`SFD:
+`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SP,`SFP,`SFDP:
 		xData = a + imm;
 `MEMNDX:
 		xData = a + b + imm;
@@ -1336,6 +1654,24 @@ casex(xOpcode)
 `RET:	xData = a + imm;
 `FPLOO:	xData = fpLooOut;
 `FPZL:	xData = fpZLOut;
+`ifdef FLOATING_POINT
+`FP:
+	case(xFunc6)
+	`FDADD:	xData = daddsub_result;
+	`FDSUB:	xData = daddsub_result;
+	`FDMUL:	xData = dmul_result;
+	`FDDIV:	xData = ddiv_result;
+	`FDI2F:	xData = i2f_result;
+	`FDF2I:	xData = f2i_result;
+	`FDCUN:	xData = dcmp_result;
+	`FDCEQ:	xData = dcmp_result;
+	`FDCNE:	xData = dcmp_result;
+	`FDCLT:	xData = dcmp_result;
+	`FDCLE:	xData = dcmp_result;
+	`FDCGT:	xData = dcmp_result;
+	`FDCGE:	xData = dcmp_result;
+	endcase
+`endif
 default:	xData = 65'd0;
 endcase
 
@@ -1343,7 +1679,7 @@ wire v_ri,v_rr;
 overflow u2 (.op(xOpcode==`SUBI), .a(a[63]), .b(imm[63]), .s(xData[63]), .v(v_ri));
 overflow u3 (.op(xOpcode==`RR && xFunc==`SUB), .a(a[63]), .b(b[63]), .s(xData[63]), .v(v_rr));
 
-wire dbz_error = (xOpcode==`DIVSI||xOpcode==`DIVUI) && b==64'd0;
+wire dbz_error = ((xOpcode==`DIVSI||xOpcode==`DIVUI) && imm==64'd0) || (xOpcode==`RR && (xFunc==`DIVS || xFunc==`DIVU) && b==64'd0);
 wire ovr_error = ((xOpcode==`ADDI || xOpcode==`SUBI) && v_ri) || ((xOpcode==`RR && (xFunc==`SUB || xFunc==`ADD)) && v_rr);
 wire priv_violation = !KernelMode && (xOpcode==`MISC &&
 	(xFunc==`IRET || xFunc==`ERET || xFunc==`CLI || xFunc==`SEI ||
@@ -1359,53 +1695,50 @@ wire xIsLoad =
 	xOpcode==`LW || xOpcode==`LH || xOpcode==`LB || xOpcode==`LWR ||
 	xOpcode==`LHU || xOpcode==`LBU ||
 	xOpcode==`LC || xOpcode==`LCU || xOpcode==`LM ||
-	xOpcode==`LF || xOpcode==`LFD
+	xOpcode==`LF || xOpcode==`LFD || xOpcode==`LP || xOpcode==`LFP || xOpcode==`LFDP ||
+	xOpcode==`LSH || xOpcode==`LSW ||
+	(xOpcode==`MEMNDX && (
+		xFunc6==`LWX || xFunc6==`LHX || xFunc6==`LBX || xFunc6==`LWRX ||
+		xFunc6==`LHUX || xFunc6==`LBUX ||
+		xFunc6==`LCX || xFunc6==`LCUX ||
+		xFunc6==`LFX || xFunc6==`LFDX || xFunc6==`LPX ||
+		xFunc6==`LSHX || xFunc6==`LSWX
+	))
 	;
 wire xIsStore =
 	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC || xOpcode==`SM ||
-	xOpcode==`SF || xOpcode==`SFD ||
-	xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTB || xOpcode==`OUTC
+	xOpcode==`SF || xOpcode==`SFD || xOpcode==`SP || xOpcode==`SFP || xOpcode==`SFDP ||
+	xOpcode==`SSH || xOpcode==`SSW ||
+	(xOpcode==`MEMNDX && (
+		xFunc6==`SWX || xFunc6==`SHX || xFunc6==`SBX || xFunc6==`SCX || xFunc6==`SWCX ||
+		xFunc6==`SFX || xFunc6==`SFDX || xFunc6==`SPX ||
+		xFunc6==`SSHX || xFunc6==`SSWX
+	))
 	;
 wire xIsSWC = xOpcode==`SWC;
 wire xIsIn = 
-	xOpcode==`INW || xOpcode==`INH || xOpcode==`INCH || xOpcode==`INB
+	xOpcode==`INW || xOpcode==`INH || xOpcode==`INCH || xOpcode==`INB ||
+	xOpcode==`INHU || xOpcode==`INCU || xOpcode==`INBU
 	;
 //wire mIsSWC = mOpcode==`SWC;
 
-//wire mIsLoad =
-//	mOpcode==`LW || mOpcode==`LH || mOpcode==`LB || mOpcode==`LC || mOpcode==`LWR ||
-//	mOpcode==`LHU || mOpcode==`LBU || mOpcode==`LCU ||
-//	mOpcode==`INW || mOpcode==`INB || mOpcode==`INH
-//	;
-wire m1IsLoad =
-	m1Opcode==`LW || m1Opcode==`LH || m1Opcode==`LB || m1Opcode==`LC || m1Opcode==`LWR ||
-	m1Opcode==`LHU || m1Opcode==`LBU || m1Opcode==`LCU || m1Opcode==`LM ||
-	m1Opcode==`LF || m1Opcode==`LFD
-	;
 wire m1IsIn = 
-	m1Opcode==`INW || m1Opcode==`INH || m1Opcode==`INCH || m1Opcode==`INB
+	m1Opcode==`INW || m1Opcode==`INH || m1Opcode==`INCH || m1Opcode==`INB ||
+	m1Opcode==`INHU || m1Opcode==`INCU || m1Opcode==`INBU
 	;
 wire m2IsInW = m2Opcode==`INW;
-wire m1IsStore = m1Opcode==`SW || m1Opcode==`SH || m1Opcode==`SB || m1Opcode==`SC || m1Opcode==`SWC || m1Opcode==`SM ||
-				m1Opcode==`SF || m1Opcode==`SFD;
-wire m2IsStore = m2Opcode==`SW || m2Opcode==`SWC || m2Opcode==`SH || m2Opcode==`SC || m2Opcode==`SB || m2Opcode==`SM ||
-				m2Opcode==`SF || m2Opcode==`SFD;
 wire xIsIO = 
 	xIsIn ||
 	xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTC || xOpcode==`OUTB
 	;
-wire m1IsIO = 
-	m1IsIn ||
-	m1Opcode==`OUTW || m1Opcode==`OUTH || m1Opcode==`OUTC || m1Opcode==`OUTB
-	;
-wire m2IsLoad =
-	m2Opcode==`LW || m2Opcode==`LH || m2Opcode==`LB || m2Opcode==`LC || m2Opcode==`LWR ||
-	m2Opcode==`LHU || m2Opcode==`LBU || m2Opcode==`LCU || m2Opcode==`LM ||
-	m2Opcode==`LF || m2Opcode==`LFD
-	;
+
+reg m1IsLoad,m2IsLoad;
+reg m1IsIO;
+reg m1IsStore,m2IsStore,wIsStore;
+
 
 wire xIsFPLoo = xOpcode==`FPLOO;
-
+wire xIsFP = xOpcode==`FP;
 wire xneedBus = xIsIO;
 wire m1needBus = (m1IsLoad & !m1IsCacheElement) || m1IsStore || m1IsIO;
 wire m2needBus = (m2IsLoad | m2IsStore);
@@ -1418,7 +1751,7 @@ wire StallR =  	(((xIsLoad||xIsIn) && ((xRt==dRa)||(xRt==dRb)||(xRt==dRt))) || x
 				;
 wire StallX = xneedBus & (m1needBus|m2needBus|icaccess|dcaccess);
 wire StallM1 = (m1needBus & (m2needBus|icaccess|dcaccess)) ||
-				( m1IsLoad & m1IsCacheElement & m2IsStore)	// wait for a preceding store to complete
+				( m1IsLoad & m1IsCacheElement & (m2IsStore|wIsStore))	// wait for a preceding store to complete
 				;
 wire StallM2 =  icaccess|dcaccess;
 
@@ -1438,6 +1771,7 @@ wire advanceX = advanceM1 & (
 					xIsMult ? mult_done :
 					xIsDiv ? div_done :
 					xIsFPLoo ? fpLooDone :
+					xIsFP ? fltdone :
 					1'b1) &
 					!StallX;
 wire advanceR = advanceX & !StallR;
@@ -1473,7 +1807,11 @@ reg prev_nmi,nmi_edge;
 always @(dOpcode or dIR)
 begin
 	ndIR <= dIR;
-	if ((dOpcode==`LM || dOpcode==`SM) && dIR[31:0]!=32'd0) begin
+	if (dOpcode==`SP || dOpcode==`LP || dOpcode==`SFP || dOpcode==`LFP || dOpcode==`SFDP || dOpcode==`LFDP) begin
+		ndIR[25] <= 1'b1;
+		ndIR[3] <= 1'b1;
+	end
+	else if ((dOpcode==`LM || dOpcode==`SM) && dIR[31:0]!=32'd0) begin
 		$display("LM/SM %h",dIR[31:0]);
 		if (dIR[0]) 
 			ndIR[0] <= 1'b0;
@@ -1580,6 +1918,30 @@ reg m1clkoff,m2clkoff,m3clkoff,m4clkoff,wclkoff;
 reg dFip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
 reg cyc1;
 
+reg [63:0] nxt_a;
+always @(dRa or xData or m1Data or m2Data or wData or tData or rfoa)
+	casex(dRa)
+	9'bxxxx00000:	nxt_a <= 64'd0;
+	xRt:	nxt_a <= xData;
+	m1Rt:	nxt_a <= m1Data;
+	m2Rt:	nxt_a <= m2Data;
+	wRt:	nxt_a <= wData;
+	tRt:	nxt_a <= tData;
+	default:	nxt_a <= rfoa;
+	endcase
+
+reg [63:0] nxt_b;
+always @(dRb or xData or m1Data or m2Data or wData or tData or rfob)
+	casex(dRb)
+	9'bxxxx00000:	nxt_b <= 64'd0;
+	xRt:	nxt_b <= xData;
+	m1Rt:	nxt_b <= m1Data;
+	m2Rt:	nxt_b <= m2Data;
+	wRt:	nxt_b <= wData;
+	tRt:	nxt_b <= tData;
+	default:	nxt_b <= rfob;
+	endcase
+
 reg [63:0] nxt_c;
 always @(dRc or xData or m1Data or m2Data or wData or tData or rfoc)
 	casex(dRc)
@@ -1602,13 +1964,13 @@ if (rst_i) begin
 	sel_o <= 8'h00;
 	adr_o <= 64'd0;
 	dat_o <= 64'd0;
-	dccyc <= 1'b0;
 	
 	nonICacheSeg <= 32'hFFFF_FFFD;
 	TBA <= 64'd0;
 	pc <= `RESET_VECTOR;
 	m1Opcode <= `NOPI;
 	m2Opcode <= `NOPI;
+	wOpcode <= `NOPI;
 	dIR <= `NOP_INSN;
 	dRt <= 9'd0;
 	tRt <= 9'd0;
@@ -1619,6 +1981,12 @@ if (rst_i) begin
 	wData <= 64'd0;
 	m1Data <= 64'd0;
 	m2Data <= 64'd0;
+	m1IsLoad <= 1'b0;
+	m2IsLoad <= 1'b0;
+	m1IsStore <= 1'b0;
+	m2IsStore <= 1'b0;
+	wIsStore <= 1'b0;
+	m1IsIO <= 1'b0;
 	icaccess <= 1'b0;
 	dcaccess <= 1'b0;
 	nopI <= 1'b0;
@@ -1675,6 +2043,13 @@ if (rst_i) begin
 `endif
 	im <= 1'b1;
 	im1 <= 1'b1;
+// These must be non-zero in order to produce random numbers
+// We set them here in case the user doesn't bother to set them.
+	m_z1 <= 32'h01234567;
+	m_z2 <= 32'h89ABCDEF;
+	m_w1 <= 32'h88888888;
+	m_w2 <= 32'h77777777;
+	insnkey <= 42'd0;
 end
 else begin
 
@@ -1736,8 +2111,21 @@ if (advanceW) begin
 	tData <= wData;
 	if (wRt!=5'd0)
 		$display("Writing regfile[%d:%d] with %h", wRt[8:5],wRt[4:0], wData);
+	case(wOpcode)
+	`LSH:
+		case (wRt)
+		`SR:	begin
+				bu_im <= wData[31];
+				im <= wData[15];
+				FXE <= wData[12];
+				end
+		default:	;
+		endcase
+	endcase
 	wRt <= 9'd0;
 	wData <= 64'd0;
+	wOpcode <= `NOPI;
+	wIsStore <= 1'b0;
 	if (|whwxtype) begin
 		dhwxtype <= 2'b00;
 		xhwxtype <= 2'b00;
@@ -1764,6 +2152,8 @@ end
 // MEMORY:
 //---------------------------------------------------------
 if (advanceM2) begin
+	wIsStore <= m2IsStore;
+	wOpcode <= m2Opcode;
 	wData <= m2Data;
 	whwxtype <= m2hwxtype;
 	wextype <= m2extype;
@@ -1775,6 +2165,8 @@ if (advanceM2) begin
 	
 	m2Rt <= 9'd0;
 	m2Opcode <= `NOPI;
+	m2IsLoad <= 1'b0;
+	m2IsStore <= 1'b0;
 	m2Func <= 7'd0;
 	m2Addr <= 64'd0;
 	m2Data <= 64'd0;
@@ -1783,21 +2175,21 @@ if (advanceM2) begin
 	m2extype <= `EX_NON;
 	if (m2extype==`EX_NON) begin
 		case(m2Opcode)
-		`SH,`SC,`SB,`SW,`SWC,`SM,`SF,`SFD:
+		`SH,`SC,`SB,`SW,`SWC,`SM,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP:
 			begin
 				cyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				we_o <= 1'b0;
 				sel_o <= 4'h0;
 			end
-		`LH,`LF:
+		`LH,`LF,`LSH,`LFP:
 			begin
 				cyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
 				wData <= sel_o[7] ? {{32{dat_i[63]}},dat_i[63:32]}:{{32{dat_i[31]}},dat_i[31: 0]};
 			end
-		`LW,`LWR,`LM,`LFD:
+		`LW,`LWR,`LM,`LFD,`LSW,`LP,`LFDP:
 			begin
 				cyc_o <= 1'b0;
 				stb_o <= 1'b0;
@@ -1889,6 +2281,8 @@ wrhit <= 1'b0;
 //---------------------------------------------------------
 if (advanceM1) begin
 	m2Opcode <= m1Opcode;
+	m2IsLoad <= m1IsLoad;
+	m2IsStore <= m1IsStore;
 	m2Func <= m1Func;
 	m2Addr <= pea;
 	m2Data <= m1Data;
@@ -1901,6 +2295,9 @@ if (advanceM1) begin
 	m2Fip <= m1Fip;
 
 	m1Rt <= 9'd0;
+	m1IsLoad <= 1'b0;
+	m1IsStore <= 1'b0;
+	m1IsIO <= 1'b0;
 	m1Opcode <= `NOPI;
 	m1Func <= 7'd0;
 	m1Data <= 64'd0;
@@ -1948,7 +2345,6 @@ if (advanceM1) begin
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
 				m2Data <= dat_i;
-				m2Opcode <= `NOPI;
 			end
 		`INH:
 			begin
@@ -1956,7 +2352,6 @@ if (advanceM1) begin
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
 				m2Data <= sel_o[7] ? {{32{dat_i[63]}},dat_i[63:32]}:{{32{dat_i[31]}},dat_i[31: 0]};
-				m2Opcode <= `NOPI;
 			end
 		`INHU:
 			begin
@@ -1964,7 +2359,6 @@ if (advanceM1) begin
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
 				m2Data <= sel_o[7] ? dat_i[63:32] : dat_i[31: 0];
-				m2Opcode <= `NOPI;
 			end
 		`INCH:
 			begin
@@ -1978,7 +2372,6 @@ if (advanceM1) begin
 				8'b11000000:	m2Data <= {{48{dat_i[63]}},dat_i[63:48]};
 				default:	m2Data <= 64'hDEADDEADDEADDEAD;			
 				endcase
-				m2Opcode <= `NOPI;
 			end
 		`INCU:
 			begin
@@ -1992,7 +2385,6 @@ if (advanceM1) begin
 				8'b11000000:	m2Data <= dat_i[63:48];
 				default:	m2Data <= 64'hDEADDEADDEADDEAD;			
 				endcase
-				m2Opcode <= `NOPI;
 			end
 		`INB:
 			begin
@@ -2010,7 +2402,6 @@ if (advanceM1) begin
 				8'b10000000:	m2Data <= {{56{dat_i[63]}},dat_i[63:56]};
 				default:	m2Data <= 64'hDEADDEADDEADDEAD;
 				endcase
-				m2Opcode <= `NOPI;
 			end
 		`INBU:
 			begin
@@ -2028,7 +2419,6 @@ if (advanceM1) begin
 				8'b10000000:	m2Data <= dat_i[63:56];
 				default:	m2Data <= 64'hDEADDEADDEADDEAD;
 				endcase
-				m2Opcode <= `NOPI;
 			end
 		`OUTW,`OUTH,`OUTC,`OUTB:
 			begin
@@ -2036,10 +2426,15 @@ if (advanceM1) begin
 				stb_o <= 1'b0;
 				we_o <= 1'b0;
 				sel_o <= 8'h00;
-				m2Opcode <= `NOPI;
 			end
+		`CACHE:
+			case(xIR[29:25])
+			`INVIL:	tvalid[ea[12:6]] <= 1'b0;
+			default:	;
+			endcase
+			
 
-		`LW,`LM,`LFD:
+		`LW,`LM,`LFD,`LSW,`LP,`LFDP:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
@@ -2048,6 +2443,7 @@ if (advanceM1) begin
 				m2Addr <= {pea[63:3],3'b000};
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				m2Data <= cdat;
 			end
@@ -2063,13 +2459,14 @@ if (advanceM1) begin
 				m2Addr <= {pea[63:3],3'b000};
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				m2Data <= cdat;
 				rsv_o <= 1'b1;
 				resv_address <= pea[63:5];
 			end
 `endif
-		`LH,`LF:
+		`LH,`LF,`LFP:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
@@ -2078,6 +2475,7 @@ if (advanceM1) begin
 				m2Addr <= {pea[63:2],2'b00};
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				if (pea[1])
 					m2Data <= {{32{cdat[31]}},cdat[31:0]};
@@ -2085,7 +2483,7 @@ if (advanceM1) begin
 					m2Data <= {{32{cdat[63]}},cdat[63:32]};
 			end
 
-		`LHU:
+		`LHU,`LSH:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
@@ -2094,6 +2492,7 @@ if (advanceM1) begin
 				m2Addr <= {pea[63:2],2'b00};
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				if (pea[1])
 					m2Data <= {32'd0,cdat};
@@ -2116,6 +2515,7 @@ if (advanceM1) begin
 			end
 			else if (dhit) begin
 				$display("dhit=1, cdat=%h",cdat);
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				case(pea[2:1])
 				2'd0:	m2Data <= {{48{cdat[15]}},cdat[15:0]};
@@ -2139,6 +2539,7 @@ if (advanceM1) begin
 				m2Addr <= {pea[63:1],1'b0};
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				case(pea[2:1])
 				2'd0:	m2Data <= {48'd0,cdat[15: 0]};
@@ -2167,6 +2568,7 @@ if (advanceM1) begin
 				m2Addr <= pea;
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				case(pea[2:0])
 				3'b000:	m2Data <= {{56{cdat[ 7]}},cdat[ 7: 0]};
@@ -2198,6 +2600,7 @@ if (advanceM1) begin
 				m2Addr <= pea;
 			end
 			else if (dhit) begin
+				m2IsLoad <= 1'b0;
 				m2Opcode <= `NOPI;
 				case(pea[2:0])
 				3'b000:	m2Data <= {56'd0,cdat[ 7: 0]};
@@ -2211,7 +2614,7 @@ if (advanceM1) begin
 				endcase
 			end
 
-		`SW,`SM,`SFD:
+		`SW,`SM,`SFD,`SSW,`SP,`SFDP:
 			begin
 				$display("SW/SM");
 				m2Addr <= {pea[63:3],3'b000};
@@ -2232,7 +2635,7 @@ if (advanceM1) begin
 				dat_o <= m1Data;
 			end
 
-		`SH,`SF:
+		`SH,`SF,`SSH,`SFP:
 			begin
 				wrhit <= dhit;
 				m2Addr <= {pea[63:2],2'b00};
@@ -2344,6 +2747,9 @@ if (advanceX) begin
 	m1hwxtype <= xhwxtype;
 	m1Fip <= xFip;
 	m1extype <= xextype;
+	m1IsLoad <= xIsLoad;
+	m1IsStore <= xIsStore;
+	m1IsIO <= xIsIO;
 	m1Opcode <= xOpcode;
 	m1Func <= xFunc;
 	m1Rt <= xRt;
@@ -2371,11 +2777,27 @@ if (advanceX) begin
 	case(xOpcode)
 	`MISC:
 		case(xFunc)
+		`SEI:	im <= 1'b1;
+		`CLI:	im <= 1'b0;
 		`WAIT:	m1clkoff <= 1'b1;
 		`ICACHE_ON:		ICacheOn <= 1'b1;
 		`ICACHE_OFF:	ICacheOn <= 1'b0;
 		`DCACHE_ON:		dcache_on <= 1'b1;
 		`DCACHE_OFF:	dcache_on <= 1'b0;
+		`GRAN:	begin
+				rando <= rand;
+				m_z1 <= next_m_z1;
+				m_z2 <= next_m_z2;
+				m_w1 <= next_m_w1;
+				m_w2 <= next_m_w2;
+				end
+		`GRAFD:	begin
+				rando <= randfd;
+				m_z1 <= next_m_z1;
+				m_z2 <= next_m_z2;
+				m_w1 <= next_m_w1;
+				m_w2 <= next_m_w2;
+				end
 `ifdef TLB
 		`TLBP:	ea <= TLBVirtPage;
 		`TLBR,`TLBWI:
@@ -2416,6 +2838,15 @@ if (advanceX) begin
 			`NON_ICACHE_SEG:	nonICacheSeg <= a[63:32];
 			`FPCR:			rm <= a[31:30];
 			`IPC:			IPC <= a;
+			`SRANDZ:		begin
+							m_z1 <= a[31:0];
+							m_z2 <= a[63:32];
+							end
+			`SRANDW:		begin
+							m_w1 <= a[31:0];
+							m_w2 <= a[63:32];
+							end
+			`INSNKEY:		insnkey <= a[41:0];
 			default:	;
 			endcase
 		`OMG:	mutex_gate[a[5:0]] <= 1'b1;
@@ -2517,17 +2948,43 @@ if (advanceX) begin
 			adr_o <= xData;
 			dat_o <= {8{b[7:0]}};
 			end
-	`LB,`LBU,`LC,`LCU,`LH,`LHU,`LW,`LWR,`LF,`LFD,`LM,
-	`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SM:
+	`LEA:	m1Data <= xData;
+	`LB,`LBU,`LC,`LCU,`LH,`LHU,`LW,`LWR,`LF,`LFD,`LM,`LSH,`LSW,`LP,`LFP,`LFDP,
+	`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SM,`SSH,`SSW,`SP,`SFP,`SFDP:
 			begin
 			m1Data <= b;
 			ea <= xData;
 			end
+	`SSH:	begin
+			case(xRt)
+			`SR:	m1Data <= {2{sr}};
+			default:	m1Data <= 64'd0;
+			endcase
+			ea <= xData;
+			end
+	`CACHE:
+			begin
+			m1Data <= b;
+			ea <= xData;
+			case(xIR[29:25])
+			`INVIALL:	tvalid <= 128'd0;
+			default:	;
+			endcase
+			end
 	`MEMNDX:
 			begin
-			m1Opcode <= xFunc;
-			m1Data <= c;
-			ea <= xData;
+			m1Opcode <= 7'd32+xFunc6;
+			case(xFunc6)
+			`LEAX:
+				begin
+				m1Data <= xData;
+				end
+			default:
+				begin
+				m1Data <= c;
+				ea <= xData;
+				end
+			endcase
 			end
 	`DIVSI,`DIVUI:
 		if (b==64'd0) begin
@@ -2535,6 +2992,49 @@ if (advanceX) begin
 		end
 	default:	;
 	endcase
+`ifdef FLOATING_POINT
+	if (xOpcode==`FP) begin
+		case (xFunc6)
+		`FDADD,`FDSUB:	
+				begin
+				fp_uf <= fpaddsub_uf;
+				fp_ovr <= fpaddsub_ovr;
+				fp_iop <= fpaddsub_iop;
+				FPC_SL <= xData[63] && xData[62:0]!=63'd0;
+				FPC_SG <= !xData[63] && xData[62:0]!=63'd0;
+				FPC_SE <= xData[62:0]==63'd0;
+				end
+		`FPMUL:
+				begin
+				fp_uf <= fpmul_uf;
+				fp_ovr <= fpmul_ovr;
+				fp_iop <= fpmul_iop;
+				FPC_SL <= xData[63] && xData[62:0]!=63'd0;
+				FPC_SG <= !xData[63] && xData[62:0]!=63'd0;
+				FPC_SE <= xData[62:0]==63'd0;
+				end
+		`FPDIV:
+				begin
+				fp_uf <= fpdiv_uf;
+				fp_ovr <= fpdiv_ovr;
+				fp_iop <= fpdiv_iop;
+				FPC_SL <= xData[63] && xData[62:0]!=63'd0;
+				FPC_SG <= !xData[63] && xData[62:0]!=63'd0;
+				FPC_SE <= xData[62:0]==63'd0;
+				end
+		`FDF2I:
+				begin
+				fp_ovr <= f2i_ovr;
+				fp_iop <= f2i_iop;
+				end
+		`FDCLT,`FDCLE,`FDCEQ,`FDCNE,`FDCGT,`FDCGE,`FDCUN:
+				begin
+				fp_iop <= fpcmp_iop;
+				end
+		default:	;
+		endcase
+	end
+`endif
 `ifndef BRANCH_PREDICTION_SIMPLE
 	// Update the branch history
 	if (isxBranch) begin
@@ -2562,35 +3062,29 @@ if (advanceR) begin
 	xbranch_taken <= dbranch_taken;
 	dbranch_taken <= 1'b0;
 	dextype <= `EX_NON;
-	if (dOpcode[6:4]!=`IMM && dOpcode!=`LM && dOpcode!=`SM)	// IMM is "sticky"
+	if (dOpcode[6:4]!=`IMM && dOpcode!=`LM && dOpcode!=`SM && dOpcode!=`SP && dOpcode!=`LP &&
+	dOpcode!=`SFP && dOpcode!=`LFP && dOpcode!=`SFDP && dOpcode!=`LFDP)	// IMM is "sticky"
 		dIR <= `NOP_INSN;
 	dRa <= 9'd0;
 	dRb <= 9'd0;
 
-	// Result forward muxes
-	casex(dRa)
-	9'bxxxx00000:	a <= 64'd0;
-	xRt:	a <= xData;
-	m1Rt:	a <= m1Data;
-	m2Rt:	a <= m2Data;
-	wRt:	a <= wData;
-	tRt:	a <= tData;
-	default:	a <= rfoa;
-	endcase
-	casex(dRb)
-	9'bxxxx00000:	b <= 64'd0;
-	xRt:	b <= disRightShift ? -xData[5:0] : xData;
-	m1Rt:	b <= disRightShift ? -m1Data[5:0] : m1Data;
-	m2Rt:	b <= disRightShift ? -m2Data[5:0] : m2Data;
-	wRt:	b <= disRightShift ? -wData[5:0] : wData;
-	tRt:	b <= disRightShift ? -tData[5:0] : tData;
-	default:	b <= disRightShift ? -rfob[5:0] : rfob;
-	endcase
+	a <= nxt_a;
+//	casex(dRb)
+//	9'bxxxx00000:	b <= 64'd0;
+//	xRt:	b <= disRightShift ? -xData[5:0] : xData;
+//	m1Rt:	b <= disRightShift ? -m1Data[5:0] : m1Data;
+//	m2Rt:	b <= disRightShift ? -m2Data[5:0] : m2Data;
+//	wRt:	b <= disRightShift ? -wData[5:0] : wData;
+//	tRt:	b <= disRightShift ? -tData[5:0] : tData;
+//	default:	b <= disRightShift ? -rfob[5:0] : rfob;
+//	endcase
+	b <= nxt_b;
 	if (dOpcode==`SHFTI)
-		case(dFunc)
-		`RORI:		b <= {58'd0,~dIR[24:19]+6'd1};
-		default:	b <= {58'd0,dIR[24:19]};
-		endcase
+		b <= {58'd0,dIR[24:19]};
+//		case(dFunc)
+//		`RORI:		b <= {58'd0,~dIR[24:19]+6'd1};
+//		default:	b <= {58'd0,dIR[24:19]};
+//		endcase
 	c <= nxt_c;
 
 	// Set the target register
@@ -2602,7 +3096,7 @@ if (advanceR) begin
 		endcase
 	`SETLO:		xRt <= {dAXC,dIR[36:32]};
 	`SETHI:		xRt <= {dAXC,dIR[36:32]};
-	`RR:		xRt <= {dAXC,dIR[24:20]};
+	`RR,`FP:	xRt <= {dAXC,dIR[24:20]};
 	`BTRI:		xRt <= 9'd0;
 	`BTRR:
 		case(dIR[4:0])
@@ -2613,15 +3107,16 @@ if (advanceR) begin
 	`TRAPcci:	xRt <= 9'd0;
 	`JMP:		xRt <= 9'd00;
 	`CALL:		xRt <= {dAXC,5'd31};
-	`RET:		xRt <= {dAXC,dIR[24:20]};
+	`RET:		xRt <= {dAXC,5'd30};
 	`MEMNDX:
-		case(dFunc)
-		`SW,`SH,`SC,`SB,`SF,`SFD,
-		`OUTW,`OUTH,`OUTC,`OUTB:
+		case(dFunc[5:0])
+		`SWX,`SHX,`SCX,`SBX,`SFX,`SFDX,`SPX,`SFPX,`SFDPX,`SSHX,`SSWX,
+		`OUTWX,`OUTHX,`OUTCX,`OUTBX:
 				xRt <= 9'd0;
 		default:	xRt <= {dAXC,dIR[24:20]};
 		endcase
-	`SW,`SH,`SC,`SB,`SF,`SFD,	// but not SWC!
+	`LSH,`LSW,
+	`SW,`SH,`SC,`SB,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP,	// but not SWC!
 	`OUTW,`OUTH,`OUTC,`OUTB:
 				xRt <= 9'd0;
 	`NOPI:		xRt <= 9'd0;
@@ -2678,23 +3173,15 @@ if (advanceR) begin
 		`BTRI:	imm <= {{44{dIR[19]}},dIR[19:0]};
 		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 			imm <= {{46{dIR[17]}},dIR[17:0]};
-		`ANDI:	imm <= {39'h7FFFFFFFFF,dIR[24:0]};
 		`ORI:	imm <= {39'h0000000000,dIR[24:0]};
 		`XORI:	imm <= {39'h0000000000,dIR[24:0]};
-		`RET:	imm <= {41'h00000000,dIR[19:0],3'b000};
-		`MEMNDX:	imm <= {{51{dIR[19]}},dIR[19:7]};
+		`RET:	imm <= {39'h00000000,dIR[24:3],3'b000};
+		`MEMNDX:	imm <= {{50{dIR[19]}},dIR[19:6]};
 		default:	imm <= {{39{dIR[24]}},dIR[24:0]};
 		endcase
-	case(dOpcode)
 
-	`MISC:
-		case(dFunc)
-		`SEI:	im <= 1'b1;
-		`CLI:	im <= 1'b0;
-		endcase
-	endcase
-
-	if ((dOpcode==`SM || dOpcode==`LM) && dIR[31:0]!=32'd0)
+	if ((((dOpcode==`SM || dOpcode==`LM) && dIR[31:0]!=32'd0)) ||
+	((dOpcode==`SP || dOpcode==`LP || dOpcode==`SFP || dOpcode==`LFP || dOpcode==`SFDP || dOpcode==`LFDP) && !dIR[25]))
 		dIR <= ndIR;
 end
 
@@ -2719,6 +3206,7 @@ if (advanceI) begin
 		dextype <= `EX_NMI;
 	end
 	else if (irq_i & !im & !StatusHWI & !im1) begin
+		bu_im <= 1'b0;
 		im <= 1'b1;
 		StatusHWI <= 1'b1;
 		dhwxtype <= 2'b10;
@@ -2735,11 +3223,16 @@ if (advanceI) begin
 		dIR <= `NOP_INSN;
 `endif
 	else begin
-		if ((iOpcode==`SM || iOpcode==`LM) && insn[31:0]!=32'd0)
+		if (((iOpcode==`SM || iOpcode==`LM) && insn[31:0]!=32'd0) ||
+		((iOpcode==`LP || iOpcode==`SP || iOpcode==`SFP || iOpcode==`LFP || iOpcode==`SFDP || iOpcode==`LFDP) && !insn[25]))
 			im1 <= 1'b1;
 		else
 			im1 <= 1'b0;
-		if ((iOpcode==`SM || iOpcode==`LM) && insn[31:0]==32'd0) begin
+		if ((iOpcode==`SP || iOpcode==`LP || iOpcode==`SFP || iOpcode==`LFP || iOpcode==`SFDP || iOpcode==`LFDP) && insn[25]==1'b1) begin
+			dIR <= `NOP_INSN;
+			pc <= fnIncPC(pc);
+		end
+		else if ((iOpcode==`SM || iOpcode==`LM) && insn[31:0]==32'd0) begin
 			dIR <= `NOP_INSN;
 			pc <= fnIncPC(pc);
 		end
@@ -2755,6 +3248,10 @@ if (advanceI) begin
 	dRb <= {AXC,insn[29:25]};
 	dRc <= {AXC,insn[24:20]};
 	casex(iOpcode)
+	`RET:		begin
+				dRa <= {AXC,5'd30};
+				dRb <= {AXC,5'd31};
+				end
 	`SETLO:		dRa <= {AXC,insn[36:32]};
 	`SETHI:		dRa <= {AXC,insn[36:32]};
 	`SM,`LM:
@@ -2810,7 +3307,9 @@ if (advanceI) begin
 `endif
 	begin
 		dbranch_taken <= 1'b0;
-		if ((iOpcode==`LM || iOpcode==`SM) && insn[31:0]!=32'd0)
+		if ((iOpcode==`SP || iOpcode==`LP || iOpcode==`SFP || iOpcode==`LFP || iOpcode==`SFDP || iOpcode==`LFDP) && !insn[25])
+			;
+		else if ((iOpcode==`LM || iOpcode==`SM) && insn[31:0]!=32'd0)
 			;
 		else begin
 			pc <= fnIncPC(pc);
@@ -2930,7 +3429,7 @@ if (advanceX) begin
 		default:	;
 		endcase
 	`BTRR:
-		case(xIR[4:0])
+		case(xFunc5)
 	// BEQ r1,r2,label
 		`BEQ,`BNE,`BLT,`BLE,`BGT,`BGE,`BLTU,`BLEU,`BGTU,`BGEU,`BAND,`BOR,`BNR,`LOOP,`BRA,`BRN:
 			if (!takb & xbranch_taken) begin
@@ -3052,7 +3551,7 @@ if (advanceX) begin
 		end
 		else begin
 			if (xbranch_taken) begin
-//				$display("Taking mispredicted branch %h",fnIncPC(xpc));
+				$display("Taking mispredicted branch %h",fnIncPC(xpc));
 				pc <= fnIncPC(xpc);
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;

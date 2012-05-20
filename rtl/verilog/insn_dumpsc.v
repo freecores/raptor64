@@ -28,7 +28,9 @@
 		`RR:
 			case(insn[6:0])
 			`ADD:	$display("ADD r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
+			`ADDU:	$display("ADDU r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			`SUB:	$display("SUB r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
+			`SUBU:	$display("SUBU r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			`CMP:	$display("CMP r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			`AND:	$display("AND r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			`ANDC:	$display("ANDC r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
@@ -40,6 +42,15 @@
 			`XNOR:	$display("XNOR r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			`MULU:	$display("MULU r%d,r%d,r%d",insn[24:20],insn[34:30],insn[29:25]);
 			default:	;
+			endcase
+		`SHFTI:
+			case(insn[4:0])
+			`SHLI:	$display("SHLI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
+			`SHRUI:	$display("SHRUI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
+			`SHRI:	$display("SHRI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
+			`ROLI:	$display("ROLI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
+			`RORI:	$display("RORI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
+			`ROLAMI:	$display("ROLAMI r%d,r%d,#%d",insn[29:25],insn[34:30],insn[24:19]);
 			endcase
 		`BTRR:
 			case(insn[4:0])
