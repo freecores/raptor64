@@ -1,113 +1,1771 @@
-                  	           		
-FFFFFFFFFFFFF000.0	           		 	org 0xFFFF_FFFF_FFFF_F000
-FFFFFFFFFFFFF000.0	           		 start:
-FFFFFFFFFFFFF000.0	048020013FD		 	ori		r1,r0,#5117		; test data
-FFFFFFFFFFFFF000.1	00848000018		 	sqrt	r4,r1
-FFFFFFFFFFFFF000.2	00848000018		 	sqrt	r4,r1
-FFFFFFFFFFFFF010.0	0480400042B		 	ori		r2,r0,#1067
-FFFFFFFFFFFFF010.1	01044500018		 	mulu	r5,r1,r2
-FFFFFFFFFFFFF010.2	04803D00000		 	ori		r1,r0,#0xFFFF_FFFF_FFD0_0000
-FFFFFFFFFFFFF020.0	04804000032		 	ori 	r2,r0,#0x32
-FFFFFFFFFFFFF020.1	0480600064C		 	ori 	r3,r0,#1612
-FFFFFFFFFFFFF020.2	           		 j1:
-FFFFFFFFFFFFF020.2	18844000000		 	sc		r2,[r1]
-FFFFFFFFFFFFF030.0	02042000002		 	addi	r1,r1,#2
-FFFFFFFFFFFFF030.1	028C6000001		 	subi	r3,r3,#1
-FFFFFFFFFFFFF030.2	288C1FFFFFE		 	bne		r3,r0,j1
-FFFFFFFFFFFFF040.0	0C7FFFFFC16		 	call	Getkey
-FFFFFFFFFFFFF040.1	37800000000		 	nop
-FFFFFFFFFFFFF040.2	37800000000		 	nop
-FFFFFFFFFFFFF050.0	37800000000		 	nop
-FFFFFFFFFFFFF050.1	37800000000		 	nop
+                  	           		; ============================================================================
+                  	           		 ; (C) 2012 Robert Finch
+                  	           		 ; All Rights Reserved.
+                  	           		 ; robfinch<remove>@opencores.org
+                  	           		 ;
+                  	           		 ; This source file is free software: you can redistribute it and/or modify 
+                  	           		 ; it under the terms of the GNU Lesser General Public License as published 
+                  	           		 ; by the Free Software Foundation, either version 3 of the License, or     
+                  	           		 ; (at your option) any later version.                                      
+                  	           		 ;                                                                          
+                  	           		 ; This source file is distributed in the hope that it will be useful,      
+                  	           		 ; but WITHOUT ANY WARRANTY; without even the implied warranty of           
+                  	           		 ; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+                  	           		 ; GNU General Public License for more details.                             
+                  	           		 ;                                                                          
+                  	           		 ; You should have received a copy of the GNU General Public License        
+                  	           		 ; along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+                  	           		 ;                                                                          
+                  	           		 ; ============================================================================
+                  	           		 ;
+                  	           		 CR	EQU	0x0D		;ASCII equates
+                  	           		 LF	EQU	0x0A
+                  	           		 TAB	EQU	0x09
+                  	           		 CTRLC	EQU	0x03
+                  	           		 CTRLH	EQU	0x08
+                  	           		 CTRLS	EQU	0x13
+                  	           		 CTRLX	EQU	0x18
+                  	           		 
+                  	           		 STACKTOP	EQU		0xFFFF_FFFF_FFFE_FFF8
+                  	           		 Milliseconds	EQU		0x400
+                  	           		 Lastloc			EQU		0x408
+                  	           		 ScreenColor	EQU		0x414
+                  	           		 CursorRow	EQU		0x416
+                  	           		 CursorCol	EQU		0x418
+                  	           		 KeybdEcho	EQU		0x41A
+                  	           		 KeybdBuffer	EQU		0x440
+                  	           		 KeybdHead	EQU		0x450
+                  	           		 KeybdTail	EQU		0x451
+                  	           		 TEXTSCR		EQU		0xFFFF_FFFF_FFD0_0000
+                  	           		 COLORSCR	EQU		0xFFFF_FFFF_FFD1_0000
+                  	           		 TEXTREG		EQU		0xFFFFFFFF_FFDA0000
+                  	           		 TEXT_COLS	EQU		0x0
+                  	           		 TEXT_ROWS	EQU		0x2
+                  	           		 TEXT_CURPOS	EQU		0x16
+                  	           		 KEYBD		EQU		0xFFFF_FFFF_FFDC_0000
+                  	           		 KEYBDCLR	EQU		0xFFFF_FFFF_FFDC_0002
+                  	           		 UART	EQU		0xFFFF_FFFF_FFDC_0A00
+                  	           		 UART_LS		EQU	0xFFFF_FFFF_FFDC_0A01
+                  	           		 PIC		EQU		0xFFFF_FFFF_FFDC_0FF0
+                  	           		 PSG			EQU		0xFFFF_FFFF_FFD5_0000
+                  	           		 AC97		EQU		0xFFFF_FFFF_FFDC_1000
+                  	           		 BOOT_STACK	EQU		0xFFFF_FFFF_FFFE_FFF8
+                  	           		 BITMAPSCR	EQU		0x00000001_00200000
+                  	           		 
+                  	           		 txempty	EQU		0x40
+                  	           		 rxfull	EQU		0x01
+                  	           		 
+                  	           		 ;	org 0x070
+                  	           		 ;	iret
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;	nop
+                  	           		 ;
+0000000000000000.0	           		 	code
+FFFFFFFFFFFFE800.0	           		 	org 0xFFFF_FFFF_FFFF_E800
+                  	           		 
+                  	           		 ; jump table
+                  	           		 ;
+FFFFFFFFFFFFE800.0	0CFFFFFFA54		 	jmp		SerialGetChar
+FFFFFFFFFFFFE800.1	0CFFFFFFA60		 	jmp		SerialPutChar
+FFFFFFFFFFFFE800.2	0CFFFFFFA90		 	jmp		SetKeyboardEcho
+FFFFFFFFFFFFE810.0	0CFFFFFFAA6		 	jmp		KeybdCheckForKey
+FFFFFFFFFFFFE810.1	0CFFFFFFA92		 	jmp		KeybdGetChar
+FFFFFFFFFFFFE810.2	0CFFFFFFB65		 	jmp		DisplayChar
+FFFFFFFFFFFFE820.0	0CFFFFFFBF5		 	jmp		DisplayString
+                  	           		 
+FFFFFFFFFFFFE820.1	           		 start:
+                  	           		 ;	lea		MSGRAM,a1
+                  	           		 ;	jsr		DisplayString
+                  	           		 
+FFFFFFFFFFFFE820.1	           		 ColdStart:
+FFFFFFFFFFFFE820.1	0000000000A		 	icache_on				; turn on the ICache
+FFFFFFFFFFFFE820.2	0000000000C		 	dcache_on				; turn on the DCache
+FFFFFFFFFFFFE830.0	0BEFFFEFFF8		 	setlo	sp,#STACKTOP	; top of stack
+FFFFFFFFFFFFE830.1	0C7FFFFFA6E		 	call	KeybdInit
+FFFFFFFFFFFFE830.2	0C7FFFFFA50		 	call	PICInit
+FFFFFFFFFFFFE840.0	00000000040		 	cli						; enable interrupts
+FFFFFFFFFFFFE840.1	0A3000000CE		 	setlo	r3,#0xCE		; blue on blue
+FFFFFFFFFFFFE840.2	18806000414		 	sc		r3,ScreenColor
+FFFFFFFFFFFFE850.0	10806000414		 	lc		r3,0x414
+FFFFFFFFFFFFE850.1	0A300000020		 	setlo	r3,#32
+FFFFFFFFFFFFE850.2	18806000416		 	sc		r3,0x416		; we do a store, then a load through the dcache
+FFFFFFFFFFFFE860.0	10804000416		 	lc		r2,0x416		;
+FFFFFFFFFFFFE860.1	10804000416		 	lc		r2,0x416		;
+FFFFFFFFFFFFE860.2	2F8860000A8		 	beq		r2,r3,dcokay
+FFFFFFFFFFFFE870.0	0000000000D		 	dcache_off				; data cache failed
+FFFFFFFFFFFFE870.1	           		 dcokay:
+FFFFFFFFFFFFE870.1	10806000414		 	lc		r3,ScreenColor
+FFFFFFFFFFFFE870.2	0C7FFFFFB06		 	call	ClearScreen
+FFFFFFFFFFFFE880.0	0C7FFFFFAF4		 	call	ClearBmpScreen
+FFFFFFFFFFFFE880.1	18800000416		 	sc		r0,CursorRow
+FFFFFFFFFFFFE880.2	18800000418		 	sc		r0,CursorCol
+FFFFFFFFFFFFE890.0	0A1FFFFE920		 	setlo	r1,#<MSGSTART
+FFFFFFFFFFFFE890.1	0E1FFFFFFFF		 	sethi	r1,#>MSGSTART
+FFFFFFFFFFFFE890.2	0C7FFFFFBF5		 	call	DisplayString
+                  	           		 ;	call	SetupAC97		; and Beep
+                  	           		 
+                  	           		 ; Allow some other contexts to start up
+                  	           		 ; equal processing time for sixteen contexts
+                  	           		 ;
+FFFFFFFFFFFFE8A0.0	00802000AA8		 	mfspr	r1,AXC			; which context am I
+FFFFFFFFFFFFE8A0.1	2F840000149		 	bne		r1,r0,j4
+FFFFFFFFFFFFE8A0.2	0A176543210		 	setlo	r1,#0x76543210		
+FFFFFFFFFFFFE8B0.0	008400008A9		 	mtspr	EP0,r1
+FFFFFFFFFFFFE8B0.1	008400009A9		 	mtspr	EP2,r1
+FFFFFFFFFFFFE8B0.2	0A1FEDCBA98		 	setlo	r1,#0xFEDCBA98
+FFFFFFFFFFFFE8C0.0	00840000929		 	mtspr	EP1,r1
+FFFFFFFFFFFFE8C0.1	00840000A29		 	mtspr	EP3,r1
+FFFFFFFFFFFFE8C0.2	           		 j4:
+FFFFFFFFFFFFE8C0.2	0CFFFFFFCA6		 	jmp		Monitor
+FFFFFFFFFFFFE8D0.0	2F801FFFFCA		 	bra		j4
+                  	           		 
+                  	           		 ;	call	ramtest
+                  	           		 
+                  	           		 ;-----------------------------------------
+                  	           		 ; Hello World!
+                  	           		 ;-----------------------------------------
+FFFFFFFFFFFFE8D0.1	           		 HelloWorld:
+FFFFFFFFFFFFE8D0.1	03FBC000018		 	subui	r30,r30,#24
+FFFFFFFFFFFFE8D0.2	27F40000003		 	sm		[r30],r1/r2/r31
+FFFFFFFFFFFFE8E0.0	0A2FFFFE910		 	setlo	r2,#MSG
+FFFFFFFFFFFFE8E0.1	           		 j3:
+FFFFFFFFFFFFE8E0.1	10082000000		 	lb		r1,[r2]
+FFFFFFFFFFFFE8E0.2	2F840000108		 	beq		r1,r0,j2
+FFFFFFFFFFFFE8F0.0	0C7FFFFFA60		 	call	SerialPutChar
+FFFFFFFFFFFFE8F0.1	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFE8F0.2	2F801FFFFAA		 	bra		j3
+FFFFFFFFFFFFE900.0	           		 j2:
+FFFFFFFFFFFFE900.0	27740000003		 	lm		[r30],r1/r2/r31
+FFFFFFFFFFFFE900.1	0DFBE000018		 	ret		#24
+                  	           		 
+                  	           		 
+FFFFFFFFFFFFE900.2	37800000000		 	align	16
+FFFFFFFFFFFFE910.0	           		 	align	16
+FFFFFFFFFFFFE910.0	           		 MSG:	
+FFFFFFFFFFFFE910 6F57206F6C6C6548	 	DB	"Hello World!",0,0,0,0
+FFFFFFFFFFFFE918 0000000021646C72
+FFFFFFFFFFFFE920.0	           		 	align	16
+FFFFFFFFFFFFE920.0	           		 MSGSTART:
+FFFFFFFFFFFFE920 3436726F74706152	 	db	"Raptor64 system starting....",CR,LF,0,0
+FFFFFFFFFFFFE928 206D657473797320
+FFFFFFFFFFFFE930 676E697472617473
+FFFFFFFFFFFFE938 00000A0D2E2E2E2E
+                  	           		 
+FFFFFFFFFFFFE940.0	           		 	align 16
+                  	           		 
+                  	           		 ;----------------------------------------------------------
+                  	           		 ; Initialize programmable interrupt controller (PIC)
+                  	           		 ;  0 = nmi
+                  	           		 ;  1 = keyboard reset
+                  	           		 ;  2 = 1000Hz pulse (cursor flash)
+                  	           		 ; 15 = keyboard char
+                  	           		 ;----------------------------------------------------------
+FFFFFFFFFFFFE940.0	           		 PICInit:
+FFFFFFFFFFFFE940.0	0A1FFFF8007		 	setlo	r1,#0x8007	; enable nmi,kbd_rst,and kbd_irq
+FFFFFFFFFFFFE940.1	24803DC0FF2		 	outc	r1,PIC+2
+FFFFFFFFFFFFE940.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;-----------------------------------------
+                  	           		 ; Get character from serial port
+                  	           		 ;-----------------------------------------
+FFFFFFFFFFFFE950.0	           		 SerialGetChar:
+FFFFFFFFFFFFE950.0	03FBC000008		 	subui	r30,r30,#8
+FFFFFFFFFFFFE950.1	19F86000000		 	sw		r3,[r30]
+FFFFFFFFFFFFE950.2	0A1FFDC0A00		 	setlo	r1,#UART
+FFFFFFFFFFFFE960.0	           		 sgc1:
+FFFFFFFFFFFFE960.0	20046000001		 	inb		r3,1[r1]		; uart status
+FFFFFFFFFFFFE960.1	050C6000001		 	andi	r3,r3,#rxfull	; is there a char available ?
+FFFFFFFFFFFFE960.2	2F8C0000008		 	beq		r3,r0,sgc1
+FFFFFFFFFFFFE970.0	11F86000000		 	lw		r3,[r30]
+FFFFFFFFFFFFE970.1	20042000000		 	inb		r1,[r1]
+FFFFFFFFFFFFE970.2	0DFBE000008		 	ret		#8
+                  	           		 
+                  	           		 ;-----------------------------------------
+                  	           		 ; Put character to serial port
+                  	           		 ;-----------------------------------------
+FFFFFFFFFFFFE980.0	           		 SerialPutChar:
+FFFFFFFFFFFFE980.0	03FBC000010		 	subui	r30,r30,#16
+FFFFFFFFFFFFE980.1	19F84000008		 	sw		r2,8[r30]
+FFFFFFFFFFFFE980.2	19F86000000		 	sw		r3,[r30]
+FFFFFFFFFFFFE990.0	0A3FFDC0A00		 	setlo	r3,#UART
+FFFFFFFFFFFFE990.1	           		 spc1:
+FFFFFFFFFFFFE990.1	200C4000001		 	inb		r2,1[r3]		; uart status
+FFFFFFFFFFFFE990.2	05084000040		 	andi	r2,r2,#txempty	; is there a char available ?
+FFFFFFFFFFFFE9A0.0	2F881FFFFA8		 	beq		r2,r0,spc1
+FFFFFFFFFFFFE9A0.1	240C2000000		 	outb	r1,[r3]
+FFFFFFFFFFFFE9A0.2	11F86000000		 	lw		r3,[r30]
+FFFFFFFFFFFFE9B0.0	11F84000008		 	lw		r2,8[r30]
+FFFFFFFFFFFFE9B0.1	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;==============================================================================
+                  	           		 ; Keyboard
+                  	           		 ;==============================================================================
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Initialize keyboard
+                  	           		 ;------------------------------------------------------------------------------
+FFFFFFFFFFFFE9B0.2	           		 KeybdInit:
+FFFFFFFFFFFFE9B0.2	18000000450		 	sb		r0,KeybdHead
+FFFFFFFFFFFFE9C0.0	18000000451		 	sb		r0,KeybdTail
+FFFFFFFFFFFFE9C0.1	0A100000001		 	setlo	r1,#1			; turn on keyboard echo
+FFFFFFFFFFFFE9C0.2	1800200041A		 	sb		r1,KeybdEcho
+FFFFFFFFFFFFE9D0.0	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Normal keyboard interrupt, the lowest priority interrupt in the system.
+                  	           		 ; Grab the character from the keyboard device and store it in a buffer.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFE9D0.1	           		 KeybdIRQ:
+FFFFFFFFFFFFE9D0.1	03FBC000018		 	subui	sp,sp,#24
+FFFFFFFFFFFFE9D0.2	27F00000007		 	sm		[sp],r1/r2/r3
+FFFFFFFFFFFFE9E0.0	12802000450		 	lbu		r1,KeybdHead
+FFFFFFFFFFFFE9E0.1	0504200000F		 	andi	r1,r1,#0x0f				; r1 = index into buffer
+FFFFFFFFFFFFE9E0.2	0A300000440		 	setlo	r3,#<KeybdBuffer
+FFFFFFFFFFFFE9F0.0	0E300000000		 	sethi	r3,#>KeybdBuffer
+FFFFFFFFFFFFE9F0.1	           		 KeybdIRQa:
+FFFFFFFFFFFFE9F0.1	20805DC0000		 	inch	r2,KEYBD				; get keyboard character
+FFFFFFFFFFFFE9F0.2	24801DC0002		 	outc	r0,KEYBD+2				; clear keyboard strobe (turns off the IRQ)
+FFFFFFFFFFFFEA00.0	1A8C2200010		 	sb		r2,[r3+r1]				; store character in buffer
+FFFFFFFFFFFFEA00.1	02842000001		 	addui	r1,r1,#1				; increment head index
+FFFFFFFFFFFFEA00.2	0504200000F		 	andi	r1,r1,#0x0f
+FFFFFFFFFFFFEA10.0	18002000450		 	sb		r1,KeybdHead
+FFFFFFFFFFFFEA10.1	           		 KeybdIRQb:
+FFFFFFFFFFFFEA10.1	12804000451		 	lbu		r2,KeybdTail			; check to see if we've collided
+FFFFFFFFFFFFEA10.2	2F844000109		 	bne		r1,r2,KeybdIRQc			; with the tail
+FFFFFFFFFFFFEA20.0	02884000001		 	addui	r2,r2,#1				; if so, increment the tail index
+FFFFFFFFFFFFEA20.1	0508400000F		 	andi	r2,r2,#0x0f				; the oldest character will be lost
+FFFFFFFFFFFFEA20.2	18004000451		 	sb		r2,KeybdTail
+FFFFFFFFFFFFEA30.0	           		 KeybdIRQc:
+FFFFFFFFFFFFEA30.0	27700000007		 	lm		[sp],r1/r2/r3
+FFFFFFFFFFFFEA30.1	02FBC000018		 	addui	sp,sp,#24
+FFFFFFFFFFFFEA30.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; r1 0=echo off, non-zero = echo on
+                  	           		 ;------------------------------------------------------------------------------
+FFFFFFFFFFFFEA40.0	           		 SetKeyboardEcho:
+FFFFFFFFFFFFEA40.0	1800200041A		 	sb		r1,KeybdEcho
+FFFFFFFFFFFFEA40.1	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;-----------------------------------------
+                  	           		 ; Get character from keyboard buffer
+                  	           		 ;-----------------------------------------
+FFFFFFFFFFFFEA40.2	           		 KeybdGetChar:
+FFFFFFFFFFFFEA40.2	03FBC000010		 	subui	sp,sp,#16
+FFFFFFFFFFFFEA50.0	27F00000006		 	sm		[sp],r2/r3
+FFFFFFFFFFFFEA50.1	12804000451		 	lbu		r2,KeybdTail
+FFFFFFFFFFFFEA50.2	12802000450		 	lbu		r1,KeybdHead
+FFFFFFFFFFFFEA60.0	2F844000148		 	beq		r1,r2,nochar
+FFFFFFFFFFFFEA60.1	0A300000440		 	setlo	r3,#KeybdBuffer
+FFFFFFFFFFFFEA60.2	1A8C4100005		 	lbu		r1,[r3+r2]
+FFFFFFFFFFFFEA70.0	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFEA70.1	0508400000F		 	andi	r2,r2,#0x0f
+FFFFFFFFFFFFEA70.2	18004000451		 	sb		r2,KeybdTail
+FFFFFFFFFFFFEA80.0	27700000006		 	lm		[sp],r2/r3
+FFFFFFFFFFFFEA80.1	0DFBE000010		 	ret		#16
+FFFFFFFFFFFFEA80.2	           		 nochar:
+FFFFFFFFFFFFEA80.2	0A1FFFFFFFF		 	setlo	r1,#-1
+FFFFFFFFFFFFEA90.0	27700000006		 	lm		[sp],r2/r3
+FFFFFFFFFFFFEA90.1	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Check if there is a keyboard character available in the keyboard buffer.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEA90.2	           		 KeybdCheckForKey:
+FFFFFFFFFFFFEA90.2	12802000451		 	lbu		r1,KeybdTail
+FFFFFFFFFFFFEAA0.0	12804000450		 	lbu		r2,KeybdHead
+FFFFFFFFFFFFEAA0.1	2F8440000A8		 	beq		r1,r2,kck1
+FFFFFFFFFFFFEAA0.2	0A100000001		 	setlo	r1,#1
+FFFFFFFFFFFFEAB0.0	0DFBE000000		 	ret
+FFFFFFFFFFFFEAB0.1	           		 kck1:
+FFFFFFFFFFFFEAB0.1	0104210000A		 	xor		r1,r1,r1		; return zero
+FFFFFFFFFFFFEAB0.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Check if there is a keyboard character available. If so return true (1)
+                  	           		 ; otherwise return false (0) in r1.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEAC0.0	           		 KeybdCheckForKeyDirect:
+FFFFFFFFFFFFEAC0.0	20803DC0000		 	inch	r1,KEYBD
+FFFFFFFFFFFFEAC0.1	2F8400000A1		 	bge		r1,r0,cfkd1
+FFFFFFFFFFFFEAC0.2	0A100000001		 	setlo	r1,#1
+FFFFFFFFFFFFEAD0.0	0DFBE000000		 	ret
+FFFFFFFFFFFFEAD0.1	           		 cfkd1:
+FFFFFFFFFFFFEAD0.1	0104210000A		 	xor		r1,r1,r1	; return 0 in r1
+FFFFFFFFFFFFEAD0.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Get character directly from keyboard. This routine blocks until a key is
+                  	           		 ; available.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEAE0.0	           		 KeybdGetCharDirect:
+FFFFFFFFFFFFEAE0.0	03FBC000010		 	subui	sp,sp,#16
+FFFFFFFFFFFFEAE0.1	27F40000002		 	sm		[sp],r2/r31
+FFFFFFFFFFFFEAE0.2	0A2FFDC0000		 	setlo	r2,KEYBD
+FFFFFFFFFFFFEAF0.0	           		 kgc1:
+FFFFFFFFFFFFEAF0.0	20803DC0000		 	inch	r1,KEYBD
+FFFFFFFFFFFFEAF0.1	2F840000001		 	bge		r1,r0,kgc1
+FFFFFFFFFFFFEAF0.2	24801DC0002		 	outc	r0,KEYBD+2		; clear keyboard strobe
+FFFFFFFFFFFFEB00.0	050420000FF		 	andi	r1,r1,#0xff		; remove strobe bit
+FFFFFFFFFFFFEB00.1	1000400041A		 	lb		r2,KeybdEcho	; is keyboard echo on ?
+FFFFFFFFFFFFEB00.2	2F880000128		 	beq		r2,r0,gk1
+FFFFFFFFFFFFEB10.0	2C84010000D		 	bnei	r1,#'\r',gk2	; convert CR keystroke into CRLF
+FFFFFFFFFFFFEB10.1	0C7FFFFFC09		 	call	CRLF
+FFFFFFFFFFFFEB10.2	2F8000000AA		 	bra		gk1
+FFFFFFFFFFFFEB20.0	           		 gk2:
+FFFFFFFFFFFFEB20.0	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFEB20.1	           		 gk1:
+FFFFFFFFFFFFEB20.1	27740000002		 	lm		[sp],r2/r31
+FFFFFFFFFFFFEB20.2	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;==============================================================================
+                  	           		 ;==============================================================================
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; 1000 Hz interrupt
+                  	           		 ; - takes care of "flashing" the cursor
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEB30.0	           		 Pulse1000:
+FFFFFFFFFFFFEB30.0	03FBC000018		 	subui	sp,sp,#24
+FFFFFFFFFFFFEB30.1	27F40000003		 	sm		[sp],r1/r2/lr
+FFFFFFFFFFFFEB30.2	11802000400		 	lw		r1,Milliseconds
+FFFFFFFFFFFFEB40.0	02842000001		 	addui	r1,r1,#1
+FFFFFFFFFFFFEB40.1	19802000400		 	sw		r1,Milliseconds
+FFFFFFFFFFFFEB40.2	0A2FFD00000		 	setlo	r2,TEXTSCR
+FFFFFFFFFFFFEB50.0	108820000DE		 	lc		r1,222[r2]
+FFFFFFFFFFFFEB50.1	02842000001		 	addui	r1,r1,#1
+FFFFFFFFFFFFEB50.2	188820000DE		 	sc		r1,222[r2]
+FFFFFFFFFFFFEB60.0	10801FF0000		 	lc		r0,0xFFFF_FFFF_FFFF_0000	; clear interrupt
+FFFFFFFFFFFFEB60.1	11802000400		 	lw		r1,Milliseconds
+FFFFFFFFFFFFEB60.2	0504200007F		 	andi	r1,r1,#0x7f
+FFFFFFFFFFFFEB70.0	2C840080040		 	bnei	r1,#64,p10001
+FFFFFFFFFFFFEB70.1	0C7FFFFFAE1		 	call	FlashCursor
+FFFFFFFFFFFFEB70.2	           		 p10001:
+FFFFFFFFFFFFEB70.2	27740000003		 	lm		[sp],r1/r2/lr
+FFFFFFFFFFFFEB80.0	0DFBE000018		 	ret		#24
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Flash Cursor
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEB80.1	           		 FlashCursor:
+FFFFFFFFFFFFEB80.1	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEB80.2	27F40000007		 	sm		[sp],r1/r2/r3/r31
+FFFFFFFFFFFFEB90.0	0C7FFFFFB55		 	call	CalcScreenLoc
+FFFFFFFFFFFFEB90.1	02842010000		 	addui	r1,r1,#0x10000
+                  	           		 	; causes screen colors to flip around
+FFFFFFFFFFFFEB90.2	10844000000		 	lc		r2,[r1]
+FFFFFFFFFFFFEBA0.0	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFEBA0.1	18844000000		 	sc		r2,[r1]
+FFFFFFFFFFFFEBA0.2	11804000408		 	lw		r2,Lastloc
+FFFFFFFFFFFFEBB0.0	2F8440000A8		 	beq		r1,r2,flshcrsr1
+                  	           		 	; restore the screen colors of the previous cursor location
+FFFFFFFFFFFFEBB0.1	10806000414		 	lc		r3,ScreenColor
+FFFFFFFFFFFFEBB0.2	18886000000		 	sc		r3,[r2]
+FFFFFFFFFFFFEBC0.0	19802000408		 	sw		r1,Lastloc
+FFFFFFFFFFFFEBC0.1	           		 flshcrsr1:
+FFFFFFFFFFFFEBC0.1	27740000007		 	lm		[sp],r1/r2/r3/r31
+FFFFFFFFFFFFEBC0.2	0DFBE000020		 	ret		#32
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;------------------------------------------------------------------------------
+FFFFFFFFFFFFEBD0.0	           		 ClearBmpScreen:
+FFFFFFFFFFFFEBD0.0	03FBC000028		 	subui	sp,sp,#40
+FFFFFFFFFFFFEBD0.1	27F4000000F		 	sm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFEBD0.2	0A100000554		 	setlo	r1,#1364			; calc number to clear
+FFFFFFFFFFFFEBE0.0	0A200000300		 	setlo	r2,#768
+FFFFFFFFFFFFEBE0.1	01044200018		 	mulu	r2,r1,r2			; r2 = # pixels to clear
+FFFFFFFFFFFFEBE0.2	01004400009		 	or		r4,r0,r2			; r4 = # pixels to clear
+FFFFFFFFFFFFEBF0.0	0A129292929		 	setlo	r1,#0x29292929		;
+FFFFFFFFFFFFEBF0.1	0A300200000		 	setlo	r3,#<BITMAPSCR		; screen address
+FFFFFFFFFFFFEBF0.2	0E300000001		 	sethi	r3,#>BITMAPSCR
+FFFFFFFFFFFFEC00.0	           		 csj4:
+FFFFFFFFFFFFEC00.0	190C2000000		 	sh		r1,[r3]
+FFFFFFFFFFFFEC00.1	028C6000004		 	addui	r3,r3,#4
+FFFFFFFFFFFFEC00.2	2F80400000F		 	loop	r2,csj4
+FFFFFFFFFFFFEC10.0	2774000000F		 	lm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFEC10.1	0DFBE000028		 	ret		#40
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Clear the screen and the screen color memory
+                  	           		 ; We clear the screen to give a visual indication that the system
+                  	           		 ; is working at all.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEC10.2	           		 ClearScreen:
+FFFFFFFFFFFFEC10.2	03FBC000028		 	subui	sp,sp,#40
+FFFFFFFFFFFFEC20.0	27F4000000F		 	sm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFEC20.1	0A3FFDA0000		 	setlo	r3,#TEXTREG
+FFFFFFFFFFFFEC20.2	108C2000000		 	lc		r1,TEXT_COLS[r3]	; calc number to clear
+FFFFFFFFFFFFEC30.0	108C4000002		 	lc		r2,TEXT_ROWS[r3]
+FFFFFFFFFFFFEC30.1	01044200018		 	mulu	r2,r1,r2			; r2 = # chars to clear
+FFFFFFFFFFFFEC30.2	0A100000020		 	setlo	r1,#32			; space char
+FFFFFFFFFFFFEC40.0	10808000414		 	lc		r4,ScreenColor
+FFFFFFFFFFFFEC40.1	0C7FFFFFB45		 	call	AsciiToScreen
+FFFFFFFFFFFFEC40.2	0A3FFD00000		 	setlo	r3,#TEXTSCR		; text screen address
+FFFFFFFFFFFFEC50.0	           		 csj4:
+FFFFFFFFFFFFEC50.0	188C2000000		 	sc		r1,[r3]
+FFFFFFFFFFFFEC50.1	188C8010000		 	sc		r4,0x10000[r3]	; color screen is 0x10000 higher
+FFFFFFFFFFFFEC50.2	028C6000002		 	addu	r3,r3,#2
+FFFFFFFFFFFFEC60.0	2F805FFFF8F		 	loop	r2,csj4
+FFFFFFFFFFFFEC60.1	2774000000F		 	lm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFEC60.2	0DFBE000028		 	ret		#40
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Scroll text on the screen upwards
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEC70.0	           		 ScrollUp:
+FFFFFFFFFFFFEC70.0	03FBC000028		 	subui	sp,sp,#40
+FFFFFFFFFFFFEC70.1	27F4000000F		 	sm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFEC70.2	0A3FFDA0000		 	setlo	r3,#TEXTREG
+FFFFFFFFFFFFEC80.0	108C2000000		 	lc		r1,TEXT_COLS[r3]	; r1 = # text columns
+FFFFFFFFFFFFEC80.1	108C4000002		 	lc		r2,TEXT_ROWS[r3]
+FFFFFFFFFFFFEC80.2	01044200018		 	mulu	r2,r1,r2			; calc number of chars to scroll
+FFFFFFFFFFFFEC90.0	01082200005		 	subu	r2,r2,r1			; one less row
+FFFFFFFFFFFFEC90.1	0A3FFD00000		 	setlo	r3,#TEXTSCR
+FFFFFFFFFFFFEC90.2	           		 scrup1:
+FFFFFFFFFFFFEC90.2	1A8C2400001		 	lc		r4,[r3+r1]			; indexed addressing example
+FFFFFFFFFFFFECA0.0	188C8000000		 	sc		r4,[r3]
+FFFFFFFFFFFFECA0.1	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFECA0.2	2F805FFFFCF		 	loop	r2,scrup1
+                  	           		 
+FFFFFFFFFFFFECB0.0	0A3FFDA0000		 	setlo	r3,#TEXTREG
+FFFFFFFFFFFFECB0.1	108C2000002		 	lc		r1,TEXT_ROWS[r3]
+FFFFFFFFFFFFECB0.2	03842000001		 	subui	r1,r1,#1
+FFFFFFFFFFFFECC0.0	0C7FFFFFB34		 	call	BlankLine
+FFFFFFFFFFFFECC0.1	2774000000F		 	lm		[sp],r1/r2/r3/r4/r31
+FFFFFFFFFFFFECC0.2	0DFBE000028		 	ret		#40
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Blank out a line on the display
+                  	           		 ; line number to blank is in r1
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFECD0.0	           		 BlankLine:
+FFFFFFFFFFFFECD0.0	03FBC000018		 	subui	sp,sp,#24
+FFFFFFFFFFFFECD0.1	27F00000007		 	sm		[sp],r1/r2/r3
+FFFFFFFFFFFFECD0.2	0A3FFDA0000		 	setlo	r3,TEXTREG			; r3 = text register address
+FFFFFFFFFFFFECE0.0	108C4000000		 	lc		r2,TEXT_COLS[r3]	; r2 = # chars to blank out
+FFFFFFFFFFFFECE0.1	01082300018		 	mulu	r3,r2,r1
+FFFFFFFFFFFFECE0.2	018C6080000		 	shli	r3,r3,#1
+FFFFFFFFFFFFECF0.0	028C7D00000		 	addui	r3,r3,#TEXTSCR		; r3 = screen address
+FFFFFFFFFFFFECF0.1	0A100000020		 	setlo	r1,#' '
+FFFFFFFFFFFFECF0.2	           		 blnkln1:
+FFFFFFFFFFFFECF0.2	188C2000000		 	sc		r1,[r3]
+FFFFFFFFFFFFED00.0	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFED00.1	2F805FFFFCF		 	loop	r2,blnkln1
+FFFFFFFFFFFFED00.2	27700000007		 	lm		[sp],r1/r2/r3
+FFFFFFFFFFFFED10.0	0DFBE000018		 	ret		#24
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Convert ASCII character to screen display character.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFED10.1	           		 AsciiToScreen:
+FFFFFFFFFFFFED10.1	050420000FF		 	andi	r1,r1,#0x00ff
+FFFFFFFFFFFFED10.2	2A040240041		 	bltui	r1,#'A',atoscr1
+FFFFFFFFFFFFED20.0	2B04014005A		 	bleui	r1,#'Z',atoscr1
+FFFFFFFFFFFFED20.1	2B84014007A		 	bgtui   r1,#'z',atoscr1
+FFFFFFFFFFFFED20.2	2A040140061		 	bltui	r1,#'a',atoscr1
+FFFFFFFFFFFFED30.0	03042000060		 	subi	r1,r1,#0x60
+FFFFFFFFFFFFED30.1	           		 atoscr1:
+FFFFFFFFFFFFED30.1	05842000100		 	ori		r1,r1,#0x100
+FFFFFFFFFFFFED30.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Convert screen character to ascii character
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFED40.0	           		 ScreenToAscii:
+FFFFFFFFFFFFED40.0	050420000FF		 	andi	r1,r1,#0xff
+FFFFFFFFFFFFED40.1	2B84010001A		 	bgtui	r1,#26,stasc1
+FFFFFFFFFFFFED40.2	0284200003C		 	addui	r1,r1,#60
+FFFFFFFFFFFFED50.0	           		 stasc1:
+FFFFFFFFFFFFED50.0	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Calculate screen memory location from CursorRow,CursorCol.
+                  	           		 ; Also refreshes the cursor location.
+                  	           		 ; Destroys r1,r2,r3
+                  	           		 ; r1 = screen location
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFED50.1	           		 CalcScreenLoc:
+FFFFFFFFFFFFED50.1	10802000416		 	lc		r1,CursorRow
+FFFFFFFFFFFFED50.2	0504200007F		 	andi	r1,r1,#0x7f
+FFFFFFFFFFFFED60.0	0A3FFDA0000		 	setlo	r3,TEXTREG
+FFFFFFFFFFFFED60.1	208C4000000		 	inch	r2,TEXT_COLS[r3]
+FFFFFFFFFFFFED60.2	01082200018		 	mulu	r2,r2,r1
+FFFFFFFFFFFFED70.0	10802000418		 	lc		r1,CursorCol
+FFFFFFFFFFFFED70.1	0504200007F		 	andi	r1,r1,#0x7f
+FFFFFFFFFFFFED70.2	01082200003		 	addu	r2,r2,r1
+FFFFFFFFFFFFED80.0	248C4000016		 	outc	r2,TEXT_CURPOS[r3]
+FFFFFFFFFFFFED80.1	01884080000		 	shli	r2,r2,#1
+FFFFFFFFFFFFED80.2	02883D00000		 	addui	r1,r2,#TEXTSCR			; r1 = screen location
+FFFFFFFFFFFFED90.0	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display a character on the screen
+                  	           		 ; d1.b = char to display
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFED90.1	           		 DisplayChar:
+FFFFFFFFFFFFED90.1	2C84020000D		 	bnei	r1,#'\r',dccr		; carriage return ?
+FFFFFFFFFFFFED90.2	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEDA0.0	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEDA0.1	18800000418		 	sc		r0,CursorCol		; just set cursor column to zero on a CR
+FFFFFFFFFFFFEDA0.2	2F8000001AA		 	bra		dcx7
+FFFFFFFFFFFFEDB0.0	           		 dccr:
+FFFFFFFFFFFFEDB0.0	2C840340091		 	bnei	r1,#0x91,dcx6		; cursor right ?
+FFFFFFFFFFFFEDB0.1	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEDB0.2	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEDC0.0	10804000418		 	lc		r2,CursorCol
+FFFFFFFFFFFFEDC0.1	2C080140038		 	beqi	r2,#56,dcx7
+FFFFFFFFFFFFEDC0.2	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFEDD0.0	18804000418		 	sc		r2,CursorCol
+FFFFFFFFFFFFEDD0.1	           		 dcx7:
+FFFFFFFFFFFFEDD0.1	0C7FFFFFB55		 	call	CalcScreenLoc
+FFFFFFFFFFFFEDD0.2	27740000007		 	lm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEDE0.0	0DFBE000020		 	ret		#32
+FFFFFFFFFFFFEDE0.1	           		 dcx6:
+FFFFFFFFFFFFEDE0.1	2C840300090		 	bnei	r1,#0x90,dcx8		; cursor up ?
+FFFFFFFFFFFFEDE0.2	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEDF0.0	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEDF0.1	10804000416		 	lc		r2,CursorRow
+FFFFFFFFFFFFEDF0.2	2C0BFE40000		 	beqi	r2,#0,dcx7
+FFFFFFFFFFFFEE00.0	03884000001		 	subui	r2,r2,#1
+FFFFFFFFFFFFEE00.1	18804000416		 	sc		r2,CursorRow
+FFFFFFFFFFFFEE00.2	2F801FFFEAA		 	bra		dcx7
+FFFFFFFFFFFFEE10.0	           		 dcx8:
+FFFFFFFFFFFFEE10.0	2C840280093		 	bnei	r1,#0x93,dcx9		; cursor left ?
+FFFFFFFFFFFFEE10.1	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEE10.2	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEE20.0	10804000418		 	lc		r2,CursorCol
+FFFFFFFFFFFFEE20.1	2C0BFB40000		 	beqi	r2,#0,dcx7
+FFFFFFFFFFFFEE20.2	03884000001		 	subui	r2,r2,#1
+FFFFFFFFFFFFEE30.0	18804000418		 	sc		r2,CursorCol
+FFFFFFFFFFFFEE30.1	2F801FFFD2A		 	bra		dcx7
+FFFFFFFFFFFFEE30.2	           		 dcx9:
+FFFFFFFFFFFFEE30.2	2C840340092		 	bnei	r1,#0x92,dcx10		; cursor down ?
+FFFFFFFFFFFFEE40.0	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEE40.1	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEE40.2	10804000416		 	lc		r2,CursorRow
+FFFFFFFFFFFFEE50.0	2C0BF84001E		 	beqi	r2,#30,dcx7
+FFFFFFFFFFFFEE50.1	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFEE50.2	18804000416		 	sc		r2,CursorRow
+FFFFFFFFFFFFEE60.0	2F801FFFBAA		 	bra		dcx7
+FFFFFFFFFFFFEE60.1	           		 dcx10:
+FFFFFFFFFFFFEE60.1	2C840340094		 	bnei	r1,#0x94,dcx11			; cursor home ?
+FFFFFFFFFFFFEE60.2	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEE70.0	27F40000007		 	sm		[sp],r1/r2/r3/lr
+FFFFFFFFFFFFEE70.1	10804000418		 	lc		r2,CursorCol
+FFFFFFFFFFFFEE70.2	2F8800000C8		 	beq		r2,r0,dcx12
+FFFFFFFFFFFFEE80.0	18800000418		 	sc		r0,CursorCol
+FFFFFFFFFFFFEE80.1	2F801FFFAAA		 	bra		dcx7
+FFFFFFFFFFFFEE80.2	           		 dcx12:
+FFFFFFFFFFFFEE80.2	18800000416		 	sc		r0,CursorRow
+FFFFFFFFFFFFEE90.0	2F801FFFA2A		 	bra		dcx7
+FFFFFFFFFFFFEE90.1	           		 dcx11:
+FFFFFFFFFFFFEE90.1	03FBC000030		 	subui	sp,sp,#48
+FFFFFFFFFFFFEE90.2	27F4000001F		 	sm		[sp],r1/r2/r3/r4/r5/r31
+FFFFFFFFFFFFEEA0.0	2C840180099		 	bnei	r1,#0x99,dcx13		; delete ?
+FFFFFFFFFFFFEEA0.1	0C7FFFFFB55		 	call	CalcScreenLoc
+FFFFFFFFFFFFEEA0.2	01002300009		 	or		r3,r0,r1			; r3 = screen location
+FFFFFFFFFFFFEEB0.0	10802000418		 	lc		r1,CursorCol		; r1 = cursor column
+FFFFFFFFFFFFEEB0.1	2F8000001AA		 	bra		dcx5
+FFFFFFFFFFFFEEB0.2	           		 dcx13:
+FFFFFFFFFFFFEEB0.2	2C840680008		 	bnei	r1,#CTRLH,dcx3		; backspace ?
+FFFFFFFFFFFFEEC0.0	10804000418		 	lc		r2,CursorCol
+FFFFFFFFFFFFEEC0.1	2F8800004A8		 	beq		r2,r0,dcx4
+FFFFFFFFFFFFEEC0.2	03884000001		 	subui	r2,r2,#1
+FFFFFFFFFFFFEED0.0	18804000418		 	sc		r2,CursorCol
+FFFFFFFFFFFFEED0.1	0C7FFFFFB55		 	call	CalcScreenLoc		; a0 = screen location
+FFFFFFFFFFFFEED0.2	01002300009		 	or		r3,r0,r1			; r3 = screen location
+FFFFFFFFFFFFEEE0.0	10802000418		 	lc		r1,CursorCol
+FFFFFFFFFFFFEEE0.1	           		 dcx5:
+FFFFFFFFFFFFEEE0.1	108C4000002		 	lc		r2,2[r3]
+FFFFFFFFFFFFEEE0.2	188C4000000		 	sc		r2,[r3]
+FFFFFFFFFFFFEEF0.0	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFEEF0.1	02842000001		 	addui	r1,r1,#1
+FFFFFFFFFFFFEEF0.2	0A4FFDA0000		 	setlo	r4,#TEXTREG
+FFFFFFFFFFFFEF00.0	2090A000000		 	inch	r5,TEXT_COLS[r4]
+FFFFFFFFFFFFEF00.1	2F84BFFFF24		 	bltu	r1,r5,dcx5
+FFFFFFFFFFFFEF00.2	0A200000020		 	setlo	r2,#' '
+FFFFFFFFFFFFEF10.0	188C5FFFFFE		 	sc		r2,-2[r3]
+FFFFFFFFFFFFEF10.1	2F80000022A		 	bra		dcx4
+FFFFFFFFFFFFEF10.2	           		 dcx3:
+FFFFFFFFFFFFEF10.2	2C04040000A		 	beqi	r1,#'\n',dclf	; linefeed ?
+FFFFFFFFFFFFEF20.0	01002400009		 	or		r4,r0,r1		; save r1 in r4
+FFFFFFFFFFFFEF20.1	0C7FFFFFB55		 	call	CalcScreenLoc	; r1 = screen location
+FFFFFFFFFFFFEF20.2	01002300009		 	or		r3,r0,r1		; r3 = screen location
+FFFFFFFFFFFFEF30.0	01008100009		 	or		r1,r0,r4		; restore r1
+FFFFFFFFFFFFEF30.1	0C7FFFFFB45		 	call	AsciiToScreen	; convert ascii char to screen char
+FFFFFFFFFFFFEF30.2	188C2000000		 	sc		r1,[r3]
+FFFFFFFFFFFFEF40.0	0C7FFFFFBD8		 	call	IncCursorPos
+FFFFFFFFFFFFEF40.1	2774000001F		 	lm		[sp],r1/r2/r3/r4/r5/r31
+FFFFFFFFFFFFEF40.2	0DFBE000030		 	ret		#48
+FFFFFFFFFFFFEF50.0	           		 dclf:
+FFFFFFFFFFFFEF50.0	0C7FFFFFBE4		 	call	IncCursorRow
+FFFFFFFFFFFFEF50.1	           		 dcx4:
+FFFFFFFFFFFFEF50.1	2774000001F		 	lm		[sp],r1/r2/r3/r4/r5/r31
+FFFFFFFFFFFFEF50.2	0DFBE000030		 	ret		#48
+                  	           		 
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Increment the cursor position, scroll the screen if needed.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEF60.0	           		 IncCursorPos:
+FFFFFFFFFFFFEF60.0	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEF60.1	27F40000007		 	sm		[r30],r1/r2/r3/r31
+FFFFFFFFFFFFEF60.2	10802000418		 	lc		r1,CursorCol
+FFFFFFFFFFFFEF70.0	02842000001		 	addui	r1,r1,#1
+FFFFFFFFFFFFEF70.1	18802000418		 	sc		r1,CursorCol
+FFFFFFFFFFFFEF70.2	20805DA0000		 	inch	r2,TEXTREG+TEXT_COLS
+FFFFFFFFFFFFEF80.0	2F844000226		 	bleu	r1,r2,icc1
+FFFFFFFFFFFFEF80.1	18800000418		 	sc		r0,CursorCol		; column = 0
+FFFFFFFFFFFFEF80.2	2F8000000CA		 	bra		icr1
+FFFFFFFFFFFFEF90.0	           		 IncCursorRow:
+FFFFFFFFFFFFEF90.0	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFEF90.1	27F40000007		 	sm		[sp],r1/r2/r3/r31
+FFFFFFFFFFFFEF90.2	           		 icr1:
+FFFFFFFFFFFFEF90.2	10802000416		 	lc		r1,CursorRow
+FFFFFFFFFFFFEFA0.0	02842000001		 	addui	r1,r1,#1
+FFFFFFFFFFFFEFA0.1	18802000416		 	sc		r1,CursorRow
+FFFFFFFFFFFFEFA0.2	20805DA0002		 	inch	r2,TEXTREG+TEXT_ROWS
+FFFFFFFFFFFFEFB0.0	2F8440000A6		 	bleu	r1,r2,icc1
+FFFFFFFFFFFFEFB0.1	03884000001		 	subui	r2,r2,#1			; backup the cursor row, we are scrolling up
+FFFFFFFFFFFFEFB0.2	18804000416		 	sc		r2,CursorRow
+FFFFFFFFFFFFEFC0.0	0C7FFFFFB1C		 	call	ScrollUp
+FFFFFFFFFFFFEFC0.1	           		 icc1:
+FFFFFFFFFFFFEFC0.1	0C7FFFFFB55		 	call	CalcScreenLoc
+FFFFFFFFFFFFEFC0.2	27740000007		 	lm		[sp],r1/r2/r3/r31
+FFFFFFFFFFFFEFD0.0	0DFBE000020		 	ret		#32
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display a string on the screen.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFEFD0.1	           		 DisplayString:
+FFFFFFFFFFFFEFD0.1	037BC000018		 	subi	sp,sp,#24
+FFFFFFFFFFFFEFD0.2	27F40000003		 	sm		[sp],r1/r2/r31
+FFFFFFFFFFFFEFE0.0	01040200009		 	or		r2,r1,r0		; r2 = pointer to string
+FFFFFFFFFFFFEFE0.1	           		 dspj1:
+FFFFFFFFFFFFEFE0.1	12882000000		 	lbu		r1,[r2]			; move string char into r1
+FFFFFFFFFFFFEFE0.2	02884000001		 	addui	r2,r2,#1		; increment pointer
+FFFFFFFFFFFFEFF0.0	2F840000088		 	beq		r1,r0,dsret		; is it end of string ?
+FFFFFFFFFFFFEFF0.1	0C7FFFFFB65		 	call	DisplayChar		; display character
+FFFFFFFFFFFFEFF0.2	2F801FFFFAA		 	bra		dspj1			; go back for next character
+FFFFFFFFFFFFF000.0	           		 dsret:
+FFFFFFFFFFFFF000.0	27740000003		 	lm		[r30],r1/r2/r31
+FFFFFFFFFFFFF000.1	0DFBE000018		 	ret		#24
+                  	           		 
+FFFFFFFFFFFFF000.2	           		 DisplayStringCRLF:
+FFFFFFFFFFFFF000.2	03FBC000008		 	subui	r30,r30,#8
+FFFFFFFFFFFFF010.0	19FBE000000		 	sw		r31,[r30]
+FFFFFFFFFFFFF010.1	0C7FFFFFBF5		 	call	DisplayString
+FFFFFFFFFFFFF010.2	11FBE000000		 	lw		r31,[r30]
+FFFFFFFFFFFFF020.0	02FBC000008		 	addui	r30,r30,#8
+                  	           		 
+FFFFFFFFFFFFF020.1	           		 CRLF:
+FFFFFFFFFFFFF020.1	03FBC000010		 	subui	r30,r30,#16
+FFFFFFFFFFFFF020.2	19F82000000		 	sw		r1,[r30]
+FFFFFFFFFFFFF030.0	19FBE000008		 	sw		r31,8[r30]
+FFFFFFFFFFFFF030.1	0A10000000D		 	setlo	r1,#'\r'
+FFFFFFFFFFFFF030.2	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF040.0	0A10000000A		 	setlo	r1,#'\n'
+FFFFFFFFFFFFF040.1	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF040.2	11F82000000		 	lw		r1,[r30]
+FFFFFFFFFFFFF050.0	11FBE000008		 	lw		r31,8[r30]
+FFFFFFFFFFFFF050.1	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display nybble in r1
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF050.2	           		 DisplayNybble:
+FFFFFFFFFFFFF050.2	03FBC000010		 	subui	r30,r30,#16
+FFFFFFFFFFFFF060.0	19FBE000008		 	sw		r31,8[r30]
+FFFFFFFFFFFFF060.1	19F82000000		 	sw		r1,[r30]
+FFFFFFFFFFFFF060.2	0504200000F		 	andi	r1,r1,#0x0F
+FFFFFFFFFFFFF070.0	02842000030		 	addui	r1,r1,#'0'
+FFFFFFFFFFFFF070.1	2B040100039		 	bleui	r1,#'9',dispnyb1
+FFFFFFFFFFFFF070.2	02842000007		 	addui	r1,r1,#7
+FFFFFFFFFFFFF080.0	           		 dispnyb1:
+FFFFFFFFFFFFF080.0	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF080.1	11F82000000		 	lw		r1,[r30]
+FFFFFFFFFFFFF080.2	11FBE000008		 	lw		r31,8[r30]
+FFFFFFFFFFFFF090.0	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display the byte in r1
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF090.1	           		 DisplayByte:
+FFFFFFFFFFFFF090.1	03FBC000010		 	subui	sp,sp,#16
+FFFFFFFFFFFFF090.2	27F40000001		 	sm		[sp],r1/r31
+FFFFFFFFFFFFF0A0.0	01842200004		 	rori	r1,r1,#4	
+FFFFFFFFFFFFF0A0.1	0C7FFFFFC16		 	call	DisplayNybble
+FFFFFFFFFFFFF0A0.2	01842200002		 	roli	r1,r1,#4
+FFFFFFFFFFFFF0B0.0	0C7FFFFFC16		 	call	DisplayNybble
+FFFFFFFFFFFFF0B0.1	27740000001		 	lm		[sp],r1/r31
+FFFFFFFFFFFFF0B0.2	0DFBE000010		 	ret		#16
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display the 64 bit word in r1
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF0C0.0	           		 DisplayWord:
+FFFFFFFFFFFFF0C0.0	03FBC000018		 	subui	sp,sp,#24
+FFFFFFFFFFFFF0C0.1	27F40000005		 	sm		[sp],r1/r3/r31
+FFFFFFFFFFFFF0C0.2	0A300000007		 	setlo	r3,#7
+FFFFFFFFFFFFF0D0.0	           		 dspwd1:
+FFFFFFFFFFFFF0D0.0	01842400002		 	roli	r1,r1,#8
+FFFFFFFFFFFFF0D0.1	0C7FFFFFC25		 	call	DisplayByte
+FFFFFFFFFFFFF0D0.2	2F80600000F		 	loop	r3,dspwd1
+FFFFFFFFFFFFF0E0.0	27740000005		 	lm		[sp],r1/r3/r31
+FFFFFFFFFFFFF0E0.1	0DFBE000018		 	ret		#24
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Display memory pointed to by r2.
+                  	           		 ; destroys r1,r3
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF0E0.2	           		 DisplayMem:
+FFFFFFFFFFFFF0E0.2	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF0F0.0	19FBE000000		 	sw		lr,[sp]
+FFFFFFFFFFFFF0F0.1	0A10000003A		 	setlo	r1,#':'
+FFFFFFFFFFFFF0F0.2	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF100.0	01080100009		 	or		r1,r2,r0
+FFFFFFFFFFFFF100.1	0C7FFFFFC30		 	call	DisplayWord
+FFFFFFFFFFFFF100.2	0A300000007		 	setlo	r3,#7
+FFFFFFFFFFFFF110.0	           		 dspmem1:
+FFFFFFFFFFFFF110.0	0A100000020		 	setlo	r1,#' '
+FFFFFFFFFFFFF110.1	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF110.2	10082000000		 	lb		r1,[r2]
+FFFFFFFFFFFFF120.0	0C7FFFFFC25		 	call	DisplayByte
+FFFFFFFFFFFFF120.1	02884000001		 	addui	r2,r2,#1
+FFFFFFFFFFFFF120.2	2F807FFFF8F		 	loop	r3,dspmem1
+FFFFFFFFFFFFF130.0	0C7FFFFFC09		 	call	CRLF
+FFFFFFFFFFFFF130.1	11FBE000000		 	lw		lr,[sp]
+FFFFFFFFFFFFF130.2	0DFBE000008		 	ret		#8
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Converts binary number in r1 into BCD number in r2 and r1.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF140.0	           		 BinToBCD:
+FFFFFFFFFFFFF140.0	03FBC000030		 	subui	sp,sp,#48
+FFFFFFFFFFFFF140.1	27F000000FC		 	sm		[sp],r3/r4/r5/r6/r7/r8
+FFFFFFFFFFFFF140.2	0A20000000A		 	setlo	r2,#10
+FFFFFFFFFFFFF150.0	0A800000013		 	setlo	r8,#19		; number of digits to produce - 1
+FFFFFFFFFFFFF150.1	           		 bta1:
+FFFFFFFFFFFFF150.1	0104430001C		 	mod		r3,r1,r2
+FFFFFFFFFFFFF150.2	018C7E00000		 	shli	r3,r3,#60	; shift result to uppermost bits
+FFFFFFFFFFFFF160.0	0194FE00000		 	shli	r7,r5,#60	; copy low order nybble of r5 to r4 topmost nybble
+FFFFFFFFFFFFF160.1	01908200001		 	shrui	r4,r4,#4
+FFFFFFFFFFFFF160.2	0110E400009		 	or		r4,r4,r7
+FFFFFFFFFFFFF170.0	0194A200001		 	shrui	r5,r5,#4
+FFFFFFFFFFFFF170.1	01146500009		 	or		r5,r5,r3	; copy new bcd digit into uppermost bits of r5
+FFFFFFFFFFFFF170.2	07042000000		 	divui	r1,r1,r2	; r1=r1/10
+FFFFFFFFFFFFF180.0	2F811FFFEAF		 	loop	r8,bta1
+FFFFFFFFFFFFF180.1	01909800001		 	shrui	r4,r4,#48	; right align number in register
+FFFFFFFFFFFFF180.2	0194C800000		 	shli	r6,r5,#16
+FFFFFFFFFFFFF190.0	0110C400009		 	or		r4,r4,r6	; copy bits into r4
+FFFFFFFFFFFFF190.1	0194B800001		 	shrui	r5,r5,#48
+FFFFFFFFFFFFF190.2	01008100009		 	or		r1,r0,r4
+FFFFFFFFFFFFF1A0.0	0100A200009		 	or		r2,r0,r5
+FFFFFFFFFFFFF1A0.1	277000000FC		 	lm		[sp],r3/r4/r5/r6/r7/r8
+FFFFFFFFFFFFF1A0.2	0DFBE000030		 	ret		#48
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Converts BCD number in r1 into Ascii number in r2 and r1.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF1B0.0	           		 BCDToAscii:
+FFFFFFFFFFFFF1B0.0	03FBC000020		 	subui	sp,sp,#32
+FFFFFFFFFFFFF1B0.1	27F0000009C		 	sm		[sp],r3/r4/r5/r8
+FFFFFFFFFFFFF1B0.2	0A80000000F		 	setlo	r8,#15
+FFFFFFFFFFFFF1C0.0	           		 bta2:
+FFFFFFFFFFFFF1C0.0	0504400000F		 	andi	r2,r1,#0x0F
+FFFFFFFFFFFFF1C0.1	05884000030		 	ori		r2,r2,#0x30
+FFFFFFFFFFFFF1C0.2	01885C00000		 	shli	r2,r2,#56
+FFFFFFFFFFFFF1D0.0	01908400001		 	shrui	r4,r4,#8
+FFFFFFFFFFFFF1D0.1	018CBC00000		 	shli	r5,r3,#56
+FFFFFFFFFFFFF1D0.2	0110A400009		 	or		r4,r4,r5
+FFFFFFFFFFFFF1E0.0	018C6400001		 	shrui	r3,r3,#8
+FFFFFFFFFFFFF1E0.1	010C4300009		 	or		r3,r3,r2
+FFFFFFFFFFFFF1E0.2	01842200001		 	shrui	r1,r1,#4
+FFFFFFFFFFFFF1F0.0	2F811FFFE8F		 	loop	r8,bta2
+FFFFFFFFFFFFF1F0.1	01008100009		 	or		r1,r0,r4
+FFFFFFFFFFFFF1F0.2	01006200009		 	or		r2,r0,r3
+FFFFFFFFFFFFF200.0	2770000009C		 	lm		[sp],r3/r4/r5/r8
+FFFFFFFFFFFFF200.1	0DFBE000020		 	ret		#32
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Convert a binary number into a 20 character ascii string.
+                  	           		 ; r1 = number to convert
+                  	           		 ; r2 = address of string buffer
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF200.2	           		 BinToStr:
+FFFFFFFFFFFFF200.2	03FBC000038		 	subui	sp,sp,#56
+FFFFFFFFFFFFF210.0	27F400007C4		 	sm		[sp],r3/r7/r8/r9/r10/r11/r31
+FFFFFFFFFFFFF210.1	01004B00009		 	or		r11,r0,r2
+FFFFFFFFFFFFF210.2	0C7FFFFFC50		 	call	BinToBCD
+FFFFFFFFFFFFF220.0	01004A00009		 	or		r10,r0,r2	; save off r2
+FFFFFFFFFFFFF220.1	0C7FFFFFC6C		 	call	BCDToAscii
+FFFFFFFFFFFFF220.2	0A900000001		 	setlo	r9,#1
+FFFFFFFFFFFFF230.0	           		 btos3:
+FFFFFFFFFFFFF230.0	0A800000007		 	setlo	r8,#7
+FFFFFFFFFFFFF230.1	           		 btos1:
+FFFFFFFFFFFFF230.1	01A4E180000		 	shli	r7,r9,#3
+FFFFFFFFFFFFF230.2	029CE000000		 	addui	r7,r7,r8
+FFFFFFFFFFFFF240.0	029CE000004		 	addui	r7,r7,#4
+FFFFFFFFFFFFF240.1	050460000FF		 	andi	r3,r1,#0xff
+FFFFFFFFFFFFF240.2	1A9D6300010		 	sb		r3,[r7+r11]
+FFFFFFFFFFFFF250.0	01842400001		 	shrui	r1,r1,#8
+FFFFFFFFFFFFF250.1	2F811FFFF2F		 	loop	r8,btos1
+FFFFFFFFFFFFF250.2	01004100009		 	or		r1,r0,r2
+FFFFFFFFFFFFF260.0	2F813FFFE8F		 	loop	r9,btos3
+                  	           		 ; the last four digits
+FFFFFFFFFFFFF260.1	01014100009		 	or		r1,r0,r10	; get back r2
+FFFFFFFFFFFFF260.2	0C7FFFFFC6C		 	call	BCDToAscii
+FFFFFFFFFFFFF270.0	0A800000003		 	setlo	r8,#3
+FFFFFFFFFFFFF270.1	           		 btos2:
+FFFFFFFFFFFFF270.1	050460000FF		 	andi	r3,r1,#0xff
+FFFFFFFFFFFFF270.2	1AA16300010		 	sb		r3,[r8+r11]
+FFFFFFFFFFFFF280.0	01842400001		 	shrui	r1,r1,#8
+FFFFFFFFFFFFF280.1	2F811FFFFAF		 	loop	r8,btos2
+FFFFFFFFFFFFF280.2	182C0000014		 	sb		r0,20[r11]	; null terminate
+FFFFFFFFFFFFF290.0	277400007C4		 	lm		[sp],r3/r7/r8/r9/r10/r11/r31
+FFFFFFFFFFFFF290.1	0DFBE000038		 	ret		#56
+                  	           		 
+                  	           		 
+                  	           		 ;==============================================================================
+                  	           		 ;==============================================================================
+FFFFFFFFFFFFF290.2	           		 Monitor:
+FFFFFFFFFFFFF290.2	0BEFFFEFFF8		 	setlo	sp,#STACKTOP	; top of stack; reset the stack pointer
+FFFFFFFFFFFFF2A0.0	1800000041A		 	sb		r0,KeybdEcho	; turn off keyboard echo
+FFFFFFFFFFFFF2A0.1	           		 PromptLn:
+FFFFFFFFFFFFF2A0.1	0C7FFFFFC09		 	call	CRLF
+FFFFFFFFFFFFF2A0.2	0A100000024		 	setlo	r1,#'$'
+FFFFFFFFFFFFF2B0.0	0C7FFFFFB65		 	call	DisplayChar
+                  	           		 
+                  	           		 ; Get characters until a CR is keyed
+                  	           		 ;
+FFFFFFFFFFFFF2B0.1	           		 Prompt3:
+FFFFFFFFFFFFF2B0.1	0C7FFFFFA92		 	call	KeybdGetChar
+FFFFFFFFFFFFF2B0.2	2C04007FFFF		 	beqi	r1,#-1,Prompt3	; wait for a character
+FFFFFFFFFFFFF2C0.0	2C04010000D		 	beqi	r1,#CR,Prompt1
+FFFFFFFFFFFFF2C0.1	0C7FFFFFB65		 	call	DisplayChar
+FFFFFFFFFFFFF2C0.2	2F801FFFFAA		 	bra		Prompt3
+                  	           		 
+                  	           		 ; Process the screen line that the CR was keyed on
+                  	           		 ;
+FFFFFFFFFFFFF2D0.0	           		 Prompt1:
+FFFFFFFFFFFFF2D0.0	18800000418		 	sc		r0,CursorCol	; go back to the start of the line
+FFFFFFFFFFFFF2D0.1	0C7FFFFFB55		 	call	CalcScreenLoc	; r1 = screen memory location
+FFFFFFFFFFFFF2D0.2	01040300009		 	or		r3,r1,r0
+FFFFFFFFFFFFF2E0.0	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF2E0.1	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF2E0.2	0C7FFFFFB50		 	call	ScreenToAscii
+FFFFFFFFFFFFF2F0.0	2C840140024		 	bnei	r1,#'$',Prompt2	; skip over '$' prompt character
+FFFFFFFFFFFFF2F0.1	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF2F0.2	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF300.0	0C7FFFFFB50		 	call	ScreenToAscii
+                  	           		 
+                  	           		 ; Dispatch based on command character
+                  	           		 ;
+FFFFFFFFFFFFF300.1	           		 Prompt2:
+FFFFFFFFFFFFF300.1	2C04150003A		 	beqi	r1,#':',Editmem		; $: - edit memory
+FFFFFFFFFFFFF300.2	2C041A00044		 	beqi	r1,#'D',Dumpmem		; $D - dump memory
+FFFFFFFFFFFFF310.0	2C075140042		 	beqi	r1,#'B',START		; $B - start tiny basic
+FFFFFFFFFFFFF310.1	2C04174004A		 	beqi	r1,#'J',ExecuteCode	; $J - execute code
+FFFFFFFFFFFFF310.2	2C04280004C		 	beqi	r1,#'L',LoadS19		; $L - load S19 file
+FFFFFFFFFFFFF320.0	2C04054003F		 	beqi	r1,#'?',DisplayHelp	; $? - display help
+FFFFFFFFFFFFF320.1	2C040100043		 	beqi	r1,#'C',TestCLS		; $C - clear screen
+FFFFFFFFFFFFF320.2	2F801FFFBCA		 	bra		Monitor
+                  	           		 
+FFFFFFFFFFFFF330.0	           		 TestCLS:
+FFFFFFFFFFFFF330.0	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF330.1	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF330.2	0C7FFFFFB50		 	call	ScreenToAscii
+FFFFFFFFFFFFF340.0	2C87F58004C		 	bnei	r1,#'L',Monitor
+FFFFFFFFFFFFF340.1	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF340.2	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF350.0	0C7FFFFFB50		 	call	ScreenToAscii
+FFFFFFFFFFFFF350.1	2C87F480053		 	bnei	r1,#'S',Monitor
+FFFFFFFFFFFFF350.2	0C7FFFFFB06		 	call	ClearScreen
+FFFFFFFFFFFFF360.0	18000000418		 	sb		r0,CursorCol
+FFFFFFFFFFFFF360.1	18000000416		 	sb		r0,CursorRow
+FFFFFFFFFFFFF360.2	0C7FFFFFB55		 	call	CalcScreenLoc
+FFFFFFFFFFFFF370.0	2F801FFF94A		 	bra		Monitor
                   	           		 	
-FFFFFFFFFFFFF050.2	           		 Getkey:
-FFFFFFFFFFFFF050.2	04803DC0000		 	ori		r1,r0,#0xFFFF_FFFF_FFDC_0000
-FFFFFFFFFFFFF060.0	           		 sr1:
-FFFFFFFFFFFFF060.0	10044000000		 	lb		r2,[r1]
-FFFFFFFFFFFFF060.1	2A880000000		 	bge		r2,r0,sr1
-FFFFFFFFFFFFF060.2	10040000001		 	lb		r0,1[r1]		; clear keyboard strobe
-FFFFFFFFFFFFF070.0	0D83E000000		 	ret
+FFFFFFFFFFFFF370.1	           		 DisplayHelp:
+FFFFFFFFFFFFF370.1	0A1FFFFF390		 	setlo	r1,HelpMsg
+FFFFFFFFFFFFF370.2	0C7FFFFFBF5		 	call	DisplayString
+FFFFFFFFFFFFF380.0	2F801FFF8CA		 	bra		Monitor
+                  	           		 
+FFFFFFFFFFFFF380.1	37800000000		 	align	16
+FFFFFFFFFFFFF380.2	37800000000		 	align	16
+FFFFFFFFFFFFF390.0	           		 	align	16
+FFFFFFFFFFFFF390.0	           		 HelpMsg:
+FFFFFFFFFFFFF390 70736944203D203F	 	db	"? = Display help",CR,LF
+FFFFFFFFFFFFF398 706C65682079616C
+FFFFFFFFFFFFF3A0 203D20534C430A0D	 	db	"CLS = clear screen",CR,LF
+FFFFFFFFFFFFF3A8 6373207261656C63
+FFFFFFFFFFFFF3B0 203A0A0D6E656572	 	db	": = Edit memory bytes",CR,LF
+FFFFFFFFFFFFF3B8 6D2074696445203D
+FFFFFFFFFFFFF3C0 79622079726F6D65
+FFFFFFFFFFFFF3C8 3D204C0A0D736574	 	db	"L = Load S19 file",CR,LF
+FFFFFFFFFFFFF3D0 31532064616F4C20
+FFFFFFFFFFFFF3D8 0A0D656C69662039
+FFFFFFFFFFFFF3E0 706D7544203D2044	 	db	"D = Dump memory",CR,LF
+FFFFFFFFFFFFF3E8 0D79726F6D656D20
+FFFFFFFFFFFFF3F0 617473203D20420A	 	db	"B = start tiny basic",CR,LF
+FFFFFFFFFFFFF3F8 20796E6974207472
+FFFFFFFFFFFFF400 4A0A0D6369736162	 	db	"J = Jump to code",CR,LF,0
+FFFFFFFFFFFFF408 20706D754A203D20
+FFFFFFFFFFFFF410 0D65646F63206F74
+FFFFFFFFFFFFF418 000000000000000A	 	align	16
+FFFFFFFFFFFFF420.0	           		 	align	16
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Ignore blanks in the input
+                  	           		 ; r3 = text pointer
+                  	           		 ; r1 destroyed
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF420.0	           		 ignBlanks:
+FFFFFFFFFFFFF420.0	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF420.1	19FBE000000		 	sw		r31,[sp]
+FFFFFFFFFFFFF420.2	           		 ignBlanks1:
+FFFFFFFFFFFFF420.2	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF430.0	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF430.1	0C7FFFFFB50		 	call	ScreenToAscii
+FFFFFFFFFFFFF430.2	2C07FF80020		 	beqi	r1,#' ',ignBlanks1
+FFFFFFFFFFFFF440.0	038C6000002		 	subui	r3,r3,#2
+FFFFFFFFFFFFF440.1	11FBE000000		 	lw		r31,[sp]
+FFFFFFFFFFFFF440.2	0DFBE000008		 	ret		#8
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Edit memory byte(s).
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF450.0	           		 EditMem:
+FFFFFFFFFFFFF450.0	0C7FFFFFD08		 	call	ignBlanks
+FFFFFFFFFFFFF450.1	0C7FFFFFD39		 	call	GetHexNumber
+FFFFFFFFFFFFF450.2	01040500009		 	or		r5,r1,r0
+FFFFFFFFFFFFF460.0	0A400000007		 	setlo	r4,#7
+FFFFFFFFFFFFF460.1	           		 edtmem1:
+FFFFFFFFFFFFF460.1	0C7FFFFFD08		 	call	ignBlanks
+FFFFFFFFFFFFF460.2	0C7FFFFFD39		 	call	GetHexNumber
+FFFFFFFFFFFFF470.0	18142000000		 	sb		r1,[r5]
+FFFFFFFFFFFFF470.1	0294A000001		 	addui	r5,r5,#1
+FFFFFFFFFFFFF470.2	2F809FFFFAF		 	loop	r4,edtmem1
+FFFFFFFFFFFFF480.0	2F801FFF0CA		 	bra		Monitor
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Execute code at the specified address.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF480.1	           		 ExecuteCode:
+FFFFFFFFFFFFF480.1	0C7FFFFFD08		 	call	ignBlanks
+FFFFFFFFFFFFF480.2	0C7FFFFFD39		 	call	GetHexNumber
+FFFFFFFFFFFFF490.0	01040300009		 	or		r3,r1,r0
+FFFFFFFFFFFFF490.1	0D0FE000000		 	jal		r31,[r3]
+FFFFFFFFFFFFF490.2	2F801FFF04A		 	bra     Monitor
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Do a memory dump of the requested location.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF4A0.0	           		 DumpMem:
+FFFFFFFFFFFFF4A0.0	0C7FFFFFD08		 	call	ignBlanks
+FFFFFFFFFFFFF4A0.1	0C7FFFFFD39		 	call	GetHexNumber
+FFFFFFFFFFFFF4A0.2	01040200009		 	or		r2,r1,r0
+FFFFFFFFFFFFF4B0.0	0C7FFFFFC09		 	call	CRLF
+FFFFFFFFFFFFF4B0.1	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4B0.2	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4C0.0	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4C0.1	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4C0.2	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4D0.0	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4D0.1	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4D0.2	0C7FFFFFC3A		 	call	DisplayMem
+FFFFFFFFFFFFF4E0.0	2F801FFEDCA		 	bra		Monitor
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Get a hexidecimal number. Maximum of sixteen digits.
+                  	           		 ; R3 = text pointer (updated)
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF4E0.1	           		 GetHexNumber:
+FFFFFFFFFFFFF4E0.1	03FBC000018		 	subui	sp,sp,#24
+FFFFFFFFFFFFF4E0.2	27F4000000A		 	sm		[sp],r2/r4/r31
+FFFFFFFFFFFFF4F0.0	0A200000000		 	setlo	r2,#0
+FFFFFFFFFFFFF4F0.1	0A40000000F		 	setlo	r4,#15
+FFFFFFFFFFFFF4F0.2	           		 gthxn2:
+FFFFFFFFFFFFF4F0.2	108C2000000		 	lc		r1,[r3]
+FFFFFFFFFFFFF500.0	028C6000002		 	addui	r3,r3,#2
+FFFFFFFFFFFFF500.1	0C7FFFFFB50		 	call	ScreenToAscii
+FFFFFFFFFFFFF500.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF510.0	2C0401BFFFF		 	beqi	r1,#-1,gthxn1
+FFFFFFFFFFFFF510.1	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF510.2	0504200000F		 	andi	r1,r1,#0x0f
+FFFFFFFFFFFFF520.0	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF520.1	2F809FFFECF		 	loop	r4,gthxn2
+FFFFFFFFFFFFF520.2	           		 gthxn1:
+FFFFFFFFFFFFF520.2	01080100009		 	or		r1,r2,r0
+FFFFFFFFFFFFF530.0	2774000000A		 	lm		[sp],r2/r4/r31
+FFFFFFFFFFFFF530.1	0DFBE000018		 	ret		#24
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Convert ASCII character in the range '0' to '9', 'a' to 'f' or 'A' to 'F'
+                  	           		 ; to a hex nybble.
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF530.2	           		 AsciiToHexNybble:
+FFFFFFFFFFFFF530.2	2A040540030		 	bltui	r1,#'0',gthx3
+FFFFFFFFFFFFF540.0	2B840100039		 	bgtui	r1,#'9',gthx5
+FFFFFFFFFFFFF540.1	03842000030		 	subui	r1,r1,#'0'
+FFFFFFFFFFFFF540.2	0DFBE000000		 	ret
+FFFFFFFFFFFFF550.0	           		 gthx5:
+FFFFFFFFFFFFF550.0	2A040340041		 	bltui	r1,#'A',gthx3
+FFFFFFFFFFFFF550.1	2B840180046		 	bgtui	r1,#'F',gthx6
+FFFFFFFFFFFFF550.2	03842000041		 	subui	r1,r1,#'A'
+FFFFFFFFFFFFF560.0	0284200000A		 	addui	r1,r1,#10
+FFFFFFFFFFFFF560.1	0DFBE000000		 	ret
+FFFFFFFFFFFFF560.2	           		 gthx6:
+FFFFFFFFFFFFF560.2	2A040240061		 	bltui	r1,#'a',gthx3
+FFFFFFFFFFFFF570.0	2B840140066		 	bgtui	r1,#'f',gthx3
+FFFFFFFFFFFFF570.1	03842000061		 	subui	r1,r1,#'a'
+FFFFFFFFFFFFF570.2	0284200000A		 	addui	r1,r1,#10
+FFFFFFFFFFFFF580.0	0DFBE000000		 	ret
+FFFFFFFFFFFFF580.1	           		 gthx3:
+FFFFFFFFFFFFF580.1	0A1FFFFFFFF		 	setlo	r1,#-1		; not a hex number
+FFFFFFFFFFFFF580.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;==============================================================================
+                  	           		 ; Load an S19 format file
+                  	           		 ;==============================================================================
+                  	           		 ;
+FFFFFFFFFFFFF590.0	           		 LoadS19:
+FFFFFFFFFFFFF590.0	2F80000008A		 	bra		ProcessRec
+FFFFFFFFFFFFF590.1	           		 NextRec:
+FFFFFFFFFFFFF590.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF590.2	2C84004000A		 	bne		r1,#LF,NextRec
+FFFFFFFFFFFFF5A0.0	           		 ProcessRec:
+FFFFFFFFFFFFF5A0.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF5A0.1	2C07CF8001A		 	beqi	r1,#26,Monitor	; CTRL-Z ?
+FFFFFFFFFFFFF5A0.2	2C87FF40053		 	bnei	r1,#'S',NextRec
+FFFFFFFFFFFFF5B0.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF5B0.1	2807FE40030		 	blt		r1,#'0',NextRec
+FFFFFFFFFFFFF5B0.2	2987FE40039		 	bgt		r1,#'9',NextRec
+FFFFFFFFFFFFF5C0.0	01040400009		 	or		r4,r1,r0		; r4 = record type
+FFFFFFFFFFFFF5C0.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF5C0.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF5D0.0	01040200009		 	or		r2,r1,r0
+FFFFFFFFFFFFF5D0.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF5D0.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF5E0.0	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF5E0.1	01082200009		 	or		r2,r2,r1		; r2 = byte count
+FFFFFFFFFFFFF5E0.2	01082300009		 	or		r3,r2,r1		; r3 = byte count
+FFFFFFFFFFFFF5F0.0	2C13FA40030		 	beqi	r4,#'0',NextRec	; manufacturer ID record, ignore
+FFFFFFFFFFFFF5F0.1	2C100A40031		 	beqi	r4,#'1',ProcessS1
+FFFFFFFFFFFFF5F0.2	2C100B00032		 	beqi	r4,#'2',ProcessS2
+FFFFFFFFFFFFF600.0	2C100A80033		 	beqi	r4,#'3',ProcessS3
+FFFFFFFFFFFFF600.1	2C13F940035		 	beqi	r4,#'5',NextRec	; record count record, ignore
+FFFFFFFFFFFFF600.2	2C100B40037		 	beqi	r4,#'7',ProcessS7
+FFFFFFFFFFFFF610.0	2C100B40038		 	beqi	r4,#'8',ProcessS8
+FFFFFFFFFFFFF610.1	2C100C40039		 	beqi	r4,#'9',ProcessS9
+FFFFFFFFFFFFF610.2	2F801FFFC2A		 	bra		NextRec
+                  	           		 
+FFFFFFFFFFFFF620.0	           		 pcssxa:
+FFFFFFFFFFFFF620.0	050C60000FF		 	andi	r3,r3,#0xff
+FFFFFFFFFFFFF620.1	038C6000001		 	subui	r3,r3,#1		; one less for loop
+FFFFFFFFFFFFF620.2	           		 pcss1a:
+FFFFFFFFFFFFF620.2	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF630.0	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF630.1	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF630.2	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF640.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF640.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF640.2	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF650.0	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF650.1	18144000000		 	sb		r2,[r5]
+FFFFFFFFFFFFF650.2	0294A000001		 	addui	r5,r5,#1
+FFFFFFFFFFFFF660.0	2F807FFFE4F		 	loop	r3,pcss1a
+                  	           		 ; Get the checksum byte
+FFFFFFFFFFFFF660.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF660.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF670.0	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF670.1	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF670.2	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF680.0	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF680.1	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF680.2	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF690.0	2F801FFF82A		 	bra		NextRec
+                  	           		 
+FFFFFFFFFFFFF690.1	           		 ProcessS1:
+FFFFFFFFFFFFF690.1	0C7FFFFFDB9		 	call	S19Get16BitAddress
+FFFFFFFFFFFFF690.2	2F801FFFC8A		 	bra		pcssxa
+FFFFFFFFFFFFF6A0.0	           		 ProcessS2:
+FFFFFFFFFFFFF6A0.0	0C7FFFFFDC1		 	call	S19Get24BitAddress
+FFFFFFFFFFFFF6A0.1	2F801FFFC0A		 	bra		pcssxa
+FFFFFFFFFFFFF6A0.2	           		 ProcessS3:
+FFFFFFFFFFFFF6A0.2	0C7FFFFFDC9		 	call	S19Get32BitAddress
+FFFFFFFFFFFFF6B0.0	2F801FFFB8A		 	bra		pcssxa
+FFFFFFFFFFFFF6B0.1	           		 ProcessS7:
+FFFFFFFFFFFFF6B0.1	0C7FFFFFDC9		 	call	S19Get32BitAddress
+FFFFFFFFFFFFF6B0.2	1980A000000		 	sw		r5,S19StartAddress
+FFFFFFFFFFFFF6C0.0	2F801FFDECA		 	bra		Monitor
+FFFFFFFFFFFFF6C0.1	           		 ProcessS8:
+FFFFFFFFFFFFF6C0.1	0C7FFFFFDC1		 	call	S19Get24BitAddress
+FFFFFFFFFFFFF6C0.2	1980A000000		 	sw		r5,S19StartAddress
+FFFFFFFFFFFFF6D0.0	2F801FFDE4A		 	bra		Monitor
+FFFFFFFFFFFFF6D0.1	           		 ProcessS9:
+FFFFFFFFFFFFF6D0.1	0C7FFFFFDB9		 	call	S19Get16BitAddress
+FFFFFFFFFFFFF6D0.2	1980A000000		 	sw		r5,S19StartAddress
+FFFFFFFFFFFFF6E0.0	2F801FFDDCA		 	bra		Monitor
+                  	           		 
+FFFFFFFFFFFFF6E0.1	           		 S19Get16BitAddress:
+FFFFFFFFFFFFF6E0.1	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF6E0.2	19FBE000000		 	sw		r31,[sp]
+FFFFFFFFFFFFF6F0.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF6F0.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF6F0.2	01040200009		 	or		r2,r1,r0
+FFFFFFFFFFFFF700.0	2F8000004AA		 	bra		S1932b
+                  	           		 
+FFFFFFFFFFFFF700.1	           		 S19Get24BitAddress:
+FFFFFFFFFFFFF700.1	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF700.2	19FBE000000		 	sw		r31,[sp]
+FFFFFFFFFFFFF710.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF710.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF710.2	01040200009		 	or		r2,r1,r0
+FFFFFFFFFFFFF720.0	2F80000024A		 	bra		S1932a
+                  	           		 
+FFFFFFFFFFFFF720.1	           		 S19Get32BitAddress:
+FFFFFFFFFFFFF720.1	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF720.2	19FBE000000		 	sw		r31,[sp]
+FFFFFFFFFFFFF730.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF730.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF730.2	01040200009		 	or		r2,r1,r0
+FFFFFFFFFFFFF740.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF740.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF740.2	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF750.0	01044200009		 	or		r2,r1,r2
+FFFFFFFFFFFFF750.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF750.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF760.0	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF760.1	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF760.2	           		 S1932a:
+FFFFFFFFFFFFF760.2	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF770.0	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF770.1	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF770.2	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF780.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF780.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF780.2	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF790.0	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF790.1	           		 S1932b:
+FFFFFFFFFFFFF790.1	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF790.2	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF7A0.0	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF7A0.1	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF7A0.2	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF7B0.0	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF7B0.1	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF7B0.2	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF7C0.0	0C7FFFFFDFC		 	call	sGetChar
+FFFFFFFFFFFFF7C0.1	0C7FFFFFD4E		 	call	AsciiToHexNybble
+FFFFFFFFFFFFF7C0.2	01884200000		 	shli	r2,r2,#4
+FFFFFFFFFFFFF7D0.0	01082200009		 	or		r2,r2,r1
+FFFFFFFFFFFFF7D0.1	0110840000A		 	xor		r4,r4,r4
+FFFFFFFFFFFFF7D0.2	01080500009		 	or		r5,r2,r0
+FFFFFFFFFFFFF7E0.0	11FBE000000		 	lw		r31,[sp]
+FFFFFFFFFFFFF7E0.1	02FBC000008		 	addui	sp,sp,#8
+FFFFFFFFFFFFF7E0.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ; Get a character from auxillary input, checking the keyboard status for a
+                  	           		 ; CTRL-C
+                  	           		 ;------------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF7F0.0	           		 sGetChar:
+FFFFFFFFFFFFF7F0.0	03FBC000008		 	subui	sp,sp,#8
+FFFFFFFFFFFFF7F0.1	19FBE000000		 	sw		r31,[sp]
+FFFFFFFFFFFFF7F0.2	           		 sgc2:
+FFFFFFFFFFFFF7F0.2	0C7FFFFFAA6		 	call	KeybdCheckForKey
+FFFFFFFFFFFFF800.0	2F841FF8B08		 	beq		r1,r0,sgc1
+FFFFFFFFFFFFF800.1	0C7FFFFFA92		 	call	KeybdGetchar
+FFFFFFFFFFFFF800.2	2C07A980000		 	beqi	r1,#CRTLC,Monitor
+FFFFFFFFFFFFF810.0	           		 sgc1:
+FFFFFFFFFFFFF810.0	0C7FFFFFE30		 	call	AUXIN
+FFFFFFFFFFFFF810.1	2F841FFFF48		 	beq		r1,r0,sgc2
+FFFFFFFFFFFFF810.2	11FBE000000		 	lw		r31,[sp]
+FFFFFFFFFFFFF820.0	02FBC000008		 	addui	sp,sp,#8
+FFFFFFFFFFFFF820.1	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;--------------------------------------------------------------------------
+                  	           		 ; Sound a 800 Hz beep
+                  	           		 ;--------------------------------------------------------------------------
+                  	           		 ;
+FFFFFFFFFFFFF820.2	           		 SetupAC97:
+FFFFFFFFFFFFF820.2	05802000000		 	ori		r1,r0,#0		; trigger a read of register 26
+FFFFFFFFFFFFF830.0	18803DC1026		 	sc		r1,AC97+0x26
+FFFFFFFFFFFFF830.1	           		 sac971:						; wait for status to register 0xF (all ready)
+FFFFFFFFFFFFF830.1	10803DC1026		 	lc		r1,AC97+0x26
+FFFFFFFFFFFFF830.2	2C84004000F		 	bnei	r1,#0x0F,sac971
+FFFFFFFFFFFFF840.0	05802000000		 	ori		r1,r0,#0		; master volume, 0db attenuation, mute off
+FFFFFFFFFFFFF840.1	18803DC1002		 	sc		r1,AC97+2
+FFFFFFFFFFFFF840.2	18803DC1004		 	sc		r1,AC97+4		; headphone volume, 0db attenuation, mute off
+FFFFFFFFFFFFF850.0	05802001F40		 	ori		r1,r0,#8000		; wait a while for the settings to take effect
+FFFFFFFFFFFFF850.1	           		 sac972:					
+FFFFFFFFFFFFF850.1	2F80200002F		 	loop	r1,sac972
+                  	           		 
+FFFFFFFFFFFFF850.2	           		 Beep:
+FFFFFFFFFFFFF850.2	0580200000F		 	ori		r1,r0,#15		; master volume to max
+FFFFFFFFFFFFF860.0	18803D50080		 	sc		r1,PSG+128
+FFFFFFFFFFFFF860.1	0580200346E		 	ori		r1,r0,#13422	; 800Hz
+FFFFFFFFFFFFF860.2	18803D50000		 	sc		r1,PSG
+FFFFFFFFFFFFF870.0	05802000020		 	ori		r1,r0,#32		; attack (8.192 ms)
+FFFFFFFFFFFFF870.1	18803D50008		 	sc		r1,PSG+8
+FFFFFFFFFFFFF870.2	05802000040		 	ori		r1,r0,#64		; decay  (16.384 ms)
+FFFFFFFFFFFFF880.0	18803D5000A		 	sc		r1,PSG+10
+FFFFFFFFFFFFF880.1	058020000C0		 	ori		r1,r0,#0xC0		; sustain level
+FFFFFFFFFFFFF880.2	18803D5000C		 	sc		r1,PSG+12
+FFFFFFFFFFFFF890.0	05802000FA0		 	ori		r1,r0,#4000		; release (1.024 s)
+FFFFFFFFFFFFF890.1	18803D5000E		 	sc		r1,PSG+14
+FFFFFFFFFFFFF890.2	05802001104		 	ori		r1,r0,#0x1104	; gate, output enable, triangle waveform
+FFFFFFFFFFFFF8A0.0	18803D50004		 	sc		r1,PSG+4
+FFFFFFFFFFFFF8A0.1	38000000000	
+FFFFFFFFFFFFF8A0.2	058037D7840		 	ori		r1,r0,#25000000	; delay about 1s
+FFFFFFFFFFFFF8B0.0	           		 beep1:
+FFFFFFFFFFFFF8B0.0	2F80200000F		 	loop	r1,beep1
+FFFFFFFFFFFFF8B0.1	05802000000		 	ori		r1,r0,#0x0000	; gate off, output enable off, no waveform
+FFFFFFFFFFFFF8B0.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;*
+                  	           		 ;* ===== Input a character from the host into register D0 (or
+                  	           		 ;*	return Zero status if there's no character available).
+                  	           		 ;*
+FFFFFFFFFFFFF8C0.0	           		 AUXIN:
+FFFFFFFFFFFFF8C0.0	20003DC0A01		 	inb		r1,UART_LS		; is character ready ?
+FFFFFFFFFFFFF8C0.1	05042000001		 	andi	r1,r1,#rxfull
+FFFFFFFFFFFFF8C0.2	2F8400000C8		 	beq		r1,r0,AXIRET	;if not, return Zero status
+FFFFFFFFFFFFF8D0.0	20003DC0A00		 	inb		r1,UART			; else get the character
+FFFFFFFFFFFFF8D0.1	0504200007F		 	andi	r1,r1,#0x7f		;zero out the high bit
+FFFFFFFFFFFFF8D0.2	           		 AXIRET:
+FFFFFFFFFFFFF8D0.2	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;*
+                  	           		 ;* ===== Return to the resident monitor, operating system, etc.
+                  	           		 ;*
+FFFFFFFFFFFFF8E0.0	           		 BYEBYE:
+FFFFFFFFFFFFF8E0.0	0CFFFFFFCA6		 	jmp		Monitor
+                  	           		 ;    MOVE.B	#228,D7 	;return to Tutor
+                  	           		 ;	TRAP	#14
+                  	           		 
+FFFFFFFFFFFFF8E0.1	37800000000		 	align 16
+FFFFFFFFFFFFF8E0.2	37800000000		 	align 16
+FFFFFFFFFFFFF8F0.0	           		 	align 16
+FFFFFFFFFFFFF8F0 726F747061520A0D	 msgInit db	CR,LF,"Raptor64 Tiny BASIC v1.0",CR,LF,"(C) 2012  Robert Finch",CR,LF,LF,0
+FFFFFFFFFFFFF8F8 20796E6954203436
+FFFFFFFFFFFFF900 3176204349534142
+FFFFFFFFFFFFF908 202943280A0D302E
+FFFFFFFFFFFFF910 6F52202032313032
+FFFFFFFFFFFFF918 6E69462074726562
+FFFFFFFFFFFFF920 0A0D000A0A0D6863	 OKMSG	db	CR,LF,"OK",CR,LF,0
+FFFFFFFFFFFFF928 616857000A0D4B4F	 msgWhat	db	"What?",CR,LF,0
+FFFFFFFFFFFFF930 726F53000A0D3F74	 SRYMSG	db	"Sorry."
+FFFFFFFFFFFFF938 6F43000A0D2E7972	 msgReadError	db	"Compact FLASH read error",CR,LF,0
+FFFFFFFFFFFFF940 4C4620746361706D
+FFFFFFFFFFFFF948 6461657220485341
+FFFFFFFFFFFFF950 0A0D726F72726520
+FFFFFFFFFFFFF958 207265626D754E00	 msgNumTooBig	db	"Number is too big",CR,LF,0
+FFFFFFFFFFFFF960 62206F6F74207369
+FFFFFFFFFFFFF968 766944000A0D6769	 msgDivZero		db	"Division by zero",CR,LF,0
+FFFFFFFFFFFFF970 7962206E6F697369
+FFFFFFFFFFFFF978 000A0D6F72657A20
+FFFFFFFFFFFFF980 7620666F2074754F	 msgVarSpace     db  "Out of variable space",CR,LF,0
+FFFFFFFFFFFFF988 20656C6261697261
+FFFFFFFFFFFFF990 000A0D6563617073
+FFFFFFFFFFFFF998 6620736574796220	 msgBytesFree	db	" bytes free",CR,LF,0
+FFFFFFFFFFFFF9A0 0A0D000A0D656572	 msgReady		db	CR,LF,"Ready",CR,LF,0
+FFFFFFFFFFFFF9A8 000A0D7964616552
+FFFFFFFFFFFFF9B0 6E69746365707845	 msgComma		db	"Expecting a comma",CR,LF,0
+FFFFFFFFFFFFF9B8 6D6D6F6320612067
+FFFFFFFFFFFFF9C0 656E694C000A0D61	 msgLineRange	db	"Line number too big",CR,LF,0
+FFFFFFFFFFFFF9C8 207265626D756E20
+FFFFFFFFFFFFF9D0 0D676962206F6F74
+FFFFFFFFFFFFF9D8 746365707845000A	 msgVar			db	"Expecting a variable",CR,LF,0
+FFFFFFFFFFFFF9E0 6176206120676E69
+FFFFFFFFFFFFF9E8 0A0D656C62616972
+FFFFFFFFFFFFF9F0 64616220444E5200	 msgRNDBad		db	"RND bad parameter",CR,LF,0
+FFFFFFFFFFFFF9F8 74656D6172617020
+FFFFFFFFFFFFFA00 535953000A0D7265	 msgSYSBad		db	"SYS bad address",CR,LF,0
+FFFFFFFFFFFFFA08 6464612064616220
+FFFFFFFFFFFFFA10 49000A0D73736572	 msgInputVar		db	"INPUT expecting a variable",CR,LF,0
+FFFFFFFFFFFFFA18 707865205455504E
+FFFFFFFFFFFFFA20 6120676E69746365
+FFFFFFFFFFFFFA28 6C62616972617620
+FFFFFFFFFFFFFA30 5458454E000A0D65	 msgNextFor		db	"NEXT without FOR",CR,LF,0
+FFFFFFFFFFFFFA38 74756F6874697720
+FFFFFFFFFFFFFA40 4E000A0D524F4620	 msgNextVar		db	"NEXT expecting a defined variable",CR,LF,0
+FFFFFFFFFFFFFA48 6570786520545845
+FFFFFFFFFFFFFA50 206120676E697463
+FFFFFFFFFFFFFA58 2064656E69666564
+FFFFFFFFFFFFFA60 656C626169726176
+FFFFFFFFFFFFFA68 2F4F544F47000A0D	 msgBadGotoGosub	db	"GOTO/GOSUB bad line number",CR,LF,0
+FFFFFFFFFFFFFA70 6162204255534F47
+FFFFFFFFFFFFFA78 6E20656E696C2064
+FFFFFFFFFFFFFA80 000A0D7265626D75
+FFFFFFFFFFFFFA88 77204E5255544552	 msgRetWoGosub   db	"RETURN without GOSUB",CR,LF,0
+FFFFFFFFFFFFFA90 472074756F687469
+FFFFFFFFFFFFFA98 50000A0D4255534F	 msgTooBig		db	"Program is too big",CR,LF,0
+FFFFFFFFFFFFFAA0 69206D6172676F72
+FFFFFFFFFFFFFAA8 6962206F6F742073
+FFFFFFFFFFFFFAB0 72747845000A0D67	 msgExtraChars	db	"Extra characters on line ignored",CR,LF,0
+FFFFFFFFFFFFFAB8 6361726168632061
+FFFFFFFFFFFFFAC0 206E6F2073726574
+FFFFFFFFFFFFFAC8 6E676920656E696C
+                  	           		 
+FFFFFFFFFFFFFAD7.0	           		 INITMSG:
+FFFFFFFFFFFFFAD0 0D000A0D6465726F	 	db		CR,LF,'Raptor64 Tiny BASIC, v1.0',CR,LF,LF,0
+FFFFFFFFFFFFFADF.0	           		 OKMSG:
+FFFFFFFFFFFFFAD8 0D000A0A0D00520A	 	db		CR,LF,'OK',CR,LF,0
+FFFFFFFFFFFFFAE6.0	           		 HOWMSG:
+FFFFFFFFFFFFFAE0 0048000A0D004F0A	 	db		'How?',CR,LF,0
+FFFFFFFFFFFFFAEB.0	           		 WHTMSG:
+FFFFFFFFFFFFFAE8 000A0D0057000A0D	 	db		'What?',CR,LF,0
+FFFFFFFFFFFFFAF0.0	           		 SRYMSG:
+FFFFFFFFFFFFFAF2.0	           		 CLMSG:
+                  	           		 ;	DC.B	0	;<- for aligning on a word boundary
+FFFFFFFFFFFFFAF0 000000000A0D0053	 	align	16
+FFFFFFFFFFFFFAF8 0000000000000000
+FFFFFFFFFFFFFB00.0	           		 	align	16
+                  	           		 	
+                  	           		 LSTROM	EQU		$
+                  	           		 	;	end of possible ROM area
+                  	           		 
+0000000000000110	           		 	bss
+0000000000000110	           		 	align	16
+                  	           		 
+0000000000000080	           		 		org		0x0080
+0000000000000088	           		         align   8
+0000000000000088 0000000000000001	 OSSP	dw	1	; OS value of sp
+0000000000000090 0000000000000001	 CURRNT	dw	1	;	Current line pointer
+0000000000000098 0000000000000001	 STKGOS	dw	1	;	Saves stack pointer in 'GOSUB'
+00000000000000A0 0000000000000001	 STKINP	dw	1	;	Saves stack pointer during 'INPUT'
+00000000000000A8 0000000000000001	 LOPVAR	dw	1	;	'FOR' loop save area
+00000000000000B0 0000000000000001	 LOPINC	dw	1	;	increment
+00000000000000B8 0000000000000001	 LOPLMT	dw	1	;	limit
+00000000000000C0 0000000000000001	 LOPLN	dw	1	;	line number
+00000000000000C8 0000000000000001	 LOPPT	dw	1	;	text pointer
+00000000000000D0 0000000000000001	 TXTUNF	dw	1	;	points to unfilled text area
+00000000000000D8 0000000000000001	 VARBGN	dw	1	;	points to variable area
+00000000000000E0 0000000000000001	 IVARBGN dw  1   ;   points to integer variable area
+00000000000000E8 0000000000000001	 SVARBGN dw  1   ;   points to string variable area
+00000000000000F0 0000000000000001	 FVARBGN dw  1   ;   points to float variable area
+00000000000000F8 0000000000000001	 STKBOT	dw	1	;	holds lower limit for stack growth
+FF 0000000000000000	 NUMWKA	fill.b	12,0			; numeric work area
+107 00000000000000
+107 0000000000000000	 BUFFER	fill.b	BUFLEN,0x00		;		Keyboard input buffer
+10F 00
+                  	           		 
                   	           		 
                   	           		 ;==============================================================================
                   	           		 ; Checkerboard RAM tester
                   	           		 ;==============================================================================
                   	           		 ;
-FFFFFFFFFFFFF070.1	           		 ramtest:
-FFFFFFFFFFFFF070.1	01000800009		 	or		r8,r0,r0		; r8 = 0
-FFFFFFFFFFFFF070.2	3D5552AAAD5	
-FFFFFFFFFFFFF080.0	04802AA5555		 	ori		r1,r0,#0xAAAA5555AAAA5555	; checkerboard pattern
-FFFFFFFFFFFFF080.1	           		 ramtest2:
-FFFFFFFFFFFFF080.1	19A02000000		 	sw		r1,[r8]			; save the checkerboard to memory
-FFFFFFFFFFFFF080.2	11A04000000		 	lw		r2,[r8]			; read it back
-FFFFFFFFFFFFF090.0	01044300006		 	cmp		r3,r1,r2		; is it the same ?
-FFFFFFFFFFFFF090.1	080C2000008		 	bnez	r3,r0,ramtest1
-FFFFFFFFFFFFF090.2	02210000008		 	addi	r8,r8,#8		; increment RAM pointer
-FFFFFFFFFFFFF0A0.0	38000000000	
-FFFFFFFFFFFFF0A0.1	03207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
-FFFFFFFFFFFFF0A0.2	080C5FFFFF9		 	bltz	r3,r0,ramtest2
-FFFFFFFFFFFFF0B0.0	           		 ramtest1:
-FFFFFFFFFFFFF0B0.0	01200A00009		 	or		r10,r8,r0		; r10 = max ram address
+FFFFFFFFFFFFFB00.0	           		 	code
+FFFFFFFFFFFFFB00.0	           		 	align	16
+FFFFFFFFFFFFFB00.0	           		 ramtest:
+FFFFFFFFFFFFFB00.0	01000800009		 	or		r8,r0,r0		; r8 = 0
+FFFFFFFFFFFFFB00.1	3D5552AAAD5	
+FFFFFFFFFFFFFB00.2	05802AA5555		 	ori		r1,r0,#0xAAAA5555AAAA5555	; checkerboard pattern
+FFFFFFFFFFFFFB10.0	           		 ramtest2:
+FFFFFFFFFFFFFB10.0	19A02000000		 	sw		r1,[r8]			; save the checkerboard to memory
+FFFFFFFFFFFFFB10.1	11A04000000		 	lw		r2,[r8]			; read it back
+FFFFFFFFFFFFFB10.2	01044300006		 	cmp		r3,r1,r2		; is it the same ?
+FFFFFFFFFFFFFB20.0	2F8C00000C9		 	bne 	r3,r0,ramtest1
+FFFFFFFFFFFFFB20.1	02A10000008		 	addui	r8,r8,#8		; increment RAM pointer
+FFFFFFFFFFFFFB20.2	38000000002	
+FFFFFFFFFFFFFB30.0	04206000000		 	cmpi	r3,r8,#0x0000_0000_0400_0000
+FFFFFFFFFFFFFB30.1	2F8C1FFFF00		 	blt		r3,r0,ramtest2
+FFFFFFFFFFFFFB30.2	           		 ramtest1:
+FFFFFFFFFFFFFB30.2	01200A00009		 	or		r10,r8,r0		; r10 = max ram address
                   	           		 	; readback the checkerboard pattern
-FFFFFFFFFFFFF0B0.1	01000800009		 	or		r8,r0,r0		; r8 = 0
-FFFFFFFFFFFFF0B0.2	           		 ramtest4:
-FFFFFFFFFFFFF0B0.2	11A04000000		 	lw		r2,[r8]
-FFFFFFFFFFFFF0C0.0	3D5552AAAD5	
-FFFFFFFFFFFFF0C0.1	03086AA5555		 	cmpi	r3,r2,#0xAAAA5555AAAA5555
-FFFFFFFFFFFFF0C0.2	080C2000009		 	bnez	r3,r0,ramtest3
-FFFFFFFFFFFFF0D0.0	02210000008		 	addi	r8,r8,#8
-FFFFFFFFFFFFF0D0.1	38000000000	
-FFFFFFFFFFFFF0D0.2	03207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
-FFFFFFFFFFFFF0E0.0	080C5FFFFF6		 	bltz	r3,r0,ramtest4
-FFFFFFFFFFFFF0E0.1	           		 ramtest3:
-FFFFFFFFFFFFF0E0.1	28A1400001E		 	bne		r8,r10,ramtest8	; check for equal maximum address
+FFFFFFFFFFFFFB40.0	01000800009		 	or		r8,r0,r0		; r8 = 0
+FFFFFFFFFFFFFB40.1	           		 ramtest4:
+FFFFFFFFFFFFFB40.1	11A04000000		 	lw		r2,[r8]
+FFFFFFFFFFFFFB40.2	3D5552AAAD5	
+FFFFFFFFFFFFFB50.0	04086AA5555		 	cmpi	r3,r2,#0xAAAA5555AAAA5555
+FFFFFFFFFFFFFB50.1	2F8C0000109		 	bne		r3,r0,ramtest3
+FFFFFFFFFFFFFB50.2	02210000008		 	addi	r8,r8,#8
+FFFFFFFFFFFFFB60.0	38000000000	
+FFFFFFFFFFFFFB60.1	04207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
+FFFFFFFFFFFFFB60.2	2F8C1FFFF20		 	blt 	r3,r0,ramtest4
+FFFFFFFFFFFFFB70.0	           		 ramtest3:
+FFFFFFFFFFFFFB70.0	2FA140003A9		 	bne		r8,r10,ramtest8	; check for equal maximum address
                   	           		 
                   	           		 	; perform ramtest again with inverted checkerboard
-FFFFFFFFFFFFF0E0.2	01000800009		 	or		r8,r0,r0		; r8 = 0
-FFFFFFFFFFFFF0F0.0	3AAAAD5552A	
-FFFFFFFFFFFFF0F0.1	0480355AAAA		 	ori		r1,r0,#0x5555AAAA5555AAAA
-FFFFFFFFFFFFF0F0.2	           		 ramtest5:
-FFFFFFFFFFFFF0F0.2	19A02000000		 	sw		r1,[r8]
-FFFFFFFFFFFFF100.0	11A04000000		 	lw		r2,[r8]
-FFFFFFFFFFFFF100.1	01044300006		 	cmp		r3,r1,r2
-FFFFFFFFFFFFF100.2	080C2000009		 	bnez	r3,r0,ramtest6
-FFFFFFFFFFFFF110.0	02210000008		 	addi	r8,r8,#8
-FFFFFFFFFFFFF110.1	38000000000	
-FFFFFFFFFFFFF110.2	03207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
-FFFFFFFFFFFFF120.0	080C5FFFFF6		 	bltz	r3,r0,ramtest5
-FFFFFFFFFFFFF120.1	           		 ramtest6:
-FFFFFFFFFFFFF120.1	01200B00009		 	or		r11,r8,r0		; r11 = max ram address
+FFFFFFFFFFFFFB70.1	01000800009		 	or		r8,r0,r0		; r8 = 0
+FFFFFFFFFFFFFB70.2	3AAAAD5552A	
+FFFFFFFFFFFFFB80.0	0580355AAAA		 	ori		r1,r0,#0x5555AAAA5555AAAA
+FFFFFFFFFFFFFB80.1	           		 ramtest5:
+FFFFFFFFFFFFFB80.1	19A02000000		 	sw		r1,[r8]
+FFFFFFFFFFFFFB80.2	11A04000000		 	lw		r2,[r8]
+FFFFFFFFFFFFFB90.0	01044300006		 	cmp		r3,r1,r2
+FFFFFFFFFFFFFB90.1	2F8C0000109		 	bne		r3,r0,ramtest6
+FFFFFFFFFFFFFB90.2	02210000008		 	addi	r8,r8,#8
+FFFFFFFFFFFFFBA0.0	38000000000	
+FFFFFFFFFFFFFBA0.1	04207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
+FFFFFFFFFFFFFBA0.2	2F8C1FFFF20		 	blt		r3,r0,ramtest5
+FFFFFFFFFFFFFBB0.0	           		 ramtest6:
+FFFFFFFFFFFFFBB0.0	01200B00009		 	or		r11,r8,r0		; r11 = max ram address
                   	           		 	; readback checkerboard
-FFFFFFFFFFFFF120.2	01000800009		 	or		r8,r0,r0
-FFFFFFFFFFFFF130.0	           		 ramtest7:
-FFFFFFFFFFFFF130.0	11A04000000		 	lw		r2,[r8]
-FFFFFFFFFFFFF130.1	3AAAAD5552A	
-FFFFFFFFFFFFF130.2	0308755AAAA		 	cmpi	r3,r2,#0x5555AAAA5555AAAA
-FFFFFFFFFFFFF140.0	080C2000006		 	bnez	r3,r0,ramtest8
-FFFFFFFFFFFFF140.1	02210000008		 	addi	r8,r8,#8
-FFFFFFFFFFFFF140.2	38000000000	
-FFFFFFFFFFFFF150.0	03207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
-FFFFFFFFFFFFF150.1	080C5FFFFF8		 	bltz	r3,r0,ramtest7
-FFFFFFFFFFFFF150.2	           		 ramtest8:
-FFFFFFFFFFFFF150.2	28216000005		 	beq		r8,r11,ramtest9
-FFFFFFFFFFFFF160.0	01216800014		 	min		r8,r8,r11
-FFFFFFFFFFFFF160.1	           		 ramtest9:
-FFFFFFFFFFFFF160.1	28214000004		 	beq		r8,r10,ramtest10
-FFFFFFFFFFFFF160.2	01214800014		 	min		r8,r8,r10
-FFFFFFFFFFFFF170.0	           		 ramtest10:
-FFFFFFFFFFFFF170.0	19810000400		 	sw		r8,0x00000400	;memend
+FFFFFFFFFFFFFBB0.1	01000800009		 	or		r8,r0,r0
+FFFFFFFFFFFFFBB0.2	           		 ramtest7:
+FFFFFFFFFFFFFBB0.2	11A04000000		 	lw		r2,[r8]
+FFFFFFFFFFFFFBC0.0	3AAAAD5552A	
+FFFFFFFFFFFFFBC0.1	0408755AAAA		 	cmpi	r3,r2,#0x5555AAAA5555AAAA
+FFFFFFFFFFFFFBC0.2	2F8C0000129		 	bne		r3,r0,ramtest8
+FFFFFFFFFFFFFBD0.0	02210000008		 	addi	r8,r8,#8
+FFFFFFFFFFFFFBD0.1	38000000000	
+FFFFFFFFFFFFFBD0.2	04207000000		 	cmpi	r3,r8,#0x0000_0000_0100_0000
+FFFFFFFFFFFFFBE0.0	2F8C1FFFEC0		 	blt		r3,r0,ramtest7
+FFFFFFFFFFFFFBE0.1	           		 ramtest8:
+FFFFFFFFFFFFFBE0.1	2FA16000088		 	beq		r8,r11,ramtest9
+FFFFFFFFFFFFFBE0.2	01216800014		 	min		r8,r8,r11
+FFFFFFFFFFFFFBF0.0	           		 ramtest9:
+FFFFFFFFFFFFFBF0.0	2FA14000048		 	beq		r8,r10,ramtest10
+FFFFFFFFFFFFFBF0.1	01214800014		 	min		r8,r8,r10
+FFFFFFFFFFFFFBF0.2	           		 ramtest10:
+FFFFFFFFFFFFFBF0.2	19810000400		 	sw		r8,0x00000400	;memend
+FFFFFFFFFFFFFC00.0	0DFBE000000		 	ret
+                  	           		 
+                  	           		 ;-------------------------------------------
+                  	           		 ; IRQ routine
+                  	           		 ;-------------------------------------------
+FFFFFFFFFFFFFC00.1	           		 irqrout:
+FFFFFFFFFFFFFC00.1	03FBC000010		 	subui	sp,sp,#16
+FFFFFFFFFFFFFC00.2	27F40000001		 	sm		[sp],r1/lr
+FFFFFFFFFFFFFC10.0	20803DC0FF0		 	inch	r1,PIC
+FFFFFFFFFFFFFC10.1	2C06C140001		 	beqi	r1,#1,ColdStart
+FFFFFFFFFFFFFC10.2	           		 irqrout3:
+FFFFFFFFFFFFFC10.2	2C840180002		 	bnei	r1,#2,irqrout2
+FFFFFFFFFFFFFC20.0	0C7FFFFFACC		 	call	Pulse1000
+FFFFFFFFFFFFFC20.1	2F8000000AA		 	bra		irqrout1
+FFFFFFFFFFFFFC20.2	           		 irqrout2:
+FFFFFFFFFFFFFC20.2	2C84014000F		 	bnei	r1,#15,irqrout1
+FFFFFFFFFFFFFC30.0	0C7FFFFFA75		 	call	KeybdIRQ
+FFFFFFFFFFFFFC30.1	           		 irqrout1:
+FFFFFFFFFFFFFC30.1	27740000001		 	lm		[sp],r1/lr
+FFFFFFFFFFFFFC30.2	02FBC000010		 	addui	sp,sp,#16
+FFFFFFFFFFFFFC40.0	00000000020		 	iret
+                  	           		 
+                  	           		 ;-------------------------------------------
+                  	           		 ; NMI routine
+                  	           		 ;-------------------------------------------
+FFFFFFFFFFFFFC40.1	           		 nmirout:
+FFFFFFFFFFFFFC40.1	00000000020		 	iret
+                  	           		 
+                  	           		 ;-------------------------------------------
+                  	           		 ; Handle miss on Data TLB
+                  	           		 ;-------------------------------------------
+FFFFFFFFFFFFFC40.2	           		 DTLBHandler:
+FFFFFFFFFFFFFC40.2	19803FF0000		 	sw		r1,0xFFFF_FFFF_FFFF_0000
+FFFFFFFFFFFFFC50.0	19805FF0008		 	sw		r2,0xFFFF_FFFF_FFFF_0008
+FFFFFFFFFFFFFC50.1	           		 dh1:
+FFFFFFFFFFFFFC50.1	00802000034		 	omgi	r1,#0		; try open mutex gate #0 (TLB protector)
+FFFFFFFFFFFFFC50.2	2F840000029		 	bne		r1,r0,dh1	; spinlock if gate is closed
+FFFFFFFFFFFFFC60.0	00802000228		 	mfspr	r1,PTA		; get the page table address
+FFFFFFFFFFFFFC60.1	00804000428		 	mfspr	r2,BadVAddr	; get the bad virtual address
+FFFFFFFFFFFFFC60.2	008800005A9		 	mtspr	TLBVirtPage,r2	; which virtual address to update
+FFFFFFFFFFFFFC70.0	01884680001		 	shrui	r2,r2,#13	; turn va into index
+FFFFFFFFFFFFFC70.1	01044100003		 	addu	r1,r1,r2
+FFFFFFFFFFFFFC70.2	11844000000		 	lw		r2,[r1]		; get the physical address from the table
+FFFFFFFFFFFFFC80.0	05084000000		 	and		r2,r2,#FFFF_FFFF_FFFF_E000	; mask off lower bits
+FFFFFFFFFFFFFC80.1	00880000529		 	mtspr	TLBPhysPage0,r2	;
+FFFFFFFFFFFFFC80.2	11844000008		 	lw		r2,8[r1]	; get the physical address from the table
+FFFFFFFFFFFFFC90.0	05084000000		 	and		r2,r2,#FFFF_FFFF_FFFF_E000	; mask off lower bits
+FFFFFFFFFFFFFC90.1	008800005A9		 	mtspr	TLBPhysPage1,r2	;
+FFFFFFFFFFFFFC90.2	00800000034		 	tlbwr				; update a random entry in the TLB
+FFFFFFFFFFFFFCA0.0	00800000035		 	cmgi	#0			; close the mutex gate
+FFFFFFFFFFFFFCA0.1	11803FF0000		 	lw		r1,0xFFFF_FFFF_FFFF_0000
+FFFFFFFFFFFFFCA0.2	11805FF0008		 	lw		r2,0xFFFF_FFFF_FFFF_0008
+FFFFFFFFFFFFFCB0.0	00000000020		 	iret
+FFFFFFFFFFFFFCB0.1	37800000000		 	nop
+FFFFFFFFFFFFFCB0.2	37800000000		 	nop
                   	           		 	
+FFFFFFFFFFFFFFB0.0	           		 	org		0xFFFF_FFFF_FFFF_FFB0
+FFFFFFFFFFFFFFB0.0	0CFFFFFFF12		 	jmp		DTLBHandler
+FFFFFFFFFFFFFFB0.1	37800000000		 	nop
+FFFFFFFFFFFFFFB0.2	37800000000		 	nop
 FFFFFFFFFFFFFFC0.0	           		 	org		0xFFFF_FFFF_FFFF_FFC0
-FFFFFFFFFFFFFFC0.0	37800000000		 	nop
+FFFFFFFFFFFFFFC0.0	0CFFFFFFF12		 	jmp		DTLBHandler
 FFFFFFFFFFFFFFC0.1	37800000000		 	nop
 FFFFFFFFFFFFFFC0.2	37800000000		 	nop
-FFFFFFFFFFFFFFD0.0	37800000000		 	nop
+FFFFFFFFFFFFFFD0.0	           		 	org     0xFFFF_FFFF_FFFF_FFD0
+FFFFFFFFFFFFFFD0.0	0CFFFFFFF01		 	jmp		irqrout
 FFFFFFFFFFFFFFD0.1	37800000000		 	nop
 FFFFFFFFFFFFFFD0.2	37800000000		 	nop
-FFFFFFFFFFFFFFE0.0	37800000000		 	nop
+FFFFFFFFFFFFFFE0.0	           		 	org     0xFFFF_FFFF_FFFF_FFE0
+FFFFFFFFFFFFFFE0.0	0CFFFFFFF11		 	jmp		nmirout
 FFFFFFFFFFFFFFE0.1	37800000000		 	nop
 FFFFFFFFFFFFFFE0.2	37800000000		 	nop
 FFFFFFFFFFFFFFF0.0	           		 	org		0xFFFF_FFFF_FFFF_FFF0
-FFFFFFFFFFFFFFF0.0	0CFFFFFFC00		 	jmp		start
+FFFFFFFFFFFFFFF0.0	0CFFFFFFA09		 	jmp		start
+FFFFFFFFFFFFFFF0.1	37800000000		 	nop
+FFFFFFFFFFFFFFF0.2	37800000000		 	nop
                   	           		 
-FFFFFFFFFFFFFFF0.1	00000000000		 
-FFFFFFFFFFFFFFF0.2	00000000000		 
+                  	           		 
+                  	           		 
+0000000000000000.0	00000000000		 
+0000000000000000.1	00000000000		 
+ 
+ 
+Symbol Table:
+==========================================================
+Name                   Typ  Segment     Address/Value
+----------------------------------------------------------
+CR                  	C	constant	000000000000000D
+LF                  	C	constant	000000000000000A
+TAB                 	C	constant	0000000000000009
+CTRLC               	C	constant	0000000000000003
+CTRLH               	C	constant	0000000000000008
+CTRLS               	C	constant	0000000000000013
+CTRLX               	C	constant	0000000000000018
+STACKTOP            	C	constant	FFFFFFFFFFFEFFF8
+Milliseconds        	C	constant	0000000000000400
+Lastloc             	C	constant	0000000000000408
+ScreenColor         	C	constant	0000000000000414
+CursorRow           	C	constant	0000000000000416
+CursorCol           	C	constant	0000000000000418
+KeybdEcho           	C	constant	000000000000041A
+KeybdBuffer         	C	constant	0000000000000440
+KeybdHead           	C	constant	0000000000000450
+KeybdTail           	C	constant	0000000000000451
+TEXTSCR             	C	constant	FFFFFFFFFFD00000
+COLORSCR            	C	constant	FFFFFFFFFFD10000
+TEXTREG             	C	constant	FFFFFFFFFFDA0000
+TEXT_COLS           	C	constant	0000000000000000
+TEXT_ROWS           	C	constant	0000000000000002
+TEXT_CURPOS         	C	constant	0000000000000016
+KEYBD               	C	constant	FFFFFFFFFFDC0000
+KEYBDCLR            	C	constant	FFFFFFFFFFDC0002
+UART                	C	constant	FFFFFFFFFFDC0A00
+UART_LS             	C	constant	FFFFFFFFFFDC0A01
+PIC                 	C	constant	FFFFFFFFFFDC0FF0
+PSG                 	C	constant	FFFFFFFFFFD50000
+AC97                	C	constant	FFFFFFFFFFDC1000
+BOOT_STACK          	C	constant	FFFFFFFFFFFEFFF8
+BITMAPSCR           	C	constant	0000000100200000
+txempty             	C	constant	0000000000000040
+rxfull              	C	constant	0000000000000001
+SerialGetChar       	L	code    	FFFFFFFFFFFFE950.0
+SerialPutChar       	L	code    	FFFFFFFFFFFFE980.0
+SetKeyboardEcho     	L	code    	FFFFFFFFFFFFEA40.0
+KeybdCheckForKey    	L	code    	FFFFFFFFFFFFEA90.2
+KeybdGetChar        	L	code    	FFFFFFFFFFFFEA40.2
+DisplayChar         	L	code    	FFFFFFFFFFFFED90.1
+DisplayString       	L	code    	FFFFFFFFFFFFEFD0.1
+start               	L	code    	FFFFFFFFFFFFE820.1
+ColdStart           	L	code    	FFFFFFFFFFFFE820.1
+KeybdInit           	L	code    	FFFFFFFFFFFFE9B0.2
+PICInit             	L	code    	FFFFFFFFFFFFE940.0
+dcokay              	L	code    	FFFFFFFFFFFFE870.1
+ClearScreen         	L	code    	FFFFFFFFFFFFEC10.2
+ClearBmpScreen      	L	code    	FFFFFFFFFFFFEBD0.0
+j4                  	L	code    	FFFFFFFFFFFFE8C0.2
+Monitor             	L	code    	FFFFFFFFFFFFF290.2
+HelloWorld          	L	code    	FFFFFFFFFFFFE8D0.1
+j3                  	L	code    	FFFFFFFFFFFFE8E0.1
+j2                  	L	code    	FFFFFFFFFFFFE900.0
+MSG                 	L	code    	FFFFFFFFFFFFE910.0
+MSGSTART            	L	code    	FFFFFFFFFFFFE920.0
+sgc1                	L	code    	FFFFFFFFFFFFF810.0
+spc1                	L	code    	FFFFFFFFFFFFE990.1
+KeybdIRQ            	L	code    	FFFFFFFFFFFFE9D0.1
+KeybdIRQa           	L	code    	FFFFFFFFFFFFE9F0.1
+KeybdIRQb           	L	code    	FFFFFFFFFFFFEA10.1
+KeybdIRQc           	L	code    	FFFFFFFFFFFFEA30.0
+nochar              	L	code    	FFFFFFFFFFFFEA80.2
+kck1                	L	code    	FFFFFFFFFFFFEAB0.1
+KeybdCheckForKeyDirect	L	code    	FFFFFFFFFFFFEAC0.0
+cfkd1               	L	code    	FFFFFFFFFFFFEAD0.1
+KeybdGetCharDirect  	L	code    	FFFFFFFFFFFFEAE0.0
+kgc1                	L	code    	FFFFFFFFFFFFEAF0.0
+gk1                 	L	code    	FFFFFFFFFFFFEB20.1
+gk2                 	L	code    	FFFFFFFFFFFFEB20.0
+CRLF                	L	code    	FFFFFFFFFFFFF020.1
+Pulse1000           	L	code    	FFFFFFFFFFFFEB30.0
+p10001              	L	code    	FFFFFFFFFFFFEB70.2
+FlashCursor         	L	code    	FFFFFFFFFFFFEB80.1
+CalcScreenLoc       	L	code    	FFFFFFFFFFFFED50.1
+flshcrsr1           	L	code    	FFFFFFFFFFFFEBC0.1
+csj4                	L	code    	FFFFFFFFFFFFEC50.0
+AsciiToScreen       	L	code    	FFFFFFFFFFFFED10.1
+ScrollUp            	L	code    	FFFFFFFFFFFFEC70.0
+scrup1              	L	code    	FFFFFFFFFFFFEC90.2
+BlankLine           	L	code    	FFFFFFFFFFFFECD0.0
+blnkln1             	L	code    	FFFFFFFFFFFFECF0.2
+atoscr1             	L	code    	FFFFFFFFFFFFED30.1
+ScreenToAscii       	L	code    	FFFFFFFFFFFFED40.0
+stasc1              	L	code    	FFFFFFFFFFFFED50.0
+dccr                	L	code    	FFFFFFFFFFFFEDB0.0
+dcx7                	L	code    	FFFFFFFFFFFFEDD0.1
+dcx6                	L	code    	FFFFFFFFFFFFEDE0.1
+dcx8                	L	code    	FFFFFFFFFFFFEE10.0
+dcx9                	L	code    	FFFFFFFFFFFFEE30.2
+dcx10               	L	code    	FFFFFFFFFFFFEE60.1
+dcx11               	L	code    	FFFFFFFFFFFFEE90.1
+dcx12               	L	code    	FFFFFFFFFFFFEE80.2
+dcx13               	L	code    	FFFFFFFFFFFFEEB0.2
+dcx5                	L	code    	FFFFFFFFFFFFEEE0.1
+dcx3                	L	code    	FFFFFFFFFFFFEF10.2
+dcx4                	L	code    	FFFFFFFFFFFFEF50.1
+dclf                	L	code    	FFFFFFFFFFFFEF50.0
+IncCursorPos        	L	code    	FFFFFFFFFFFFEF60.0
+IncCursorRow        	L	code    	FFFFFFFFFFFFEF90.0
+icc1                	L	code    	FFFFFFFFFFFFEFC0.1
+icr1                	L	code    	FFFFFFFFFFFFEF90.2
+dspj1               	L	code    	FFFFFFFFFFFFEFE0.1
+dsret               	L	code    	FFFFFFFFFFFFF000.0
+DisplayStringCRLF   	L	code    	FFFFFFFFFFFFF000.2
+DisplayNybble       	L	code    	FFFFFFFFFFFFF050.2
+dispnyb1            	L	code    	FFFFFFFFFFFFF080.0
+DisplayByte         	L	code    	FFFFFFFFFFFFF090.1
+DisplayWord         	L	code    	FFFFFFFFFFFFF0C0.0
+dspwd1              	L	code    	FFFFFFFFFFFFF0D0.0
+DisplayMem          	L	code    	FFFFFFFFFFFFF0E0.2
+dspmem1             	L	code    	FFFFFFFFFFFFF110.0
+BinToBCD            	L	code    	FFFFFFFFFFFFF140.0
+bta1                	L	code    	FFFFFFFFFFFFF150.1
+BCDToAscii          	L	code    	FFFFFFFFFFFFF1B0.0
+bta2                	L	code    	FFFFFFFFFFFFF1C0.0
+BinToStr            	L	code    	FFFFFFFFFFFFF200.2
+btos3               	L	code    	FFFFFFFFFFFFF230.0
+btos1               	L	code    	FFFFFFFFFFFFF230.1
+btos2               	L	code    	FFFFFFFFFFFFF270.1
+PromptLn            	L	code    	FFFFFFFFFFFFF2A0.1
+Prompt3             	L	code    	FFFFFFFFFFFFF2B0.1
+Prompt1             	L	code    	FFFFFFFFFFFFF2D0.0
+Prompt2             	L	code    	FFFFFFFFFFFFF300.1
+Editmem             	L	code    	FFFFFFFFFFFFF450.0
+Dumpmem             	L	code    	FFFFFFFFFFFFF4A0.0
+ExecuteCode         	L	code    	FFFFFFFFFFFFF480.1
+LoadS19             	L	code    	FFFFFFFFFFFFF590.0
+DisplayHelp         	L	code    	FFFFFFFFFFFFF370.1
+TestCLS             	L	code    	FFFFFFFFFFFFF330.0
+HelpMsg             	L	code    	FFFFFFFFFFFFF390.0
+ignBlanks           	L	code    	FFFFFFFFFFFFF420.0
+ignBlanks1          	L	code    	FFFFFFFFFFFFF420.2
+GetHexNumber        	L	code    	FFFFFFFFFFFFF4E0.1
+edtmem1             	L	code    	FFFFFFFFFFFFF460.1
+gthxn2              	L	code    	FFFFFFFFFFFFF4F0.2
+AsciiToHexNybble    	L	code    	FFFFFFFFFFFFF530.2
+gthxn1              	L	code    	FFFFFFFFFFFFF520.2
+gthx3               	L	code    	FFFFFFFFFFFFF580.1
+gthx5               	L	code    	FFFFFFFFFFFFF550.0
+gthx6               	L	code    	FFFFFFFFFFFFF560.2
+ProcessRec          	L	code    	FFFFFFFFFFFFF5A0.0
+NextRec             	L	code    	FFFFFFFFFFFFF590.1
+sGetChar            	L	code    	FFFFFFFFFFFFF7F0.0
+ProcessS1           	L	code    	FFFFFFFFFFFFF690.1
+ProcessS2           	L	code    	FFFFFFFFFFFFF6A0.0
+ProcessS3           	L	code    	FFFFFFFFFFFFF6A0.2
+ProcessS7           	L	code    	FFFFFFFFFFFFF6B0.1
+ProcessS8           	L	code    	FFFFFFFFFFFFF6C0.1
+ProcessS9           	L	code    	FFFFFFFFFFFFF6D0.1
+pcssxa              	L	code    	FFFFFFFFFFFFF620.0
+pcss1a              	L	code    	FFFFFFFFFFFFF620.2
+S19Get16BitAddress  	L	code    	FFFFFFFFFFFFF6E0.1
+S19Get24BitAddress  	L	code    	FFFFFFFFFFFFF700.1
+S19Get32BitAddress  	L	code    	FFFFFFFFFFFFF720.1
+S1932b              	L	code    	FFFFFFFFFFFFF790.1
+S1932a              	L	code    	FFFFFFFFFFFFF760.2
+sgc2                	L	code    	FFFFFFFFFFFFF7F0.2
+AUXIN               	L	code    	FFFFFFFFFFFFF8C0.0
+SetupAC97           	L	code    	FFFFFFFFFFFFF820.2
+sac971              	L	code    	FFFFFFFFFFFFF830.1
+sac972              	L	code    	FFFFFFFFFFFFF850.1
+Beep                	L	code    	FFFFFFFFFFFFF850.2
+beep1               	L	code    	FFFFFFFFFFFFF8B0.0
+AXIRET              	L	code    	FFFFFFFFFFFFF8D0.2
+BYEBYE              	L	code    	FFFFFFFFFFFFF8E0.0
+msgInit             	L	code    	FFFFFFFFFFFFF8F0.0
+OKMSG               	L	code    	FFFFFFFFFFFFFADF.0
+msgWhat             	L	code    	FFFFFFFFFFFFF92D.0
+SRYMSG              	L	code    	FFFFFFFFFFFFFAF0.0
+CLMSG               	L	code    	FFFFFFFFFFFFFAF2.0
+msgReadError        	L	code    	FFFFFFFFFFFFF93E.0
+msgNumTooBig        	L	code    	FFFFFFFFFFFFF959.0
+msgDivZero          	L	code    	FFFFFFFFFFFFF96D.0
+msgVarSpace         	L	code    	FFFFFFFFFFFFF980.0
+msgBytesFree        	L	code    	FFFFFFFFFFFFF998.0
+msgReady            	L	code    	FFFFFFFFFFFFF9A6.0
+msgComma            	L	code    	FFFFFFFFFFFFF9B0.0
+msgLineRange        	L	code    	FFFFFFFFFFFFF9C4.0
+msgVar              	L	code    	FFFFFFFFFFFFF9DA.0
+msgRNDBad           	L	code    	FFFFFFFFFFFFF9F1.0
+msgSYSBad           	L	code    	FFFFFFFFFFFFFA05.0
+msgInputVar         	L	code    	FFFFFFFFFFFFFA17.0
+msgNextFor          	L	code    	FFFFFFFFFFFFFA34.0
+msgNextVar          	L	code    	FFFFFFFFFFFFFA47.0
+msgBadGotoGosub     	L	code    	FFFFFFFFFFFFFA6B.0
+msgRetWoGosub       	L	code    	FFFFFFFFFFFFFA88.0
+msgTooBig           	L	code    	FFFFFFFFFFFFFA9F.0
+msgExtraChars       	L	code    	FFFFFFFFFFFFFAB4.0
+INITMSG             	L	code    	FFFFFFFFFFFFFAD7.0
+HOWMSG              	L	code    	FFFFFFFFFFFFFAE6.0
+WHTMSG              	L	code    	FFFFFFFFFFFFFAEB.0
+LSTROM              	C	constant	0000000000000000
+typef               	L	bss     	0000000000000080
+OSSP                	L	bss     	0000000000000088
+CURRNT              	L	bss     	0000000000000090
+STKGOS              	L	bss     	0000000000000098
+STKINP              	L	bss     	00000000000000A0
+LOPVAR              	L	bss     	00000000000000A8
+LOPINC              	L	bss     	00000000000000B0
+LOPLMT              	L	bss     	00000000000000B8
+LOPLN               	L	bss     	00000000000000C0
+LOPPT               	L	bss     	00000000000000C8
+TXTUNF              	L	bss     	00000000000000D0
+VARBGN              	L	bss     	00000000000000D8
+IVARBGN             	L	bss     	00000000000000E0
+SVARBGN             	L	bss     	00000000000000E8
+FVARBGN             	L	bss     	00000000000000F0
+STKBOT              	L	bss     	00000000000000F8
+NUMWKA              	L	bss     	0000000000000100
+BUFFER              	L	bss     	000000000000010E
+ramtest             	L	code    	FFFFFFFFFFFFFB00.0
+ramtest2            	L	code    	FFFFFFFFFFFFFB10.0
+ramtest1            	L	code    	FFFFFFFFFFFFFB30.2
+ramtest4            	L	code    	FFFFFFFFFFFFFB40.1
+ramtest3            	L	code    	FFFFFFFFFFFFFB70.0
+ramtest8            	L	code    	FFFFFFFFFFFFFBE0.1
+ramtest5            	L	code    	FFFFFFFFFFFFFB80.1
+ramtest6            	L	code    	FFFFFFFFFFFFFBB0.0
+ramtest7            	L	code    	FFFFFFFFFFFFFBB0.2
+ramtest9            	L	code    	FFFFFFFFFFFFFBF0.0
+ramtest10           	L	code    	FFFFFFFFFFFFFBF0.2
+irqrout             	L	code    	FFFFFFFFFFFFFC00.1
+irqrout3            	L	code    	FFFFFFFFFFFFFC10.2
+irqrout2            	L	code    	FFFFFFFFFFFFFC20.2
+irqrout1            	L	code    	FFFFFFFFFFFFFC30.1
+nmirout             	L	code    	FFFFFFFFFFFFFC40.1
+DTLBHandler         	L	code    	FFFFFFFFFFFFFC40.2
+dh1                 	L	code    	FFFFFFFFFFFFFC50.1
