@@ -36,22 +36,25 @@
 `define TLBMissPage		52'hFFFF_FFFF_FFFF_F
 `define ITLB_MissHandler	64'hFFFF_FFFF_FFFF_FFC0
 `define DTLB_MissHandler	64'hFFFF_FFFF_FFFF_FFB0
+`define BERR_VECTOR		64'hFFFF_FFFF_FFFF_FFA0
 
 `define GEN_TRAP_OFFSET		13'h0200
 `define DBZ_TRAP_OFFSET		13'h0050
 `define OFL_TRAP_OFFSET		13'h0070
 `define PRIV_OFFSET			13'h0080
 
-`define EX_NON		8'd0
-`define EX_RST		8'd1
-`define EX_NMI		8'd2
-`define EX_IRQ		8'd3
-`define EX_TRAP		8'd4
-`define EX_PRIV		8'd5	// priviledge violation
-`define EX_OFL		8'd16	// overflow
-`define EX_DBZ		8'd17	// divide by zero
-`define EX_TLBI		8'd19	// TLB exception - ifetch
-`define EX_TLBD		8'd20	// TLB exception - data
+`define EX_NON		9'd000
+`define EX_TRAP		9'd32	// Trap exception
+`define EX_IRQ		9'd449	// interrupt
+`define EX_DBZ		9'd488	// divide by zero
+`define EX_OFL		9'd489	// overflow
+`define EX_PRIV		9'd496	// priviledge violation
+`define EX_TLBD		9'd506	// TLB exception - data
+`define EX_TLBI		9'd507	// TLB exception - ifetch
+`define EX_DBERR	9'd508	// Bus Error - load or store or I/O
+`define EX_IBERR	9'd509	// Bus Error - instruction fetch
+`define EX_NMI		9'd510	// non-maskable interrupt
+`define EX_RST		9'd511	// Reset
 
 `define EXCEPT_Int		5'd00
 `define EXCEPT_Mod		5'd01	// TLB modification
@@ -81,6 +84,8 @@
 `define		DCACHE_ON	7'd12
 `define		DCACHE_OFF	7'd13
 `define     FIP		7'd20
+`define		SYSJMP	7'd22
+`define 	SYSCALL	7'd23
 `define		IRET	7'd32
 `define		ERET	7'd33
 `define 	WAIT	7'd40
@@ -440,7 +445,7 @@
 `define NOP_INSN	42'b1101111_000_00000000_00000000_00000000_00000000
 
 module Raptor64sc(rst_i, clk_i, nmi_i, irq_i, bte_o, cti_o, bl_o,
-	cyc_o, stb_o, ack_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr
+	cyc_o, stb_o, ack_i, err_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr
 );
 parameter IDLE = 5'd1;
 parameter ICACT = 5'd2;
@@ -481,6 +486,7 @@ reg cyc_o;
 output stb_o;
 reg stb_o;
 input ack_i;
+input err_i;
 output we_o;
 reg we_o;
 output [7:0] sel_o;
@@ -501,10 +507,11 @@ wire fltdone = fltctr==6'd0;
 reg resetA;
 reg im,bu_im;			// interrupt mask
 reg im1;			// temporary interrupt mask for LM/SM
+reg [1:0] vtno;		// vector table number
 reg [1:0] rm;		// fp rounding mode
 reg FXE;			// fp exception enable
 wire KernelMode;
-wire [31:0] sr = {bu_im,15'd0,im,1'b0,KernelMode,FXE,12'b0};
+wire [31:0] sr = {bu_im,15'd0,im,1'b0,KernelMode,FXE,vtno,10'b0};
 reg [41:0] dIR;
 reg [41:0] ndIR;
 wire [6:0] dOpcode = dIR[41:35];
@@ -564,6 +571,7 @@ reg [7:0] ASID;		// address space identifier (process ID)
 integer n;
 reg [63:13] BadVAddr;
 reg [63:13] PageTableAddr;
+reg [63:0] errorAddress;
 
 function [63:0] fnIncPC;
 input [63:0] fpc;
@@ -761,12 +769,15 @@ wire ICacheAct = ICacheOn & isICached;
 reg [41:0] insn1;
 reg [41:0] insnkey;
 
+// SYSCALL 509
+wire [127:0] bevect = 128'b00_00000000_00000000_00000000_11111110_10010111__00_00000000_00000000_00000000_11111110_10010111__00_00000000_00000000_00000000_11111110_10010111;
+
 Raptor64_icache_ram u1
 (
 	.clka(clk), // input clka
-	.wea(icaccess & ack_i), // input [0 : 0] wea
+	.wea(icaccess & (ack_i|err_i)), // input [0 : 0] wea
 	.addra(adr_o[12:3]), // input [9 : 0] addra
-	.dina(dat_i), // input [63 : 0] dina
+	.dina(err_i ? (adr_o[3] ? bevect[127:64] : bevect[63:0]) : dat_i), // input [63 : 0] dina
 	.clkb(~clk), // input clkb
 	.addrb(pc[12:4]), // input [8 : 0] addrb
 	.doutb(insnbundle) // output [127 : 0] doutb
@@ -883,8 +894,9 @@ reg rsf;
 reg [63:5] resv_address;
 reg dirqf,rirqf,m1irqf,m2irqf,wirqf,tirqf;
 reg xirqf;
-reg [7:0] dextype,m1extype,m2extype,wextype,textype,exception_type;
-reg [7:0] xextype;
+reg [8:0] dextype,m1extype,m2extype,wextype,textype,exception_type;
+reg [8:0] xextype;
+reg wLdPC,m2LdPC;
 wire advanceX_edge;
 reg takb;
 
@@ -967,7 +979,7 @@ wire [63:0] fpZLOut;
 wire [63:0] fpLooOut;
 wire fpLooDone;
 
-
+/*
 fpZLUnit #(64) u30 
 (
 	.op(xFunc[5:0]),
@@ -988,7 +1000,7 @@ fpLOOUnit #(64) u31
 	.done(fpLooDone)
 );
 
-
+*/
 wire dcmp_result;
 wire [63:0] daddsub_result;
 wire [63:0] ddiv_result;
@@ -1411,8 +1423,8 @@ endcase
 // Datapath (ALU) operations.
 //-----------------------------------------------------------------------------
 wire [6:0] cntlzo,cntloo;
-cntlz64 u12 ( .i(a),  .o(cntlzo) );
-cntlo64 u13 ( .i(a),  .o(cntloo) );
+cntlz64 u12 (.clk(clk), .i(a),  .o(cntlzo) );
+cntlo64 u13 (.clk(clk), .i(a),  .o(cntloo) );
 
 reg [1:0] shftop;
 wire [63:0] shfto;
@@ -1467,7 +1479,8 @@ always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	or Wired or Index or Random or TLBPhysPage0 or TLBPhysPage1 or TLBVirtPage or TLBASID or
 	PageTableAddr or BadVAddr or ASID or TLBPageMask 
 `endif
-	or ASID or EPC or mutex_gate or IPC or CauseCode or TBA or xAXC or nonICacheSeg or rm
+	or ASID or EPC or mutex_gate or IPC or CauseCode or TBA or xAXC or nonICacheSeg or rm or
+	rando
 )
 casex(xOpcode)
 `R:
@@ -1690,6 +1703,8 @@ wire xIsMult = (xOpcode==`RR && (xFunc==`MULU || xFunc==`MULS)) ||
 	xOpcode==`MULSI || xOpcode==`MULUI;
 wire xIsDiv = (xOpcode==`RR && (xFunc==`DIVU || xFunc==`DIVS)) ||
 	xOpcode==`DIVSI || xOpcode==`DIVUI;
+wire xIsCnt = xOpcode==`R && (xFunc==`CTLZ || xFunc==`CTLO || xFunc==`CTPOP);
+reg m1IsCnt,m2IsCnt;
 
 wire xIsLoad =
 	xOpcode==`LW || xOpcode==`LH || xOpcode==`LB || xOpcode==`LWR ||
@@ -1703,8 +1718,10 @@ wire xIsLoad =
 		xFunc6==`LCX || xFunc6==`LCUX ||
 		xFunc6==`LFX || xFunc6==`LFDX || xFunc6==`LPX ||
 		xFunc6==`LSHX || xFunc6==`LSWX
-	))
+	)) ||
+	(xOpcode==`MISC && (xFunc==`SYSJMP || xFunc==`SYSCALL))
 	;
+
 wire xIsStore =
 	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC || xOpcode==`SM ||
 	xOpcode==`SF || xOpcode==`SFD || xOpcode==`SP || xOpcode==`SFP || xOpcode==`SFDP ||
@@ -1745,9 +1762,9 @@ wire m2needBus = (m2IsLoad | m2IsStore);
 
 // Stall on SWC allows rsf flag to be loaded for the next instruction
 // Currently stalls on load of R0, but doesn't need to.
-wire StallR =  	(((xIsLoad||xIsIn) && ((xRt==dRa)||(xRt==dRb)||(xRt==dRt))) || xIsSWC) ||
-				(((m1IsLoad||m1IsIn) && ((m1Rt==dRa)||(m1Rt==dRb)||(m1Rt==dRt)))) ||
-				(((m2IsLoad) && ((m2Rt==dRa)||(m2Rt==dRb)||(m2Rt==dRt))))
+wire StallR =  	(((xIsLoad||xIsIn||xIsCnt) && ((xRt==dRa)||(xRt==dRb)||(xRt==dRt))) || xIsSWC) ||
+				(((m1IsLoad||m1IsIn||m1IsCnt) && ((m1Rt==dRa)||(m1Rt==dRb)||(m1Rt==dRt)))) ||
+				(((m2IsLoad||m2IsCnt) && ((m2Rt==dRa)||(m2Rt==dRb)||(m2Rt==dRt))))
 				;
 wire StallX = xneedBus & (m1needBus|m2needBus|icaccess|dcaccess);
 wire StallM1 = (m1needBus & (m2needBus|icaccess|dcaccess)) ||
@@ -1758,11 +1775,11 @@ wire StallM2 =  icaccess|dcaccess;
 wire advanceT = !resetA;
 wire advanceW = advanceT;
 wire advanceM2 = advanceW &&
-					((m2IsLoad || m2IsStore) ? ack_i : 1'b1) &&
+					((m2IsLoad || m2IsStore) ? (ack_i|err_i) : 1'b1) &&
 					!StallM2
 					;
 wire advanceM1 = advanceM2 &
-					(m1IsIO ? ack_i : 1'b1) &
+					(m1IsIO ? (ack_i|err_i) : 1'b1) &
 					((m1IsLoad & m1IsCacheElement) ? dhit : 1'b1) & 
 					!StallM1
 					;
@@ -1981,6 +1998,8 @@ if (rst_i) begin
 	wData <= 64'd0;
 	m1Data <= 64'd0;
 	m2Data <= 64'd0;
+	m2LdPC <= 1'b0;
+	wLdPC <= 1'b0;
 	m1IsLoad <= 1'b0;
 	m2IsLoad <= 1'b0;
 	m1IsStore <= 1'b0;
@@ -2107,6 +2126,8 @@ end
 if (advanceW) begin
 	textype <= wextype;
 	wextype <= `EX_NON;
+	if (wextype==`EX_IRQ)
+		$display("wextype=IRQ");
 	tRt <= wRt;
 	tData <= wData;
 	if (wRt!=5'd0)
@@ -2126,6 +2147,7 @@ if (advanceW) begin
 	wData <= 64'd0;
 	wOpcode <= `NOPI;
 	wIsStore <= 1'b0;
+	wLdPC <= 1'b0;
 	if (|whwxtype) begin
 		dhwxtype <= 2'b00;
 		xhwxtype <= 2'b00;
@@ -2156,25 +2178,40 @@ if (advanceM2) begin
 	wOpcode <= m2Opcode;
 	wData <= m2Data;
 	whwxtype <= m2hwxtype;
-	wextype <= m2extype;
+	wextype <= (m2IsLoad|m2IsStore)&err_i ? `EX_DBERR : m2extype;
+	if (m2extype==`EX_IRQ)
+		$display("m2extype=IRQ");
 	wRt <= m2Rt;
 	wpc <= m2pc;
 	wpcv <= m2pcv;
 	wclkoff <= m2clkoff;
 	wFip <= m2Fip;
+	wLdPC <= m2LdPC;
 	
 	m2Rt <= 9'd0;
 	m2Opcode <= `NOPI;
 	m2IsLoad <= 1'b0;
 	m2IsStore <= 1'b0;
+	m2IsCnt <= 1'b0;
 	m2Func <= 7'd0;
 	m2Addr <= 64'd0;
 	m2Data <= 64'd0;
 	m2clkoff <= 1'b0;
 	m2pc <= 64'd0;
 	m2extype <= `EX_NON;
+	m2LdPC <= 1'b0;
+	if ((m2IsLoad|m2IsStore)&err_i)
+		errorAddress <= adr_o;
 	if (m2extype==`EX_NON) begin
 		case(m2Opcode)
+		`MISC:
+			if (m2Func==`SYSJMP || m2Func==`SYSCALL)
+				begin
+					cyc_o <= 1'b0;
+					stb_o <= 1'b0;
+					sel_o <= 8'h00;
+					wData <= {dat_i[63:2],2'b00};
+				end
 		`SH,`SC,`SB,`SW,`SWC,`SM,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP:
 			begin
 				cyc_o <= 1'b0;
@@ -2281,13 +2318,17 @@ wrhit <= 1'b0;
 //---------------------------------------------------------
 if (advanceM1) begin
 	m2Opcode <= m1Opcode;
+	m2Func <= m1Func;
 	m2IsLoad <= m1IsLoad;
 	m2IsStore <= m1IsStore;
+	m2IsCnt <= m1IsCnt;
 	m2Func <= m1Func;
 	m2Addr <= pea;
 	m2Data <= m1Data;
 	m2hwxtype <= m1hwxtype;
-	m2extype <= m1extype;
+	m2extype <= m1IsIO & err_i ? `EX_DBERR : m1extype;
+	if (m1extype==`EX_IRQ)
+		$display("m1extype=IRQ");
 	m2Rt <= m1Rt;
 	m2pc <= m1pc;
 	m2pcv <= m1pcv;
@@ -2297,6 +2338,7 @@ if (advanceM1) begin
 	m1Rt <= 9'd0;
 	m1IsLoad <= 1'b0;
 	m1IsStore <= 1'b0;
+	m1IsCnt <= 1'b0;
 	m1IsIO <= 1'b0;
 	m1Opcode <= `NOPI;
 	m1Func <= 7'd0;
@@ -2306,10 +2348,29 @@ if (advanceM1) begin
 	m1IsCacheElement <= 1'b0;
 	m1extype <= `EX_NON;
 
+	if (m1IsIO&err_i)
+		errorAddress <= adr_o;
+
 	if (m1extype == `EX_NON) begin
 		case(m1Opcode)
 		`MISC:
 			case(m1Func)
+			`SYSJMP,`SYSCALL:
+				begin
+				m2LdPC <= 1'b1;
+				if (!m1IsCacheElement) begin
+					cyc_o <= 1'b1;
+					stb_o <= 1'b1;
+					sel_o <= 8'hFF;
+					adr_o <= {pea[63:3],3'b000};
+					m2Addr <= {pea[63:3],3'b000};
+				end
+				else if (dhit) begin
+					m2IsLoad <= 1'b0;
+					m2Opcode <= `NOPI;
+					m2Data <= {cdat[63:2],2'b00};
+				end
+				end
 `ifdef TLB
 			`TLBP:
 				begin
@@ -2747,8 +2808,11 @@ if (advanceX) begin
 	m1hwxtype <= xhwxtype;
 	m1Fip <= xFip;
 	m1extype <= xextype;
+	if (xextype==`EX_IRQ)
+		$display("xextype=IRQ");
 	m1IsLoad <= xIsLoad;
 	m1IsStore <= xIsStore;
+	m1IsCnt <= xIsCnt;
 	m1IsIO <= xIsIO;
 	m1Opcode <= xOpcode;
 	m1Func <= xFunc;
@@ -2797,6 +2861,10 @@ if (advanceX) begin
 				m_z2 <= next_m_z2;
 				m_w1 <= next_m_w1;
 				m_w2 <= next_m_w2;
+				end
+		`SYSJMP,`SYSCALL:
+				begin
+				ea <= {TBA[63:12],xIR[15:7],3'b000};
 				end
 `ifdef TLB
 		`TLBP:	ea <= TLBVirtPage;
@@ -3053,6 +3121,8 @@ if (advanceR) begin
 	xhwxtype <= dhwxtype;
 	xFip <= dFip;
 	xextype <= dextype;
+	if (dextype==`EX_IRQ)
+		$display("dextype=IRQ");
 	if (dOpcode==`R && dFunc==`MYST)
 		xIR <= nxt_c;
 	else
@@ -3069,28 +3139,17 @@ if (advanceR) begin
 	dRb <= 9'd0;
 
 	a <= nxt_a;
-//	casex(dRb)
-//	9'bxxxx00000:	b <= 64'd0;
-//	xRt:	b <= disRightShift ? -xData[5:0] : xData;
-//	m1Rt:	b <= disRightShift ? -m1Data[5:0] : m1Data;
-//	m2Rt:	b <= disRightShift ? -m2Data[5:0] : m2Data;
-//	wRt:	b <= disRightShift ? -wData[5:0] : wData;
-//	tRt:	b <= disRightShift ? -tData[5:0] : tData;
-//	default:	b <= disRightShift ? -rfob[5:0] : rfob;
-//	endcase
 	b <= nxt_b;
 	if (dOpcode==`SHFTI)
 		b <= {58'd0,dIR[24:19]};
-//		case(dFunc)
-//		`RORI:		b <= {58'd0,~dIR[24:19]+6'd1};
-//		default:	b <= {58'd0,dIR[24:19]};
-//		endcase
 	c <= nxt_c;
 
 	// Set the target register
 	casex(dOpcode)
 	`R:
 		case(dFunc)
+		`MTSPR,`CMG,`CMGI,`EXEC:
+					xRt <= 9'd0;
 		`MYST:		xRt <= {dAXC,dIR[19:15]};
 		default:	xRt <= {dAXC,dIR[29:25]};
 		endcase
@@ -3100,7 +3159,7 @@ if (advanceR) begin
 	`BTRI:		xRt <= 9'd0;
 	`BTRR:
 		case(dIR[4:0])
-		`LOOP:	xRt <= {AXC,dIR[29:25]};
+		`LOOP:	xRt <= {dAXC,dIR[29:25]};
 		default: xRt <= 9'd0;
 		endcase
 	`TRAPcc:	xRt <= 9'd0;
@@ -3125,37 +3184,37 @@ if (advanceR) begin
 	`SM:		xRt <= 9'd0;
 	`LM:
 		casex(dIR[30:0])
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1:	xRt <= {AXC,5'd1};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxx10:	xRt <= {AXC,5'd2};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxx100:	xRt <= {AXC,5'd3};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxx1000:	xRt <= {AXC,5'd4};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxx10000:	xRt <= {AXC,5'd5};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxx100000:	xRt <= {AXC,5'd6};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxx1000000:	xRt <= {AXC,5'd7};
-		31'bxxxxxxxxxxxxxxxxxxxxxxx10000000:	xRt <= {AXC,5'd8};
-		31'bxxxxxxxxxxxxxxxxxxxxxx100000000:	xRt <= {AXC,5'd9};
-		31'bxxxxxxxxxxxxxxxxxxxxx1000000000:	xRt <= {AXC,5'd10};
-		31'bxxxxxxxxxxxxxxxxxxxx10000000000:	xRt <= {AXC,5'd11};
-		31'bxxxxxxxxxxxxxxxxxxx100000000000:	xRt <= {AXC,5'd12};
-		31'bxxxxxxxxxxxxxxxxxx1000000000000:	xRt <= {AXC,5'd13};
-		31'bxxxxxxxxxxxxxxxxx10000000000000:	xRt <= {AXC,5'd14};
-		31'bxxxxxxxxxxxxxxxx100000000000000:	xRt <= {AXC,5'd15};
-		31'bxxxxxxxxxxxxxxx1000000000000000:	xRt <= {AXC,5'd16};
-		31'bxxxxxxxxxxxxxx10000000000000000:	xRt <= {AXC,5'd17};
-		31'bxxxxxxxxxxxxx100000000000000000:	xRt <= {AXC,5'd18};
-		31'bxxxxxxxxxxxx1000000000000000000:	xRt <= {AXC,5'd19};
-		31'bxxxxxxxxxxx10000000000000000000:	xRt <= {AXC,5'd20};
-		31'bxxxxxxxxxx100000000000000000000:	xRt <= {AXC,5'd21};
-		31'bxxxxxxxxx1000000000000000000000:	xRt <= {AXC,5'd22};
-		31'bxxxxxxxx10000000000000000000000:	xRt <= {AXC,5'd23};
-		31'bxxxxxxx100000000000000000000000:	xRt <= {AXC,5'd24};
-		31'bxxxxxx1000000000000000000000000:	xRt <= {AXC,5'd25};
-		31'bxxxxx10000000000000000000000000:	xRt <= {AXC,5'd26};
-		31'bxxxx100000000000000000000000000:	xRt <= {AXC,5'd27};
-		31'bxxx1000000000000000000000000000:	xRt <= {AXC,5'd28};
-		31'bxx10000000000000000000000000000:	xRt <= {AXC,5'd29};
-		31'bx100000000000000000000000000000:	xRt <= {AXC,5'd30};
-		31'b1000000000000000000000000000000:	xRt <= {AXC,5'd31};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1:	xRt <= {dAXC,5'd1};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxx10:	xRt <= {dAXC,5'd2};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxx100:	xRt <= {dAXC,5'd3};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxx1000:	xRt <= {dAXC,5'd4};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxxx10000:	xRt <= {dAXC,5'd5};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxxx100000:	xRt <= {dAXC,5'd6};
+		31'bxxxxxxxxxxxxxxxxxxxxxxxx1000000:	xRt <= {dAXC,5'd7};
+		31'bxxxxxxxxxxxxxxxxxxxxxxx10000000:	xRt <= {dAXC,5'd8};
+		31'bxxxxxxxxxxxxxxxxxxxxxx100000000:	xRt <= {dAXC,5'd9};
+		31'bxxxxxxxxxxxxxxxxxxxxx1000000000:	xRt <= {dAXC,5'd10};
+		31'bxxxxxxxxxxxxxxxxxxxx10000000000:	xRt <= {dAXC,5'd11};
+		31'bxxxxxxxxxxxxxxxxxxx100000000000:	xRt <= {dAXC,5'd12};
+		31'bxxxxxxxxxxxxxxxxxx1000000000000:	xRt <= {dAXC,5'd13};
+		31'bxxxxxxxxxxxxxxxxx10000000000000:	xRt <= {dAXC,5'd14};
+		31'bxxxxxxxxxxxxxxxx100000000000000:	xRt <= {dAXC,5'd15};
+		31'bxxxxxxxxxxxxxxx1000000000000000:	xRt <= {dAXC,5'd16};
+		31'bxxxxxxxxxxxxxx10000000000000000:	xRt <= {dAXC,5'd17};
+		31'bxxxxxxxxxxxxx100000000000000000:	xRt <= {dAXC,5'd18};
+		31'bxxxxxxxxxxxx1000000000000000000:	xRt <= {dAXC,5'd19};
+		31'bxxxxxxxxxxx10000000000000000000:	xRt <= {dAXC,5'd20};
+		31'bxxxxxxxxxx100000000000000000000:	xRt <= {dAXC,5'd21};
+		31'bxxxxxxxxx1000000000000000000000:	xRt <= {dAXC,5'd22};
+		31'bxxxxxxxx10000000000000000000000:	xRt <= {dAXC,5'd23};
+		31'bxxxxxxx100000000000000000000000:	xRt <= {dAXC,5'd24};
+		31'bxxxxxx1000000000000000000000000:	xRt <= {dAXC,5'd25};
+		31'bxxxxx10000000000000000000000000:	xRt <= {dAXC,5'd26};
+		31'bxxxx100000000000000000000000000:	xRt <= {dAXC,5'd27};
+		31'bxxx1000000000000000000000000000:	xRt <= {dAXC,5'd28};
+		31'bxx10000000000000000000000000000:	xRt <= {dAXC,5'd29};
+		31'bx100000000000000000000000000000:	xRt <= {dAXC,5'd30};
+		31'b1000000000000000000000000000000:	xRt <= {dAXC,5'd31};
 		default:	xRt <= 9'h000;
 		endcase
 
@@ -3206,6 +3265,9 @@ if (advanceI) begin
 		dextype <= `EX_NMI;
 	end
 	else if (irq_i & !im & !StatusHWI & !im1) begin
+		$display("*****************");
+		$display("IRQ detected");
+		$display("*****************");
 		bu_im <= 1'b0;
 		im <= 1'b1;
 		StatusHWI <= 1'b1;
@@ -3312,7 +3374,8 @@ if (advanceI) begin
 		else if ((iOpcode==`LM || iOpcode==`SM) && insn[31:0]!=32'd0)
 			;
 		else begin
-			pc <= fnIncPC(pc);
+			if (pc!=64'd3)
+				pc <= fnIncPC(pc);
 		end
 		case(iOpcode)
 		`MISC:
@@ -3370,8 +3433,6 @@ if (advanceI) begin
 					pc <= {pc[63:4] + {{50{insn[29]}},insn[29:20]},insn[19:18],2'b00};
 				end
 			end
-		`TRAPcc:	if (predict_taken) begin pc <= {TBA[63:13],`GEN_TRAP_OFFSET}; dbranch_taken <= 1'b1; end
-		`TRAPcci:	if (predict_taken) begin pc <= {TBA[63:13],`GEN_TRAP_OFFSET}; dbranch_taken <= 1'b1; end
 		default:	;
 		endcase
 	end
@@ -3379,7 +3440,7 @@ end
 
 //`include "RPSTAGE.v"
 //---------------------------------------------------------
-// EXECUTE - part two:
+// EXECUTE (EX')- part two:
 // - override the default program counter increment for
 //   control flow instructions
 // - NOP out the instructions following a branch in the
@@ -3404,6 +3465,27 @@ if (advanceX) begin
 			if (StatusEXL) begin
 				StatusEXL <= 1'b0;
 				pc <= EPC;
+				dIR <= `NOP_INSN;
+				xIR <= `NOP_INSN;
+				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
+			end
+		`SYSJMP:
+			begin
+				StatusEXL <= 1'b1;
+				pc <= 64'd3;
+				dIR <= `NOP_INSN;
+				xIR <= `NOP_INSN;
+				xRt <= 9'd0;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
+			end
+		`SYSCALL:
+			begin
+				StatusEXL <= 1'b1;
+				EPC <= fnIncPC(xpc);
+				pc <= 64'd3;
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
@@ -3564,26 +3646,13 @@ if (advanceX) begin
 		if (takb) begin
 			StatusEXL <= 1'b1;
 			CauseCode <= `EX_TRAP;
-			EPC <= xpc;
-			if (!xbranch_taken) begin
-				pc <= {TBA[63:13],`GEN_TRAP_OFFSET};
-				dIR <= `NOP_INSN;
-				xIR <= `NOP_INSN;
-				xRt <= 9'd0;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-			end
-		end
-		else begin
-			if (xbranch_taken) begin
-//				$display("Taking mispredicted branch %h",fnIncPC(xpc));
-				pc <= fnIncPC(xpc);
-				dIR <= `NOP_INSN;
-				xIR <= `NOP_INSN;
-				xRt <= 9'd0;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-			end
+			xextype <= `EX_TRAP;
+			pc <= 64'd3;
+			dIR <= `NOP_INSN;
+			xIR <= `NOP_INSN;
+			xRt <= 9'd0;
+			xpcv <= 1'b0;
+			dpcv <= 1'b0;
 		end
 	default:	;
 	endcase
@@ -3591,9 +3660,9 @@ if (advanceX) begin
 	if (dbz_error) begin
 		$display("Divide by zero error");
 		CauseCode <= `EX_DBZ;
+		xextype <= `EX_DBZ;
 		StatusEXL <= 1'b1;
-		EPC <= xpc;
-		pc <= {TBA[63:13],`DBZ_TRAP_OFFSET};
+		pc <= 64'd3;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3603,9 +3672,9 @@ if (advanceX) begin
 	else if (ovr_error) begin
 		$display("Overflow error");
 		CauseCode <= `EX_OFL;
+		xextype <= `EX_OFL;
 		StatusEXL <= 1'b1;
-		EPC <= xpc;
-		pc <= {TBA[63:13],`OFL_TRAP_OFFSET};
+		pc <= 64'd3;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3615,9 +3684,9 @@ if (advanceX) begin
 	else if (priv_violation) begin
 		$display("Priviledge violation");
 		CauseCode <= `EX_PRIV;
+		xextype <= `EX_PRIV;
 		StatusEXL <= 1'b1;
-		EPC <= xpc;
-		pc <= {TBA[63:13],`PRIV_OFFSET};
+		pc <= 64'd3;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3677,41 +3746,42 @@ end
 //---------------------------------------------------------
 if (advanceW) begin
 	case(wextype)
-	`EX_RST:	begin
-				pc <= `RESET_VECTOR;
-				case(1'b1)
-				wpcv:	IPC <= wpc;
-				m2pcv:	IPC <= m2pc;
-				m1pcv: 	IPC <= m1pc;
-				xpcv:	IPC <= xpc;
-				dpcv:	IPC <= dpc;
-				default:	IPC <= pc;
-				endcase
-				end
-	`EX_NMI:	begin
-				pc <= `NMI_VECTOR;
-				case(1'b1)
-				wpcv:	IPC <= wpc;
-				m2pcv:	IPC <= m2pc;
-				m1pcv: 	IPC <= m1pc;
-				xpcv:	IPC <= xpc;
-				dpcv:	IPC <= dpc;
-				default:	IPC <= pc;
-				endcase
-				end
-	`EX_IRQ:	begin
-				pc <= `IRQ_VECTOR;
-				case(1'b1)
-				wpcv:	IPC <= wpc;
-				m2pcv:	IPC <= m2pc;
-				m1pcv: 	IPC <= m1pc;
-				xpcv:	IPC <= xpc;
-				dpcv:	IPC <= dpc;
-				default:	IPC <= pc;
-				endcase
-				end
-	default:	;
+	`EX_NON:	;
+	`EX_RST:
+		begin
+		pc <= `RESET_VECTOR;
+		end
+	`EX_NMI,`EX_IRQ,`EX_DBERR:
+		begin
+		$display("Stuffing SYSJMP");
+		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
+		pc <= 64'd3;
+		case(1'b1)
+		wpcv:	IPC <= wpc;
+		m2pcv:	IPC <= m2pc;
+		m1pcv: 	IPC <= m1pc;
+		xpcv:	IPC <= xpc;
+		dpcv:	IPC <= dpc;
+		default:	IPC <= pc;
+		endcase
+		end
+	`EX_OFL,`EX_DBZ,`EX_PRIV,`EX_TRAP:
+		begin
+		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
+		pc <= 64'd3;
+		EPC <= fnIncPC(wpc);
+		end
+	default:
+		begin
+		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
+		pc <= 64'd3;
+		EPC <= fnIncPC(wpc);
+		end
 	endcase
+	if (wLdPC) begin
+		$display("Loading PC");
+		pc <= wData;
+	end
 end
 
 
@@ -3736,7 +3806,7 @@ IDLE:
 		dcaccess <= 1'b1;
 		bte_o <= 2'b00;			// linear burst
 		cti_o <= 3'b010;		// burst access
-		bl_o <= 5'd8;
+		bl_o <= 5'd7;
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
 		adr_o <= {pea[63:6],6'h00};
@@ -3749,12 +3819,12 @@ IDLE:
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
 		if (ICacheAct) begin
-			bl_o <= 5'd8;
+			bl_o <= 5'd7;
 			adr_o <= {ppc[63:6],6'h00};
 			cstate <= ICACT1;
 		end
 		else begin
-			bl_o <= 5'd2;
+			bl_o <= 5'd1;
 			adr_o <= {ppc[63:4],4'b0000};
 			cstate <= ICACT2;
 		end
@@ -3762,7 +3832,7 @@ IDLE:
 // WISHBONE burst accesses
 //
 ICACT1:
-	if (ack_i) begin
+	if (ack_i|err_i) begin
 		adr_o[5:3] <= adr_o[5:3] + 3'd1;
 		if (adr_o[5:3]==3'd6)
 			cti_o <= 3'b111;	// Last cycle ahead
@@ -3776,20 +3846,21 @@ ICACT1:
 			cstate <= IDLE;
 		end
 	end
+//SYSCALL 509:	00_00000000_00000000_00000000_11111110_10010111
 ICACT2:
-	if (ack_i) begin
+	if (ack_i|err_i) begin
 		adr_o <= adr_o + 64'd8;
 		if (adr_o[3]==1'b0) begin
 			cti_o <= 3'b111;	// Last cycle ahead
-			tmpbuf <= dat_i;
+			tmpbuf <= err_i ? bevect[63:0] : dat_i;
 		end
 		else begin
 			if (tick[0]) begin
-				insnbuf0 <= {dat_i,tmpbuf};
+				insnbuf0 <= {err_i ? bevect[127:64] : dat_i,tmpbuf};
 				ibuftag0 <= adr_o[63:4];
 			end
 			else begin
-				insnbuf1 <= {dat_i,tmpbuf};
+				insnbuf1 <= {err_i ? bevect[127:64] : dat_i,tmpbuf};
 				ibuftag1 <= adr_o[63:4];
 			end
 			cti_o <= 3'b000;	// back to non-burst mode
@@ -3801,7 +3872,7 @@ ICACT2:
 	end
 
 DCACT:
-	if (ack_i) begin
+	if (ack_i|err_i) begin
 		adr_o[5:3] <= adr_o[5:3] + 3'd1;
 		if (adr_o[5:3]==3'h6)
 			cti_o <= 3'b111;	// Last cycle ahead

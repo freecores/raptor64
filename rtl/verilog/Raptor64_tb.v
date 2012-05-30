@@ -13,6 +13,7 @@ wire [63:0] sys_adr;
 wire [63:0] sys_dbo;
 wire [63:0] sys_dbi;
 wire sys_ack;
+wire sys_err = 1'b0;
 reg [7:0] cnt;
 wire wr_empty = 1'b1;
 wire wr_full;
@@ -29,8 +30,11 @@ wire tc_ack;
 wire pic_ack;
 reg pulse1000Hz;
 
+wire uart_ack = sys_cyc && sys_stb && (sys_adr[63:8]==56'hFFFF_FFFF_FFDC_0A);
+wire rast_ack = sys_cyc && sys_stb && (sys_adr[63:8]==56'hFFFF_FFFF_FFDA_01);
+
 assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
-assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack;
+assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack;
 
 initial begin
 	clk = 1;
@@ -78,8 +82,8 @@ rtfTextController tc1
 	.lp(),
 	.curpos(),
 	.vclk(),
-	.eol(),
-	.eof(),
+	.hsync(),
+	.vsync(),
 	.blank(),
 	.border(),
 	.rgbIn(),
@@ -811,6 +815,7 @@ Raptor64sc u1
 	.cyc_o(sys_cyc),
 	.stb_o(sys_stb),
 	.ack_i(sys_ack),
+	.err_i(sys_err),
 	.we_o(sys_we),
 	.sel_o(sys_sel),
 	.adr_o(sys_adr),

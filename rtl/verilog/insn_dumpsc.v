@@ -12,6 +12,10 @@
 			`TLBR:	$display("TLBR");
 			`TLBWI:	$display("TLBWI");
 			`TLBWR:	$display("TLBWR");
+			`ICACHE_ON:	$display("ICACHE_ON");
+			`ICACHE_OFF:	$display("ICACHE_OFF");
+			`DCACHE_ON:	$display("DCACHE_ON");
+			`DCACHE_OFF:	$display("DCACHE_OFF");
 			default:	;
 			endcase
 			end
@@ -95,6 +99,7 @@
 		`SC:	$display("SC r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`SH:	$display("SH r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`SW:	$display("SW r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
+		`LEA:	$display("LEA r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`LB:	$display("LB r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`LBU:	$display("LBU r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
 		`LC:	$display("LC r%d,%d[r%d]",insn[29:25],{{39{insn[24]}},insn[24:0]},insn[34:30]);
