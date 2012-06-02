@@ -33,15 +33,8 @@
 `define IRQ_VECTOR		64'hFFFF_FFFF_FFFF_FFD0
 `define TRAP_VECTOR		64'h0000_0000_0000_0000
 
-`define TLBMissPage		52'hFFFF_FFFF_FFFF_F
 `define ITLB_MissHandler	64'hFFFF_FFFF_FFFF_FFC0
 `define DTLB_MissHandler	64'hFFFF_FFFF_FFFF_FFB0
-`define BERR_VECTOR		64'hFFFF_FFFF_FFFF_FFA0
-
-`define GEN_TRAP_OFFSET		13'h0200
-`define DBZ_TRAP_OFFSET		13'h0050
-`define OFL_TRAP_OFFSET		13'h0070
-`define PRIV_OFFSET			13'h0080
 
 `define EX_NON		9'd000
 `define EX_TRAP		9'd32	// Trap exception
@@ -56,393 +49,7 @@
 `define EX_NMI		9'd510	// non-maskable interrupt
 `define EX_RST		9'd511	// Reset
 
-`define EXCEPT_Int		5'd00
-`define EXCEPT_Mod		5'd01	// TLB modification
-`define EXCEPT_TLBL		5'd02	// TLB exception - load or ifetch
-`define EXCEPT_TLBS		5'd03	// TLB exception - store
-`define EXCEPT_AdEL		5'd04	// Address error - load or ifetch
-`define EXCEPT_AdES		5'd05	// Address error - store
-`define EXCEPT_IBE		5'd06	// Bus Error - instruction fetch
-`define EXCEPT_DBE		5'd07	// Bus Error - load or store
-`define EXCEPT_Sys		5'd08
-`define EXCEPT_Bp		5'd09
-`define EXCEPT_RI		5'd10	// reserved instruction
-`define EXCEPT_CpU		5'd11	// Coprocessor unusable
-`define EXCEPT_Ov		5'd12	// Integer Overflow
-`define EXCEPT_Tr		5'd13	// Trap exception
-// 14-22 Reserved
-`define EXCEPT_WATCH	5'd23
-`define EXCEPT_MCheck	5'd24	// Machine check
-// 25-31 Reserved
-
-
-`define MISC	7'd0
-`define		BRK		7'd0
-`define		IRQ		7'd1
-`define		ICACHE_ON	7'd10
-`define		ICACHE_OFF	7'd11
-`define		DCACHE_ON	7'd12
-`define		DCACHE_OFF	7'd13
-`define     FIP		7'd20
-`define		SYSJMP	7'd22
-`define 	SYSCALL	7'd23
-`define		IRET	7'd32
-`define		ERET	7'd33
-`define 	WAIT	7'd40
-`define		TLBP	7'd49
-`define     TLBR	7'd50
-`define     TLBWI	7'd51
-`define     TLBWR	7'd52
-`define		CLI		7'd64
-`define 	SEI		7'd65
-`define		GRAN	7'd80
-`define		GRAFD	7'd82
-`define R		7'd1
-`define 	COM		7'd4
-`define		NOT		7'd5
-`define		NEG		7'd6
-`define		ABS		7'd7
-`define		SGN		7'd8
-`define		MOV		7'd9
-`define		SWAP	7'd13
-`define		CTLZ	7'd16
-`define		CTLO	7'd17
-`define		CTPOP	7'd18
-`define		SEXT8	7'd19
-`define		SEXT16	7'd20
-`define		SEXT32	7'd21
-`define		SQRT	7'd24
-`define		REDOR	7'd30
-`define		REDAND	7'd31
-`define     MFSPR	7'd40
-`define     MTSPR	7'd41
-`define         SR				6'd00
-`define         TLBIndex    	6'd01
-`define         TLBRandom		6'd02
-`define         PageTableAddr	6'd04
-`define         BadVAddr        6'd08
-`define         TLBPhysPage0	6'd10
-`define         TLBPhysPage1	6'd11
-`define         TLBVirtPage		6'd12
-`define			TLBPageMask		6'd13
-`define			TLBASID			6'd14
-`define         ASID			6'd15
-`define			Wired			6'd16
-`define         EP0             6'd17
-`define         EP1             6'd18
-`define         EP2             6'd19
-`define         EP3             6'd20
-`define         AXC             6'd21
-`define			Tick			6'd22
-`define 		EPC				6'd23
-`define			CauseCode		6'd24
-`define			TBA				6'd25
-`define			NON_ICACHE_SEG	6'd26
-`define			FPCR			6'd32
-`define			IPC				6'd33
-`define			RAND			6'd34
-`define			SRANDZ			6'd35
-`define			SRANDW			6'd36
-`define			INSNKEY			6'd37
-`define		OMG		7'd50
-`define 	CMG		7'd51
-`define		OMGI	7'd52
-`define 	CMGI	7'd53
-`define		EXEC	7'd58
-`define 	MYST	7'd59
-`define RR	7'd2
-`define 	ADD		7'd2
-`define		ADDU	7'd3
-`define 	SUB		7'd4
-`define 	SUBU	7'd5
-`define 	CMP		7'd6
-`define 	CMPU	7'd7
-`define 	AND		7'd8
-`define 	OR		7'd9
-`define 	XOR		7'd10
-`define 	ANDC	7'd11
-`define		NAND	7'd12
-`define		NOR		7'd13
-`define 	XNOR	7'd14
-`define		ORC		7'd15
-`define		MIN		7'd20
-`define		MAX		7'd21
-`define		MULU	7'd24
-`define		MULS	7'd25
-`define		DIVU	7'd26
-`define 	DIVS	7'd27
-`define		MOD		7'd28
-`define		MOVZ	7'd30
-`define		MOVNZ	7'd31
-
-`define 	SHL		7'd40
-`define 	SHRU	7'd41
-`define		ROL		7'd42
-`define		ROR		7'd43
-`define		SHR		7'd44
-`define 	ROLAM	7'd45
-
-`define		NOP		7'd60
-
-`define 	SLT		7'd96
-`define 	SLE		7'd97
-`define 	SGT		7'd98
-`define 	SGE		7'd99
-`define 	SLTU	7'd100
-`define 	SLEU	7'd101
-`define 	SGTU	7'd102
-`define 	SGEU	7'd103
-`define 	SEQ		7'd104
-`define 	SNE		7'd105
-
-`define     BCD_ADD	7'd110
-`define     BCD_SUB 7'd111
-
-`define SHFTI	7'd3
-`define		SHLI		5'd0
-`define 	SHRUI		5'd1
-`define 	ROLI		5'd2
-`define 	SHRI		5'd3
-`define 	RORI		5'd4
-`define 	ROLAMI		5'd5
-`define 	BFINS		5'd8
-`define 	BFSET		5'd9
-`define 	BFCLR		5'd10
-`define 	BFCHG		5'd11
-`define ADDI	7'd4
-`define ADDUI	7'd5
-`define SUBI	7'd6
-`define SUBUI	7'd7
-`define CMPI	7'd8
-`define CMPUI	7'd9
-`define ANDI	7'd10
-`define ORI		7'd11
-`define XORI	7'd12
-
-`define MULUI	7'd13
-`define MULSI	7'd14
-`define DIVUI	7'd15
-`define DIVSI	7'd16
-
-`define TRAPcc	7'd17
-`define		TEQ		5'd0
-`define		TNE		5'd1
-`define		TLT		5'd2
-`define		TGE		5'd3
-`define		TLE		5'd4
-`define		TGT		5'd5
-`define		TLTU	5'd6
-`define		TGEU	5'd7
-`define		TLEU	5'd8
-`define		TGTU	5'd9
-`define		TRAP	5'd10
-`define		TRN		5'd11
-`define TRAPcci	7'd18
-`define		TEQI	5'd0
-`define		TNEI	5'd1
-`define		TLTI	5'd2
-`define		TGEI	5'd3
-`define		TLEI	5'd4
-`define		TGTI	5'd5
-`define		TLTUI	5'd6
-`define		TGEUI	5'd7
-`define		TLEUI	5'd8
-`define		TGTUI	5'd9
-`define		TRAI	5'd10
-`define		TRNI	5'd11
-// SETLO=20 to 23
-`define SETLO	7'b00101xx
-`define CALL	7'd24
-`define JMP		7'd25
-`define JAL		7'd26
-`define RET		7'd27
-// SETLO=28 to 31
-`define SETHI	7'b00111xx
-`define LB		7'd32
-`define LC		7'd33
-`define LH		7'd34
-`define LW		7'd35
-`define LP		7'd36
-`define LBU		7'd37
-`define LCU		7'd38
-`define LHU		7'd39
-`define LSH		7'd40
-`define LSW		7'd41
-`define LF		7'd42
-`define LFD		7'd43
-`define LFP		7'd44
-`define LFDP	7'd45
-`define LWR		7'd46
-`define LDONE	7'd47
-
-`define SB		7'd48
-`define SC		7'd49
-`define SH		7'd50
-`define SW		7'd51
-`define SP		7'd52
-`define MEMNDX	7'd53
-`define 	LBX		6'd0
-`define 	LCX		6'd1
-`define 	LHX		6'd2
-`define 	LWX		6'd3
-`define 	LPX		6'd4
-`define 	LBUX	6'd5
-`define 	LCUX	6'd6
-`define 	LHUX	6'd7
-`define 	LSHX	6'd8
-`define 	LSWX	6'd9
-`define	 	LFX		6'd10
-`define 	LFDX	6'd11
-`define 	LFPX	6'd12
-`define 	LFDPX	6'd13
-`define 	LWRX	6'd14
-
-`define 	SBX		6'd16
-`define 	SCX		6'd17
-`define 	SHX		6'd18
-`define 	SWX		6'd19
-`define 	SPX		6'd20
-`define 	SSHX	6'd24
-`define 	SSWX	6'd25
-`define 	SFX		6'd26
-`define 	SFDX	6'd27
-`define 	SFPX	6'd28
-`define 	SFDPX	6'd29
-`define 	SWCX	6'd30
-
-`define 	INBX	6'd32
-`define 	INCX	6'd33
-`define 	INHX	6'd34
-`define 	INWX	6'd35
-`define 	INBUX	6'd36
-`define 	INCUX	6'd37
-`define 	INHUX	6'd38
-`define 	OUTBX	6'd40
-`define 	OUTCX	6'd41
-`define 	OUTHX	6'd42
-`define 	OUTWX	6'd43
-`define 	CACHEX	6'd44
-`define 	LEAX	6'd45
-`define 	LMX		6'd46
-`define 	SMX		6'd47
-
-`define SSH		7'd56
-`define SSW		7'd57
-`define SF		7'd58
-`define SFD		7'd59
-`define SFP		7'd60
-`define SFDP	7'd61
-`define SWC		7'd62
-
-`define INB		7'd64
-`define INCH	7'd65
-`define INH		7'd66
-`define INW		7'd67
-`define INBU	7'd68
-`define INCU	7'd69
-`define INHU	7'd70
-`define OUTB	7'd72
-`define OUTC	7'd73
-`define OUTH	7'd74
-`define OUTW	7'd75
-`define CACHE	7'd76
-`define		INVIL	5'd0
-`define		INVIALL	5'd1
-`define LEA		7'd77
-`define LM		7'd78
-`define SM		7'd79
-
-`define BLTI	7'd80
-`define BGEI	7'd81
-`define BLEI	7'd82
-`define BGTI	7'd83
-`define BLTUI	7'd84
-`define BGEUI	7'd85
-`define BLEUI	7'd86
-`define BGTUI	7'd87
-`define BEQI	7'd88
-`define BNEI	7'd89
-
-`define BTRI	7'd94
-`define 	BLTRI	5'd0
-`define 	BGERI	5'd1
-`define 	BLERI	5'd2
-`define 	BGTRI	5'd3
-`define 	BLTURI	5'd4
-`define 	BGEURI	5'd5
-`define 	BLEURI	5'd6
-`define 	BGTURI	5'd7
-`define 	BEQRI	5'd8
-`define 	BNERI	5'd9
-`define		BRARI	5'd10
-`define		BRNRI	5'd11
-`define		BANDRI	5'd12
-`define		BORRI	5'd13
-`define BTRR	7'd95
-`define 	BLT		5'd0
-`define 	BGE		5'd1
-`define 	BLE		5'd2
-`define 	BGT		5'd3
-`define 	BLTU	5'd4
-`define 	BGEU	5'd5
-`define 	BLEU	5'd6
-`define 	BGTU	5'd7
-`define 	BEQ		5'd8
-`define 	BNE		5'd9
-`define		BRA		5'd10
-`define		BRN		5'd11
-`define		BAND	5'd12
-`define		BOR		5'd13
-`define		BNR		5'd14
-`define		LOOP	5'd15
-`define 	BLTR	5'd16
-`define 	BGER	5'd17
-`define 	BLER	5'd18
-`define 	BGTR	5'd19
-`define 	BLTUR	5'd20
-`define 	BGEUR	5'd21
-`define 	BLEUR	5'd22
-`define 	BGTUR	5'd23
-`define 	BEQR	5'd24
-`define 	BNER	5'd25
-`define		BRAR	5'd26
-`define		BRNR	5'd27
-
-
-`define SLTI	7'd96
-`define SLEI	7'd97
-`define SGTI	7'd98
-`define SGEI	7'd99
-`define SLTUI	7'd100
-`define SLEUI	7'd101
-`define SGTUI	7'd102
-`define SGEUI	7'd103
-`define SEQI	7'd104
-`define SNEI	7'd105
-
-`define FP		7'd108
-`define FDADD		6'd0
-`define FDSUB		6'd1
-`define FDMUL		6'd2
-`define FDDIV		6'd3
-`define FDCUN		6'd4
-`define FDI2F		6'd5
-`define FDF2I		6'd6
-`define FDF2D		6'd7
-`define FDD2F		6'd8
-`define FDCLT		6'b001100
-`define FDCEQ		6'b010100
-`define FDCLE		6'b011100
-`define FDCGT		6'b100100
-`define FDCNE		6'b101100
-`define FDCGE		6'b110100
-`define FPLOO	7'd109
-`define FPZL	7'd110
-`define NOPI	7'd111
-
-`define IMM		3'd7
-
-`define NOP_INSN	42'b1101111_000_00000000_00000000_00000000_00000000
+`include "Raptor64_opcodes.v"
 
 module Raptor64sc(rst_i, clk_i, nmi_i, irq_i, bte_o, cti_o, bl_o,
 	cyc_o, stb_o, ack_i, err_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr
@@ -512,10 +119,9 @@ reg [1:0] rm;		// fp rounding mode
 reg FXE;			// fp exception enable
 wire KernelMode;
 wire [31:0] sr = {bu_im,15'd0,im,1'b0,KernelMode,FXE,vtno,10'b0};
-reg [41:0] dIR;
+reg [41:0] dIR,xIR,m1IR,m2IR,wIR;
 reg [41:0] ndIR;
 wire [6:0] dOpcode = dIR[41:35];
-reg [41:0] xIR;
 reg [63:0] pc;
 reg [63:0] ErrorEPC,EPC,IPC;
 reg [63:0] dpc,m1pc,m2pc,wpc;
@@ -573,6 +179,37 @@ reg [63:13] BadVAddr;
 reg [63:13] PageTableAddr;
 reg [63:0] errorAddress;
 
+wire [6:0] iFunc = insn[6:0];
+wire [6:0] dFunc = dIR[6:0];
+wire [5:0] dFunc6 = dIR[5:0];
+wire [6:0] xFunc = xIR[6:0];
+wire [5:0] xFunc6 = xIR[5:0];
+wire [4:0] xFunc5 = xIR[4:0];
+wire [6:0] iOpcode = insn[41:35];
+wire [6:0] xOpcode = xIR[41:35];
+reg [6:0] m1Opcode,m2Opcode,wOpcode;
+reg [6:0] m1Func,m2Func,wFunc;
+reg [63:0] m1Data,m2Data,wData,tData;
+reg [63:0] m2Addr;
+reg [63:0] tick;
+reg [63:0] tba;
+reg [63:0] exception_address,ipc;
+reg [63:0] a,b,c,imm,m1b;
+reg prev_ihit;
+reg rsf;
+reg [63:5] resv_address;
+reg dirqf,rirqf,m1irqf,m2irqf,wirqf,tirqf;
+reg xirqf;
+reg [8:0] dextype,m1extype,m2extype,wextype,textype,exception_type;
+reg [8:0] xextype;
+reg wLdPC,m2LdPC;
+wire advanceX_edge;
+reg takb;
+wire advanceX,advanceM1,advanceW;
+reg m1IsLoad,m2IsLoad;
+reg m1IsIO;
+reg m1IsStore,m2IsStore,wIsStore;
+
 function [63:0] fnIncPC;
 input [63:0] fpc;
 begin
@@ -592,101 +229,52 @@ assign KernelMode = StatusEXL|StatusHWI;
 // The TLB contains 64 entries, that are 8 way set associative.
 // The TLB is dual ported and shared between the instruction and data streams.
 //-----------------------------------------------------------------------------
-
-wire unmappedArea = pc[63:52]==12'hFFD || pc[63:52]==12'hFFE || pc[63:52]==12'hFFF;
-wire unmappedDataArea = ea[63:52]==12'hFFD || ea[63:52]==12'hFFE || ea[63:52]==12'hFFF;
 wire [63:0] ppc;
 wire [63:0] pea;
-
+wire [63:0] tlbo;
 `ifdef TLB
-reg [24:13] TLBPageMask;
-reg [63:13] TLBVirtPage;
-reg [63:13] TLBPhysPage0;
-reg [63:13] TLBPhysPage1;
-reg [7:0] TLBASID;
-reg TLBG;
-reg TLBD;
-reg TLBValid;
-reg [63:0] Index;
-reg [2:0] Random;
-reg [2:0] Wired;
-reg [15:0] IMatch,DMatch;
+wire [63:0] TLBVirtPage;
+wire wTlbp = advanceW && wOpcode==`MISC && wFunc==`TLBP;
+wire wTlbrd = advanceW && wOpcode==`MISC && wFunc==`TLBR;
+wire wTlbwr = advanceW && wOpcode==`MISC && wFunc==`TLBWR;
+wire wTlbwi = advanceW && wOpcode==`MISC && wFunc==`TLBWI;
+wire wMtspr = advanceW && wOpcode==`R && wFunc==`MTSPR;
+wire xTlbrd = advanceX && xOpcode==`MISC && xFunc==`TLBR;
+wire xTlbwr = advanceX && xOpcode==`MISC && xFunc==`TLBWR;
+wire xTlbwi = advanceX && xOpcode==`MISC && xFunc==`TLBWI;
+wire ITLBMiss,DTLBMiss;
 
-reg [3:0] m;
-reg [5:0] i;
-reg [24:13] ITLBPageMask [63:0];
-reg [63:13] ITLBVirtPage [63:0];
-reg [63:13] ITLBPhysPage0 [63:0];
-reg [63:13] ITLBPhysPage1 [63:0];
-reg [63:0] ITLBG;
-reg [63:0] ITLBD;
-reg [7:0] ITLBASID [63:0];
-reg [15:0] ITLBValid;
-initial begin
-	for (n = 0; n < 64; n = n + 1)
-	begin
-		ITLBPageMask[n] = 0;
-		ITLBVirtPage[n] = 0;
-		ITLBPhysPage0[n] = 0;
-		ITLBPhysPage1[n] = 0;
-		ITLBG[n] = 0;
-		ITLBASID[n] = 0;
-		ITLBValid[n] = 0;
-	end
-end
-always @*
-for (n = 0; n < 8; n = n + 1)
-	IMatch[n] = ((pc[63:13]|ITLBPageMask[{n[2:0],pc[15:13]}])==(ITLBVirtPage[{n[2:0],pc[15:13]}]|ITLBPageMask[{n[2:0],pc[15:13]}])) &&
-				((ITLBASID[{n,pc[15:13]}]==ASID) || ITLBG[{n,pc[15:13]}]) &&
-				ITLBValid[{n,pc[15:13]}];
-always @(IMatch)
-if (IMatch[0]) m <= 4'd0;
-else if (IMatch[1]) m <= 4'd1;
-else if (IMatch[2]) m <= 4'd2;
-else if (IMatch[3]) m <= 4'd3;
-else if (IMatch[4]) m <= 4'd4;
-else if (IMatch[5]) m <= 4'd5;
-else if (IMatch[6]) m <= 4'd6;
-else if (IMatch[7]) m <= 4'd7;
-else m <= 4'd15;
+Raptor64_TLB u22
+(
+	.rst(rst_i),
+	.clk(clk),
+	.pc(pc),
+	.ea(ea),
+	.ppc(ppc),
+	.pea(pea),
+	.m1IsStore(advanceM1 && m1IsStore),
+	.ASID(ASID),
+	.wTlbp(wTlbp),
+	.wTlbrd(wTlbrd),
+	.wTlbwr(wTlbwr),
+	.wTlbwi(wTlbwi),
+	.xTlbrd(xTlbrd),
+	.xTlbwr(xTlbwr),
+	.xTlbwi(xTlbwi),
+	.wr(wMtspr),
+	.wregno(wIR[12:7]),
+	.dati(wData),
+	.xregno(xIR[12:7]),
+	.dato(tlbo),
+	.ITLBMiss(ITLBMiss),
+	.DTLBMiss(DTLBMiss),
+	.HTLBVirtPage(TLBVirtPage)
+);
 
-wire ioddpage = |({ITLBPageMask[{m[2:0],pc[15:13]}]+19'd1,13'd0}&pc);
-wire [63:13] IPFN = ioddpage ? ITLBPhysPage1[{m[2:0],pc[15:13]}] : ITLBPhysPage0[{m[2:0],pc[15:13]}];
-
-wire ITLBMiss = !unmappedArea & m[3];
-
-assign ppc[63:13] = unmappedArea ? pc[63:13] : m[3] ? `TLBMissPage: IPFN;
-assign ppc[12:0] = pc[12:0];
-
-reg [3:0] q;
-always @(ea)
-for (n = 0; n < 7; n = n + 1)
-	DMatch[n] = ((ea[63:13]|ITLBPageMask[{n,ea[15:13]}])==(ITLBVirtPage[{n,ea[15:13]}]|ITLBPageMask[{n,ea[15:13]}])) &&
-				((ITLBASID[{n,ea[15:13]}]==ASID) || ITLBG[{n,ea[15:13]}]) &&
-				ITLBValid[{n,ea[15:13]}];
-always @(DMatch)
-if (DMatch[0]) q <= 4'd0;
-else if (DMatch[1]) q <= 4'd1;
-else if (DMatch[2]) q <= 4'd2;
-else if (DMatch[3]) q <= 4'd3;
-else if (DMatch[4]) q <= 4'd4;
-else if (DMatch[5]) q <= 4'd5;
-else if (DMatch[6]) q <= 4'd6;
-else if (DMatch[7]) q <= 4'd7;
-else q <= 4'd15;
-
-wire doddpage = |({ITLBPageMask[{q[2:0],ea[15:13]}]+19'd1,13'd0}&ea);
-wire [63:13] DPFN = doddpage ? ITLBPhysPage1[{q[2:0],ea[15:13]}] : ITLBPhysPage0[{q[2:0],ea[15:13]}];
-
-wire DTLBMiss = !unmappedDataArea & q[3];
-
-assign pea[63:13] = unmappedDataArea ? ea[63:13] : q[3] ? `TLBMissPage: DPFN;
-assign pea[12:0] = ea[12:0];
 `else
 assign ppc = pc;
 assign pea = ea;
 `endif
-wire m1UnmappedDataArea = pea[63:13]>=12'hFFD;
 
 wire dram_bus = !pea[63];
 wire m2_dram_bus = !m2Addr[63];
@@ -873,32 +461,6 @@ wire xisCacheElement = (xData[63:52] != 12'hFFD && xData[63:52]!=12'hFFF) && dca
 reg m1IsCacheElement;
 
 reg nopI;
-wire [6:0] iFunc = insn[6:0];
-wire [6:0] dFunc = dIR[6:0];
-wire [5:0] dFunc6 = dIR[5:0];
-wire [6:0] xFunc = xIR[6:0];
-wire [5:0] xFunc6 = xIR[5:0];
-wire [4:0] xFunc5 = xIR[4:0];
-wire [6:0] iOpcode = insn[41:35];
-wire [6:0] xOpcode = xIR[41:35];
-reg [6:0] m1Opcode,m2Opcode,wOpcode;
-reg [6:0] m1Func,m2Func;
-reg [63:0] m1Data,m2Data,wData,tData;
-reg [63:0] m2Addr;
-reg [63:0] tick;
-reg [63:0] tba;
-reg [63:0] exception_address,ipc;
-reg [63:0] a,b,c,imm,m1b;
-reg prev_ihit;
-reg rsf;
-reg [63:5] resv_address;
-reg dirqf,rirqf,m1irqf,m2irqf,wirqf,tirqf;
-reg xirqf;
-reg [8:0] dextype,m1extype,m2extype,wextype,textype,exception_type;
-reg [8:0] xextype;
-reg wLdPC,m2LdPC;
-wire advanceX_edge;
-reg takb;
 
 
 
@@ -1248,48 +810,25 @@ default:
 	predict_taken = 1'd0;
 endcase
 `else
+
 //-----------------------------------------------------------------------------
 // Branch history table.
 // The history table is updated by the EX stage and read in
 // both the EX and IF stages.
 //-----------------------------------------------------------------------------
-reg [2:0] gbl_branch_hist;
-reg [1:0] branch_history_table [255:0];
-wire [7:0] bht_wa = {xpc[5:0],gbl_branch_hist[2:1]};		// write address
-wire [7:0] bht_ra1 = {xpc[5:0],gbl_branch_hist[2:1]};		// read address (EX stage)
-wire [7:0] bht_ra2 = {pc[5:0],gbl_branch_hist[2:1]};	// read address (IF stage)
-wire [1:0] bht_xbits = branch_history_table[bht_ra1];
-wire [1:0] bht_ibits = branch_history_table[bht_ra2];
-wire predict_taken = bht_ibits==2'd0 || bht_ibits==2'd1;
+wire predict_taken;
 
-wire isxBranchI = (xOpcode==`BEQI || xOpcode==`BNEI ||
-					xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
-					xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI)
-				;
-wire isxBranch = isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BTRI || xOpcode==`BTRR;
-
-reg [1:0] xbits_new;
-
-always @(takb or bht_xbits)
-if (takb) begin
-	if (bht_xbits != 2'd1)
-		xbits_new <= bht_xbits + 2'd1;
-	else
-		xbits_new <= bht_xbits;
-end
-else begin
-	if (bht_xbits != 2'd2)
-		xbits_new <= bht_xbits - 2'd1;
-	else
-		xbits_new <= bht_xbits;
-end
-
-// For simulation only, initialize the history table to zeros.
-// In the real world we don't care.
-initial begin
-	for (n = 0; n < 256; n = n + 1)
-		branch_history_table[n] = 0;
-end
+Raptor64_BranchHistory u6
+(
+	.rst(rst_i),
+	.clk(clk),
+	.advanceX(advanceX),
+	.xIR(xIR),
+	.pc(pc),
+	.xpc(xpc),
+	.takb(takb),
+	.predict_taken(predict_taken)
+);
 `endif
 
 //-----------------------------------------------------------------------------
@@ -1371,7 +910,7 @@ case (xOpcode)
 `BGTUI:	takb = !(ltui|eqi);
 `BGEUI:	takb = !ltui;
 `BTRI:
-	case(xIR[24:18])
+	case(xIR[24:20])
 	`BRA:	takb = 1'b1;
 	`BRN:	takb = 1'b0;
 	`BEQ:	takb = eqi;
@@ -1429,26 +968,13 @@ cntlo64 u13 (.clk(clk), .i(a),  .o(cntloo) );
 reg [1:0] shftop;
 wire [63:0] shfto;
 reg [63:0] masko;
-//wire shl = (xOpcode==`RR && xFunc==`SHL) || (xOpcode==`SHFTI && xFunc==`SHLI);
-//wire shr = (xOpcode==`RR && xFunc==`SHR) || (xOpcode==`SHFTI && xFunc==`SHRI);
-//wire shru = (xOpcode==`RR && xFunc==`SHRU) || (xOpcode==`SHFTI && xFunc==`SHRUI);
-//wire rol = (xOpcode==`RR && xFunc==`ROL) || (xOpcode==`SHFTI && xFunc==`ROLI);
-//wire ror = (xOpcode==`RR && xFunc==`ROR) || (xOpcode==`SHFTI && xFunc==`RORI);
-//wire rolam = (xOpcode==`RR && xFunc==`ROLAM) || (xOpcode==`SHFTI && xFunc==`ROLAMI);
-//
-//always @(shl,shr,shru,rol,ror,rolam)
-//	if (shl) shftop = 2'b00;
-//	else if (rol | ror | rolam) shftop = 2'b01;
-//	else if (shru) shftop = 2'b10;
-//	else if (shr) shftop = 2'b11;
-//	else shftop = 2'b01;
-
+reg [63:0] bfextd;
 wire [127:0] shlxo = {64'd0,a} << b[5:0];
 wire [127:0] shruxo = {a,64'd0} >> b[5:0];
 wire [63:0] shlo = shlxo[63:0];
 wire [63:0] shruo = shruxo[127:64];
-wire [63:0] rolo = {shlo[127:64]|shlo[63:0]};
-wire [63:0] roro = {shruo[127:64]|shruo[63:0]};
+wire [63:0] rolo = {shlxo[127:64]|shlxo[63:0]};
+wire [63:0] roro = {shruxo[127:64]|shruxo[63:0]};
 wire [63:0] shro = ~(~a >> b[5:0]);
 // generate mask
 wire [5:0] mb = xIR[12:7];
@@ -1457,29 +983,15 @@ integer nn;
 always @(mb or me or nn)
 	for (nn = 0; nn < 64; nn = nn + 1)
 		masko[nn] <= (nn >= mb) ^ (nn <= me) ^ (me >= mb);
-/*
-shiftAndMask #(64) u15
-(
-	.op(shftop),
-	.oz(1'b0),		// zero the output
-	.a(a),
-	.b(b[5:0]),
-	.mb(xIR[12:7]),
-	.me(xIR[18:13]),
-	.o(shfto),
-	.mo(masko)
-);
 
-*/
 always @(xOpcode or xFunc or a or b or imm or as or bs or imms or xpc or
 	sqrt_out or cntlzo or cntloo or tick or ipc or tba or AXC or
 	lt or eq or ltu or mult_out or lti or eqi or ltui or xIR or div_q or div_r or
-	shfto or masko or bcdaddo or bcdsubo or fpLooOut or fpZLOut
+	shfto or masko or bcdaddo or bcdsubo or fpLooOut or fpZLOut or
 `ifdef TLB
-	or Wired or Index or Random or TLBPhysPage0 or TLBPhysPage1 or TLBVirtPage or TLBASID or
-	PageTableAddr or BadVAddr or ASID or TLBPageMask 
+	PageTableAddr or BadVAddr or ASID or tlbo or
 `endif
-	or ASID or EPC or mutex_gate or IPC or CauseCode or TBA or xAXC or nonICacheSeg or rm or
+	ASID or EPC or mutex_gate or IPC or CauseCode or TBA or xAXC or nonICacheSeg or rm or
 	rando
 )
 casex(xOpcode)
@@ -1515,22 +1027,23 @@ casex(xOpcode)
 	`SEXT16:	xData = {{48{a[15]}},a[15:0]};
 	`SEXT32:	xData = {{32{a[31]}},a[31:0]};
 
+	`MTSPR:		xData = a;
 	`MFSPR:
 		case(xIR[12:7])
 `ifdef TLB
-		`Wired:			xData = Wired;
-		`TLBIndex:		xData = Index;
-		`TLBRandom:		xData = Random;
-		`TLBPhysPage0:	xData = {TLBPhysPage0,13'd0};
-		`TLBPhysPage1:	xData = {TLBPhysPage1,13'd0};
-		`TLBVirtPage:	xData = {TLBVirtPage,13'd0};
-		`TLBPageMask:	xData = {TLBPageMask,13'd0};
+		`TLBWired:		xData = tlbo;
+		`TLBIndex:		xData = tlbo;
+		`TLBRandom:		xData = tlbo;
+		`TLBPhysPage0:	xData = tlbo;
+		`TLBPhysPage1:	xData = tlbo;
+		`TLBVirtPage:	xData = tlbo;
+		`TLBPageMask:	xData = tlbo;
 		`TLBASID:	begin
 					xData = 65'd0;
-					xData[0] = TLBValid;
-					xData[1] = TLBD;
-					xData[2] = TLBG;
-					xData[15:8] = TLBASID;
+					xData[0] = tlbo[0];
+					xData[1] = tlbo[1];
+					xData[2] = tlbo[2];
+					xData[15:8] = tlbo[15:8];
 					end
 		`PageTableAddr:	xData = {PageTableAddr,13'd0};
 		`BadVAddr:		xData = {BadVAddr,13'd0};
@@ -1545,8 +1058,8 @@ casex(xOpcode)
 		`NON_ICACHE_SEG:	xData = nonICacheSeg;
 		`FPCR:			xData = FPC;
 		`RAND:			xData = rando;
-		`SRANDZ:		xData = {m_z2,m_z1};
-		`SRANDW:		xData = {m_w2,m_w1};
+		`SRAND1:		xData = {m_z2,m_z1};
+		`SRAND2:		xData = {m_w2,m_w1};
 		`INSNKEY:		xData = insnkey;
 		default:	xData = 65'd0;
 		endcase
@@ -1616,6 +1129,7 @@ casex(xOpcode)
 	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b1 : b[n]; xData[64] = 1'b0; end
 	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? 1'b0 : b[n]; xData[64] = 1'b0; end
 	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) xData[n] = masko[n] ? ~b[n] : b[n]; xData[64] = 1'b0; end
+	`BFEXT:		begin for (n = 0; n < 64; n = n + 1) bfextd[n] = masko[n] ? b[n] : 1'b0; xData = bfextd >> mb; end
 	default:	xData = 65'd0;
 	endcase
 `BTRR:
@@ -1658,8 +1172,8 @@ casex(xOpcode)
 		xData = a + imm;
 `MEMNDX:
 		xData = a + b + imm;
-`SM:	xData = a + {popcnt36(xIR[31:0]),3'b000};
-`LM:	xData = a + {popcnt36(xIR[31:0]),3'b000};
+`SM:	xData = a + {popcnt36(xIR[31:0]),3'b000}-64'd8;
+`LM:	xData = a + {popcnt36(xIR[31:0]),3'b000}-64'd8;
 `TRAPcc:	xData = fnIncPC(xpc);
 `TRAPcci:	xData = fnIncPC(xpc);
 `CALL:		xData = fnIncPC(xpc);
@@ -1749,10 +1263,6 @@ wire xIsIO =
 	xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTC || xOpcode==`OUTB
 	;
 
-reg m1IsLoad,m2IsLoad;
-reg m1IsIO;
-reg m1IsStore,m2IsStore,wIsStore;
-
 
 wire xIsFPLoo = xOpcode==`FPLOO;
 wire xIsFP = xOpcode==`FP;
@@ -1773,17 +1283,17 @@ wire StallM1 = (m1needBus & (m2needBus|icaccess|dcaccess)) ||
 wire StallM2 =  icaccess|dcaccess;
 
 wire advanceT = !resetA;
-wire advanceW = advanceT;
+assign advanceW = advanceT;
 wire advanceM2 = advanceW &&
 					((m2IsLoad || m2IsStore) ? (ack_i|err_i) : 1'b1) &&
 					!StallM2
 					;
-wire advanceM1 = advanceM2 &
+assign advanceM1 = advanceM2 &
 					(m1IsIO ? (ack_i|err_i) : 1'b1) &
 					((m1IsLoad & m1IsCacheElement) ? dhit : 1'b1) & 
 					!StallM1
 					;
-wire advanceX = advanceM1 & (
+assign advanceX = advanceM1 & (
 					xIsSqrt ? sqrt_done :
 					xIsMult ? mult_done :
 					xIsDiv ? div_done :
@@ -1897,79 +1407,39 @@ begin
 	end
 end
 
-//---------------------------------------------------------
-// Register file.
-//---------------------------------------------------------
-
-syncRam512x64_1rw3r u5
-(
-	.wrst(1'b0),
-	.wclk(clk),
-	.wce(advanceW),
-	.we(1'b1),
-	.wadr(wRt),
-	.i(wData),
-	.wo(),
-	
-	.rrsta(1'b0),
-	.rclka(~clk),
-	.rcea(advanceR),
-	.radra(dRa),
-	.roa(rfoa),
-
-	.rrstb(1'b0),
-	.rclkb(~clk),
-	.rceb(advanceR),
-	.radrb(dRb),
-	.rob(rfob),
-
-	.rrstc(1'b0),
-	.rclkc(~clk),
-	.rcec(advanceR),
-	.radrc(dRc),
-	.roc(rfoc)
-);
-
-
 reg m1clkoff,m2clkoff,m3clkoff,m4clkoff,wclkoff;
 reg dFip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
 reg cyc1;
 
-reg [63:0] nxt_a;
-always @(dRa or xData or m1Data or m2Data or wData or tData or rfoa)
-	casex(dRa)
-	9'bxxxx00000:	nxt_a <= 64'd0;
-	xRt:	nxt_a <= xData;
-	m1Rt:	nxt_a <= m1Data;
-	m2Rt:	nxt_a <= m2Data;
-	wRt:	nxt_a <= wData;
-	tRt:	nxt_a <= tData;
-	default:	nxt_a <= rfoa;
-	endcase
+//---------------------------------------------------------
+// Register file.
+//---------------------------------------------------------
 
-reg [63:0] nxt_b;
-always @(dRb or xData or m1Data or m2Data or wData or tData or rfob)
-	casex(dRb)
-	9'bxxxx00000:	nxt_b <= 64'd0;
-	xRt:	nxt_b <= xData;
-	m1Rt:	nxt_b <= m1Data;
-	m2Rt:	nxt_b <= m2Data;
-	wRt:	nxt_b <= wData;
-	tRt:	nxt_b <= tData;
-	default:	nxt_b <= rfob;
-	endcase
+wire [63:0] nxt_a, nxt_b, nxt_c;
 
-reg [63:0] nxt_c;
-always @(dRc or xData or m1Data or m2Data or wData or tData or rfoc)
-	casex(dRc)
-	9'bxxxx00000:	nxt_c <= 64'd0;
-	xRt:	nxt_c <= xData;
-	m1Rt:	nxt_c <= m1Data;
-	m2Rt:	nxt_c <= m2Data;
-	wRt:	nxt_c <= wData;
-	tRt:	nxt_c <= tData;
-	default:	nxt_c <= rfoc;
-	endcase
+Raptor64_regfile u5
+(
+	.clk(clk),
+	.advanceR(advanceR),
+	.advanceW(advanceW),
+	.dRa(dRa),
+	.dRb(dRb),
+	.dRc(dRc),
+	.dpc(dpc),
+	.xRt(xRt),
+	.m1Rt(m1Rt),
+	.m2Rt(m2Rt),
+	.wRt(wRt),
+	.tRt(tRt),
+	.xData(xData[63:0]),
+	.m1Data(m1Data),
+	.m2Data(m2Data),
+	.wData(wData),
+	.tData(tData),
+	.nxt_a(nxt_a),
+	.nxt_b(nxt_b),
+	.nxt_c(nxt_c)
+);
 
 always @(posedge clk)
 if (rst_i) begin
@@ -2040,17 +1510,10 @@ if (rst_i) begin
 	imm <= 64'd0;
 	xRt <= 9'd0;
 	clk_en <= 1'b1;
-`ifdef TLB
-	Random <= 4'hF;
-	Wired <= 4'd0;
-`endif
 	StatusEXL <= 1'b1;
 	StatusHWI <= 1'b0;
 	resetA <= 1'b1;
 	mutex_gate <= 64'h0;
-`ifndef BRANCH_PREDICTION_SIMPLE
-	gbl_branch_hist <= 3'b000;
-`endif
 	dcache_on <= 1'b0;
 	ICacheOn <= 1'b0;
 	ibuftag0 <= 64'h0;
@@ -2084,13 +1547,6 @@ if (resetA) begin
 		resetA <= 1'b0;
 	end
 end
-
-`ifdef TLB
-if (Random==Wired)
-	Random <= 3'd7;
-else
-	Random <= Random - 3'd1;
-`endif
 
 tick <= tick + 64'd1;
 
@@ -2175,7 +1631,9 @@ end
 //---------------------------------------------------------
 if (advanceM2) begin
 	wIsStore <= m2IsStore;
+	wIR <= m2IR;
 	wOpcode <= m2Opcode;
+	wFunc <= m2Func;
 	wData <= m2Data;
 	whwxtype <= m2hwxtype;
 	wextype <= (m2IsLoad|m2IsStore)&err_i ? `EX_DBERR : m2extype;
@@ -2317,6 +1775,7 @@ wrhit <= 1'b0;
 // present.
 //---------------------------------------------------------
 if (advanceM1) begin
+	m2IR <= m1IR;
 	m2Opcode <= m1Opcode;
 	m2Func <= m1Func;
 	m2IsLoad <= m1IsLoad;
@@ -2371,34 +1830,6 @@ if (advanceM1) begin
 					m2Data <= {cdat[63:2],2'b00};
 				end
 				end
-`ifdef TLB
-			`TLBP:
-				begin
-					Index[63] <= ~|DMatch;
-				end
-			`TLBR:
-				begin
-					TLBPageMask <= ITLBPageMask[i];
-					TLBVirtPage <= ITLBVirtPage[i];
-					TLBPhysPage0 <= ITLBPhysPage0[i];
-					TLBPhysPage1 <= ITLBPhysPage1[i];
-					TLBASID <= ITLBASID[i];
-					TLBG <= ITLBG[i];
-					TLBD <= ITLBD[i];
-					TLBValid <= ITLBValid[i];
-				end
-			`TLBWI,`TLBWR:
-				begin
-					ITLBValid[i] <= TLBValid;
-					ITLBVirtPage[i] <= TLBVirtPage;
-					ITLBPhysPage0[i] <= TLBPhysPage0;
-					ITLBPhysPage1[i] <= TLBPhysPage1;
-					ITLBPageMask[i] <= TLBPageMask;
-					ITLBASID[i] <= TLBASID;
-					ITLBD[i] <= TLBD;
-					ITLBG[i] <= TLBG;
-				end
-`endif
 			endcase
 		`INW:
 			begin
@@ -2680,10 +2111,6 @@ if (advanceM1) begin
 				$display("SW/SM");
 				m2Addr <= {pea[63:3],3'b000};
 				wrhit <= dhit;
-`ifdef TLB
-				if (!m1UnmappedDataArea & !q[3])
-					ITLBD[{q[2:0],pea[15:13]}] <= 1'b1;
-`endif
 `ifdef ADDRESS_RESERVATION
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
@@ -2700,10 +2127,6 @@ if (advanceM1) begin
 			begin
 				wrhit <= dhit;
 				m2Addr <= {pea[63:2],2'b00};
-`ifdef TLB
-				if (!m1UnmappedDataArea & !q[3])
-					ITLBD[{q[2:0],pea[15:13]}] <= 1'b1;
-`endif
 `ifdef ADDRESS_RESERVATION
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
@@ -2721,10 +2144,6 @@ if (advanceM1) begin
 				$display("Storing char to %h, ea=%h",pea,ea);
 				wrhit <= dhit;
 				m2Addr <= {pea[63:2],2'b00};
-`ifdef TLB
-				if (!m1UnmappedDataArea & !q[3])
-					ITLBD[{q[2:0],pea[15:13]}] <= 1'b1;
-`endif
 `ifdef ADDRESS_RESERVATION
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
@@ -2750,10 +2169,6 @@ if (advanceM1) begin
 				if (resv_address==pea[63:5])
 					resv_address <= 59'd0;
 `endif
-`ifdef TLB
-				if (!m1UnmappedDataArea & !q[3])
-					ITLBD[{q[2:0],pea[15:13]}] <= 1'b1;
-`endif
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
@@ -2776,10 +2191,6 @@ if (advanceM1) begin
 			begin
 				rsf <= 1'b0;
 				if (resv_address==pea[63:5]) begin
-`ifdef TLB
-					if (!m1UnmappedDataArea & !q[3])
-						ITLBD[{q[2:0],pea[15:13]}] <= 1'b1;
-`endif
 					wrhit <= dhit;
 					m2Addr <= {pea[63:3],3'b00};
 					cyc_o <= 1'b1;
@@ -2805,6 +2216,7 @@ end
 // - perform virtual to physical address translation.
 //---------------------------------------------------------
 if (advanceX) begin
+	m1IR <= xIR;
 	m1hwxtype <= xhwxtype;
 	m1Fip <= xFip;
 	m1extype <= xextype;
@@ -2868,14 +2280,6 @@ if (advanceX) begin
 				end
 `ifdef TLB
 		`TLBP:	ea <= TLBVirtPage;
-		`TLBR,`TLBWI:
-			begin
-				i <= {Index[2:0],TLBVirtPage[15:13]};
-			end
-		`TLBWR:
-			begin
-				i <= {Random,TLBVirtPage[15:13]};
-			end
 `endif
 		default:	;
 		endcase
@@ -2884,18 +2288,6 @@ if (advanceX) begin
 		`MTSPR:
 			case(xIR[12:7])
 `ifdef TLB
-			`Wired:			Wired <= a[2:0];
-			`TLBIndex:		Index <= a[2:0];
-			`TLBVirtPage:	TLBVirtPage <= a[63:13];
-			`TLBPhysPage0:	TLBPhysPage0 <= a[63:13];
-			`TLBPhysPage1:	TLBPhysPage1 <= a[63:13];
-			`TLBPageMask:	TLBPageMask <= a[24:13];
-			`TLBASID:		begin
-							TLBValid <= a[0];
-							TLBD <= a[1];
-							TLBG <= a[2];
-							TLBASID <= a[15:8];
-							end
 			`PageTableAddr:	PageTableAddr <= a[63:13];
 			`BadVAddr:		BadVAddr <= a[63:13];
 `endif
@@ -2906,11 +2298,11 @@ if (advanceX) begin
 			`NON_ICACHE_SEG:	nonICacheSeg <= a[63:32];
 			`FPCR:			rm <= a[31:30];
 			`IPC:			IPC <= a;
-			`SRANDZ:		begin
+			`SRAND1:		begin
 							m_z1 <= a[31:0];
 							m_z2 <= a[63:32];
 							end
-			`SRANDW:		begin
+			`SRAND2:		begin
 							m_w1 <= a[31:0];
 							m_w2 <= a[63:32];
 							end
@@ -3101,13 +2493,6 @@ if (advanceX) begin
 				end
 		default:	;
 		endcase
-	end
-`endif
-`ifndef BRANCH_PREDICTION_SIMPLE
-	// Update the branch history
-	if (isxBranch) begin
-		gbl_branch_hist <= {gbl_branch_hist,takb};
-		branch_history_table[bht_wa] <= xbits_new;
 	end
 `endif
 end
@@ -3374,7 +2759,7 @@ if (advanceI) begin
 		else if ((iOpcode==`LM || iOpcode==`SM) && insn[31:0]!=32'd0)
 			;
 		else begin
-			if (pc!=64'd3)
+			if (pc!=64'hC)
 				pc <= fnIncPC(pc);
 		end
 		case(iOpcode)
@@ -3474,7 +2859,7 @@ if (advanceX) begin
 		`SYSJMP:
 			begin
 				StatusEXL <= 1'b1;
-				pc <= 64'd3;
+				pc <= 64'hC;
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
@@ -3485,7 +2870,7 @@ if (advanceX) begin
 			begin
 				StatusEXL <= 1'b1;
 				EPC <= fnIncPC(xpc);
-				pc <= 64'd3;
+				pc <= 64'hC;
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRt <= 9'd0;
@@ -3647,7 +3032,7 @@ if (advanceX) begin
 			StatusEXL <= 1'b1;
 			CauseCode <= `EX_TRAP;
 			xextype <= `EX_TRAP;
-			pc <= 64'd3;
+			pc <= 64'hC;
 			dIR <= `NOP_INSN;
 			xIR <= `NOP_INSN;
 			xRt <= 9'd0;
@@ -3662,7 +3047,7 @@ if (advanceX) begin
 		CauseCode <= `EX_DBZ;
 		xextype <= `EX_DBZ;
 		StatusEXL <= 1'b1;
-		pc <= 64'd3;
+		pc <= 64'hC;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3674,7 +3059,7 @@ if (advanceX) begin
 		CauseCode <= `EX_OFL;
 		xextype <= `EX_OFL;
 		StatusEXL <= 1'b1;
-		pc <= 64'd3;
+		pc <= 64'hC;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3686,7 +3071,7 @@ if (advanceX) begin
 		CauseCode <= `EX_PRIV;
 		xextype <= `EX_PRIV;
 		StatusEXL <= 1'b1;
-		pc <= 64'd3;
+		pc <= 64'hC;
 		dIR <= `NOP_INSN;
 		xIR <= `NOP_INSN;
 		xRt <= 9'd0;
@@ -3755,7 +3140,7 @@ if (advanceW) begin
 		begin
 		$display("Stuffing SYSJMP");
 		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
-		pc <= 64'd3;
+		pc <= 64'hC;
 		case(1'b1)
 		wpcv:	IPC <= wpc;
 		m2pcv:	IPC <= m2pc;
@@ -3768,13 +3153,13 @@ if (advanceW) begin
 	`EX_OFL,`EX_DBZ,`EX_PRIV,`EX_TRAP:
 		begin
 		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
-		pc <= 64'd3;
+		pc <= 64'hC;
 		EPC <= fnIncPC(wpc);
 		end
 	default:
 		begin
 		xIR <= {`MISC,19'd0,wextype,`SYSJMP};
-		pc <= 64'd3;
+		pc <= 64'hC;
 		EPC <= fnIncPC(wpc);
 		end
 	endcase
