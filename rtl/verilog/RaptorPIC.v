@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 //=============================================================================
 //	(C) 2005-2012  Robert Finch
 //	All rights reserved.
@@ -96,7 +97,7 @@ module RaptorPIC
 	output ack_o,		// transfer acknowledge
 	input we_i,			// write
 	input [1:0] sel_i,	// byte select
-	input [63:0] adr_i,	// address
+	input [23:0] adr_i,	// address
 	input [15:0] dat_i,
 	output reg [15:0] dat_o,
 	output vol_o,		// volatile register selected
@@ -111,12 +112,12 @@ module RaptorPIC
 reg [15:0] ie;		// interrupt enable register
 reg ack1;
 
-wire cs = cyc_i && stb_i && adr_i[63:4]==60'hFFFF_FFFF_FFDC_0FF;
+wire cs = cyc_i && stb_i && adr_i[23:4]==20'hDC_0FF;
 assign vol_o = cs;
 
 always @(posedge clk_i)
-	ack1 <= cs & !ack_o;
-assign ack_o = ack1 && cs;
+	ack1 <= cs;
+assign ack_o = cs ? (we_i ? 1'b1 : ack1) : 1'b0;
 
 // write registers	
 always @(posedge clk_i)

@@ -5,6 +5,7 @@ parameter DOCMD = 8'd2;
 reg clk;
 reg rst;
 reg nmi;
+wire sys_iocyc;
 wire sys_cyc;
 wire sys_stb;
 wire sys_we;
@@ -30,11 +31,14 @@ wire tc_ack;
 wire pic_ack;
 reg pulse1000Hz;
 
-wire uart_ack = sys_cyc && sys_stb && (sys_adr[63:8]==56'hFFFF_FFFF_FFDC_0A);
-wire rast_ack = sys_cyc && sys_stb && (sys_adr[63:8]==56'hFFFF_FFFF_FFDA_01);
+wire uart_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_0A);
+wire rast_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDA_01);
+wire AC97_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_10);
+wire spr_ack =  sys_iocyc && sys_stb && (sys_adr[23:16]==8'hD8);
+wire Led_ack =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_06);
 
 assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
-assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack;
+assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack;
 
 initial begin
 	clk = 1;
@@ -45,11 +49,11 @@ initial begin
 	#100 rst = 0;
 	#800 nmi = 1;
 	#100 nmi = 0;
-	#500000 pulse1000Hz = 1;
-	#10 pulse1000Hz = 0;
 end
 
 always #10 clk = ~clk;	//  50 MHz
+always #290930 pulse1000Hz = 1;
+always #130 pulse1000Hz = 0;
 
 
 reg pulse1000HzB;
@@ -71,7 +75,7 @@ rtfTextController tc1
 (
 	.rst_i(rst),
 	.clk_i(clk),
-	.cyc_i(sys_cyc),
+	.cyc_i(sys_iocyc),
 	.stb_i(sys_stb),
 	.ack_o(tc_ack),
 	.we_i(sys_we),
@@ -130,7 +134,7 @@ RaptorPIC u_pic
 (
 	.rst_i(rst),		// reset
 	.clk_i(clk),	// system clock
-	.cyc_i(sys_cyc),	// cycle valid
+	.cyc_i(sys_iocyc),	// cycle valid
 	.stb_i(sys_stb),	// strobe
 	.ack_o(pic_ack),	// transfer acknowledge
 	.we_i(sys_we),		// write
@@ -154,7 +158,7 @@ RaptorPIC u_pic
 
 reg [63:0] keybdout;
 always @(sys_adr)
-	if (sys_adr==64'hFFFF_FFFF_FFDC_0000) begin
+	if (sys_adr==24'hDC_0000) begin
 		$display ("keyboard=FF");
 		keybdout <= 64'hFFFF_FFFF_FFFF_FFFF;
 	end
@@ -812,6 +816,7 @@ Raptor64sc u1
 	.irq_i(cpu_irq),
 	.bte_o(),
 	.cti_o(),
+	.iocyc_o(sys_iocyc),
 	.cyc_o(sys_cyc),
 	.stb_o(sys_stb),
 	.ack_i(sys_ack),

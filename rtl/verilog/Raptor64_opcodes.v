@@ -39,6 +39,7 @@
 `define		ICACHE_OFF	7'd11
 `define		DCACHE_ON	7'd12
 `define		DCACHE_OFF	7'd13
+`define     PCCAP_OFF	7'd14
 `define     FIP		7'd20
 `define		SYSJMP	7'd22
 `define 	SYSCALL	7'd23
@@ -91,7 +92,7 @@
 `define         AXC             6'd21
 `define			Tick			6'd22
 `define 		EPC				6'd23
-`define			CauseCode		6'd24
+`define			ERRADR			6'd24
 `define			TBA				6'd25
 `define			NON_ICACHE_SEG	6'd26
 `define			FPCR			6'd32
@@ -100,6 +101,8 @@
 `define			SRAND1			6'd35
 `define			SRAND2			6'd36
 `define			INSNKEY			6'd37
+`define			PCHI			6'd62
+`define         PCHISTORIC		6'd63
 `define		OMG		7'd50
 `define 	CMG		7'd51
 `define		OMGI	7'd52
@@ -127,7 +130,8 @@
 `define		MULS	7'd25
 `define		DIVU	7'd26
 `define 	DIVS	7'd27
-`define		MOD		7'd28
+`define		MODU	7'd28
+`define		MODS	7'd29
 `define		MOVZ	7'd30
 `define		MOVNZ	7'd31
 
@@ -151,6 +155,7 @@
 `define 	SEQ		7'd104
 `define 	SNE		7'd105
 
+`define     BCD_MUL 7'd109
 `define     BCD_ADD	7'd110
 `define     BCD_SUB 7'd111
 
