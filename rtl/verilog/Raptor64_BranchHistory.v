@@ -2,7 +2,7 @@
 `timescale 1ns / 1ps
 //=============================================================================
 //        __
-//   \\__/ o\    (C) 2011,2012  Robert Finch
+//   \\__/ o\    (C) 2011-2013  Robert Finch, Stratford
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@opencores.org
 //       ||
@@ -30,7 +30,7 @@ module Raptor64_BranchHistory(rst, clk, advanceX, xIR, pc, xpc, takb, predict_ta
 input rst;
 input clk;
 input advanceX;
-input [41:0] xIR;
+input [31:0] xIR;
 input [63:0] pc;
 input [63:0] xpc;
 input takb;
@@ -45,14 +45,14 @@ initial begin
 	for (n = 0; n < 256; n = n + 1)
 		branch_history_table[n] = 0;
 end
-wire [7:0] bht_wa = {xpc[5:0],gbl_branch_hist[2:1]};		// write address
-wire [7:0] bht_ra1 = {xpc[5:0],gbl_branch_hist[2:1]};		// read address (EX stage)
-wire [7:0] bht_ra2 = {pc[5:0],gbl_branch_hist[2:1]};	// read address (IF stage)
+wire [7:0] bht_wa = {xpc[7:2],gbl_branch_hist[2:1]};		// write address
+wire [7:0] bht_ra1 = {xpc[7:2],gbl_branch_hist[2:1]};		// read address (EX stage)
+wire [7:0] bht_ra2 = {pc[7:2],gbl_branch_hist[2:1]};	// read address (IF stage)
 wire [1:0] bht_xbits = branch_history_table[bht_ra1];
 wire [1:0] bht_ibits = branch_history_table[bht_ra2];
 assign predict_taken = bht_ibits==2'd0 || bht_ibits==2'd1;
 
-wire [6:0] xOpcode = xIR[41:35];
+wire [6:0] xOpcode = xIR[31:25];
 wire isxBranchI = (xOpcode==`BEQI || xOpcode==`BNEI ||
 					xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
 					xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI)

@@ -1,5 +1,30 @@
-
-
+`timescale 1ns / 1ps
+//=============================================================================
+//        __
+//   \\__/ o\    (C) 2012  Robert Finch
+//    \  __ /    All rights reserved.
+//     \/_//     robfinch<remove>@opencores.org
+//       ||
+//  
+//	BCDMath.v
+//
+//  
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU Lesser General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or     
+// (at your option) any later version.                                      
+//                                                                          
+// This source file is distributed in the hope that it will be useful,      
+// but WITHOUT ANY WARRANTY; without even the implied warranty of           
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the            
+// GNU General Public License for more details.                             
+//                                                                          
+// You should have received a copy of the GNU General Public License        
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.    
+//                                                                          
+//
+//=============================================================================
+//
 module BCDAdd(ci,a,b,o,c);
 input ci;		// carry input
 input [7:0] a;
@@ -61,6 +86,7 @@ case(i)
 5'h10:	begin o = 4'h6; c = 1'b1; end
 5'h11:	begin o = 4'h7; c = 1'b1; end
 5'h12:	begin o = 4'h8; c = 1'b1; end
+5'h13:	begin o = 4'h9; c = 1'b1; end
 default:	begin o = 4'h9; c = 1'b1; end
 endcase
 endmodule
@@ -83,6 +109,7 @@ case(i)
 5'h7: begin o = 4'h7; c = 1'b0; end
 5'h8: begin o = 4'h8; c = 1'b0; end
 5'h9: begin o = 4'h9; c = 1'b0; end
+5'h16: begin 0 = 4'h0; c = 1'b1; end
 5'h17: begin o = 4'h1; c = 1'b1; end
 5'h18: begin o = 4'h2; c = 1'b1; end
 5'h19: begin o = 4'h3; c = 1'b1; end

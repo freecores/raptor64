@@ -28,7 +28,7 @@
 //=============================================================================
 //
 module Raptor64_bitfield(xIR, rolo, b, o, masko);
-input [41:0] xIR;
+input [31:0] xIR;
 input [63:0] rolo;
 input [63:0] b;
 output [63:0] o;
@@ -36,14 +36,14 @@ reg [63:0] o;
 output [63:0] masko;
 
 reg [63:0] o1;
-wire [6:0] xOpcode = xIR[41:35];
+wire [6:0] xOpcode = xIR[31:25];
 wire [4:0] xFunc5 = xIR[4:0];
 
 // generate mask
 reg [63:0] mask;
 assign masko = mask;
-wire [5:0] mb = xIR[12:7];
-wire [5:0] me = xIR[18:13];
+wire [5:0] mb = xIR[10:5];
+wire [5:0] me = xIR[16:11];
 integer nn,n;
 always @(mb or me or nn)
 	for (nn = 0; nn < 64; nn = nn + 1)

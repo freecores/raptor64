@@ -28,15 +28,15 @@
 //=============================================================================
 //
 module Raptor64_addsub(xIR, a, b, imm, o);
-input [41:0] xIR;
+input [31:0] xIR;
 input [63:0] a;
 input [63:0] b;
 input [63:0] imm;
 output [63:0] o;
 reg [63:0] o;
 
-wire [6:0] xOpcode = xIR[41:35];
-wire [6:0] xFunc = xIR[6:0];
+wire [6:0] xOpcode = xIR[31:25];
+wire [5:0] xFunc = xIR[5:0];
 wire [7:0] bcdaddo,bcdsubo;
 
 BCDAdd u1(.ci(1'b0),.a(a[7:0]),.b(b[7:0]),.o(bcdaddo),.c());

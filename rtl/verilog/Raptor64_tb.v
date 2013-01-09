@@ -29,20 +29,24 @@ wire [15:0] tc_dato;
 wire [15:0] pic_dato;
 wire tc_ack;
 wire pic_ack;
-reg pulse1000Hz;
+reg pulse1000Hz,pulse100Hz;
 
 wire uart_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_0A);
 wire rast_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDA_01);
 wire AC97_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_10);
 wire spr_ack =  sys_iocyc && sys_stb && (sys_adr[23:16]==8'hD8);
 wire Led_ack =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_06);
+wire dt_ack  =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_04);
+wire p100ack =  sys_iocyc && sys_stb && (sys_adr[63:0]==64'hFFFFFFFF_FFFF0010);
+wire p1000ack =  sys_iocyc && sys_stb && (sys_adr[63:0]==64'hFFFFFFFF_FFFF0000);
 
 assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
-assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack;
+assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack|dt_ack|p100ack|p1000ack;
 
 initial begin
 	clk = 1;
 	pulse1000Hz = 0;
+	pulse100Hz = 0;
 	rst = 0;
 	nmi = 0;
 	#100 rst = 1;
@@ -51,22 +55,31 @@ initial begin
 	#100 nmi = 0;
 end
 
-always #10 clk = ~clk;	//  50 MHz
-always #290930 pulse1000Hz = 1;
+always #20 clk = ~clk;	//  25 MHz
+always #29930 pulse1000Hz = 1;
 always #130 pulse1000Hz = 0;
+always #299030 pulse100Hz = 1;
+always #130 pulse100Hz = 0;
 
 
-reg pulse1000HzB;
+reg pulse1000HzB,pulse100HzB;
 always @(posedge clk)
 if (rst) begin
 	pulse1000HzB <= 1'b0;
+	pulse100HzB <= 1'b0;
 end
 else begin
 	if (pulse1000Hz)
 		pulse1000HzB <= 1'b1;
 	else begin
-	if (sys_adr==64'hFFFFFFFF_FFFF0000)
+	if (p1000ack)
 		pulse1000HzB <= 1'b0;
+	end
+	if (pulse100Hz)
+		pulse100HzB <= 1'b1;
+	else begin
+	if (p100ack)
+		pulse100HzB <= 1'b0;
 	end
 end
 
@@ -145,7 +158,8 @@ RaptorPIC u_pic
 	.vol_o(),			// volatile register selected
 	.i1(),
 	.i2(pulse1000HzB),
-	.i3(), .i4(), .i5(), .i6(), .i7(),
+	.i3(pulse100HzB),
+	.i4(), .i5(), .i6(), .i7(),
 	.i8(), .i9(), .i10(), .i11(), .i12(), .i13(), .i14(),
 	.i15(),
 	.irqo(cpu_irq),	// normally connected to the processor irq

@@ -25,17 +25,20 @@
 //
 //=============================================================================
 
+`define EX_IRQ			9'd449	// interrupt
+`define EX_NMI			9'd510	// non-maskable interrupt
+
 module Raptor64_SetTargetRegister(rst,clk,advanceR,advanceX,dIR,dAXC,xRt);
 input rst;
 input clk;
 input advanceR;
 input advanceX;
-input [41:0] dIR;
+input [31:0] dIR;
 input [3:0] dAXC;
 output [8:0] xRt;
 reg [8:0] xRt;
 
-wire [6:0] dOpcode = dIR[41:35];
+wire [6:0] dOpcode = dIR[31:25];
 wire [6:0] dFunc = dIR[6:0];
 
 always @(posedge clk)
@@ -45,20 +48,26 @@ end
 else begin
 if (advanceR) begin
 	casex(dOpcode)
+	`MISC:
+		case(dFunc)
+		`SYSCALL:	xRt <= {dAXC,dIR[24:20]};
+		default:	xRt <= 9'd0;
+		endcase
 	`R:
 		case(dFunc)
 		`MTSPR,`CMG,`CMGI,`EXEC:
 					xRt <= 9'd0;
-		`MYST:		xRt <= {dAXC,dIR[19:15]};
-		default:	xRt <= {dAXC,dIR[29:25]};
+		default:	xRt <= {dAXC,dIR[19:15]};
 		endcase
-	`SETLO:		xRt <= {dAXC,dIR[36:32]};
-	`SETHI:		xRt <= {dAXC,dIR[36:32]};
-	`RR,`FP:	xRt <= {dAXC,dIR[24:20]};
+	`MYST,`MUX:	xRt <= {dAXC,dIR[ 9: 5]};
+	`SETLO:		xRt <= {dAXC,dIR[26:22]};
+	`SETMID:	xRt <= {dAXC,dIR[26:22]};
+	`SETHI:		xRt <= {dAXC,dIR[26:22]};
+	`RR,`FP:	xRt <= {dAXC,dIR[14:10]};
 	`BTRI:		xRt <= 9'd0;
 	`BTRR:
 		case(dIR[4:0])
-		`LOOP:	xRt <= {dAXC,dIR[29:25]};
+		`LOOP:	xRt <= {dAXC,dIR[19:15]};
 		default: xRt <= 9'd0;
 		endcase
 	`TRAPcc:	xRt <= 9'd0;
@@ -71,7 +80,7 @@ if (advanceR) begin
 		`SWX,`SHX,`SCX,`SBX,`SFX,`SFDX,`SPX,`SFPX,`SFDPX,`SSHX,`SSWX,
 		`OUTWX,`OUTHX,`OUTCX,`OUTBX:
 				xRt <= 9'd0;
-		default:	xRt <= {dAXC,dIR[24:20]};
+		default:	xRt <= {dAXC,dIR[14:10]};
 		endcase
 	`LSH,`LSW,
 	`SW,`SH,`SC,`SB,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP,	// but not SWC!
@@ -80,47 +89,8 @@ if (advanceR) begin
 	`NOPI:		xRt <= 9'd0;
 	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 				xRt <= 9'd0;
-	`SM:		xRt <= 9'd0;
-	`LM:
-		casex(dIR[30:0])
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1:	xRt <= {dAXC,5'd1};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxx10:	xRt <= {dAXC,5'd2};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxx100:	xRt <= {dAXC,5'd3};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxxx1000:	xRt <= {dAXC,5'd4};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxxx10000:	xRt <= {dAXC,5'd5};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxxx100000:	xRt <= {dAXC,5'd6};
-		31'bxxxxxxxxxxxxxxxxxxxxxxxx1000000:	xRt <= {dAXC,5'd7};
-		31'bxxxxxxxxxxxxxxxxxxxxxxx10000000:	xRt <= {dAXC,5'd8};
-		31'bxxxxxxxxxxxxxxxxxxxxxx100000000:	xRt <= {dAXC,5'd9};
-		31'bxxxxxxxxxxxxxxxxxxxxx1000000000:	xRt <= {dAXC,5'd10};
-		31'bxxxxxxxxxxxxxxxxxxxx10000000000:	xRt <= {dAXC,5'd11};
-		31'bxxxxxxxxxxxxxxxxxxx100000000000:	xRt <= {dAXC,5'd12};
-		31'bxxxxxxxxxxxxxxxxxx1000000000000:	xRt <= {dAXC,5'd13};
-		31'bxxxxxxxxxxxxxxxxx10000000000000:	xRt <= {dAXC,5'd14};
-		31'bxxxxxxxxxxxxxxxx100000000000000:	xRt <= {dAXC,5'd15};
-		31'bxxxxxxxxxxxxxxx1000000000000000:	xRt <= {dAXC,5'd16};
-		31'bxxxxxxxxxxxxxx10000000000000000:	xRt <= {dAXC,5'd17};
-		31'bxxxxxxxxxxxxx100000000000000000:	xRt <= {dAXC,5'd18};
-		31'bxxxxxxxxxxxx1000000000000000000:	xRt <= {dAXC,5'd19};
-		31'bxxxxxxxxxxx10000000000000000000:	xRt <= {dAXC,5'd20};
-		31'bxxxxxxxxxx100000000000000000000:	xRt <= {dAXC,5'd21};
-		31'bxxxxxxxxx1000000000000000000000:	xRt <= {dAXC,5'd22};
-		31'bxxxxxxxx10000000000000000000000:	xRt <= {dAXC,5'd23};
-		31'bxxxxxxx100000000000000000000000:	xRt <= {dAXC,5'd24};
-		31'bxxxxxx1000000000000000000000000:	xRt <= {dAXC,5'd25};
-		31'bxxxxx10000000000000000000000000:	xRt <= {dAXC,5'd26};
-		31'bxxxx100000000000000000000000000:	xRt <= {dAXC,5'd27};
-		31'bxxx1000000000000000000000000000:	xRt <= {dAXC,5'd28};
-		31'bxx10000000000000000000000000000:	xRt <= {dAXC,5'd29};
-		31'bx100000000000000000000000000000:	xRt <= {dAXC,5'd30};
-		31'b1000000000000000000000000000000:	xRt <= {dAXC,5'd31};
-		default:	xRt <= 9'h000;
-		endcase
-
-	default:	xRt <= {dAXC,dIR[29:25]};
+	default:	xRt <= {dAXC,dIR[19:15]};
 	endcase
-	if (dOpcode[6:4]==`IMM)
-		xRt <= 9'd0;
 end
 else if (advanceX)
 	xRt <= 9'd0;

@@ -27,23 +27,24 @@
 //
 //=============================================================================
 //
-module Raptor64_shift(xIR, a, b, mask, o);
-input [41:0] xIR;
+module Raptor64_shift(xIR, a, b, mask, o, rolo);
+input [31:0] xIR;
 input [63:0] a;
 input [63:0] b;
 input [63:0] mask;
 output [63:0] o;
 reg [63:0] o;
+output [63:0] rolo;
 
-wire [6:0] xOpcode = xIR[41:35];
-wire [6:0] xFunc = xIR[6:0];
+wire [6:0] xOpcode = xIR[31:25];
+wire [5:0] xFunc = xIR[5:0];
 wire [4:0] xFunc5 = xIR[4:0];
 
 wire [127:0] shlxo = {64'd0,a} << b[5:0];
 wire [127:0] shruxo = {a,64'd0} >> b[5:0];
 wire [63:0] shlo = shlxo[63:0];
 wire [63:0] shruo = shruxo[127:64];
-wire [63:0] rolo = {shlxo[127:64]|shlxo[63:0]};
+assign rolo = {shlxo[127:64]|shlxo[63:0]};
 wire [63:0] roro = {shruxo[127:64]|shruxo[63:0]};
 wire [63:0] shro = ~(~a >> b[5:0]);
 
@@ -52,6 +53,7 @@ case(xOpcode)
 `RR:
 	case(xFunc)
 	`SHL:	o = shlo;
+	`SHLU:	o = shlo;
 	`SHRU:	o = shruo;
 	`ROL:	o = rolo;
 	`ROR:	o = roro;
@@ -62,6 +64,7 @@ case(xOpcode)
 `SHFTI:
 	case(xFunc5)
 	`SHLI:	o = shlo;
+	`SHLUI:	o = shlo;
 	`SHRUI:	o = shruo;
 	`ROLI:	o = rolo;
 	`RORI:	o = roro;

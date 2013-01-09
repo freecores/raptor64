@@ -23,6 +23,9 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.    
 //                                                                          
 //
+// If a register field is not used by an instruction, then the register
+// selected is forced to r0 for that field. This causes load stalls to be
+// avoided, which would otherwise occur.
 //=============================================================================
 
 module Raptor64_SetOperandRegs(rst, clk, advanceI, advanceR, advanceX, b, AXC, insn, xIR, dRa, dRb, dRc);
@@ -33,8 +36,8 @@ input advanceR;
 input advanceX;
 input [63:0] b;
 input [3:0] AXC;
-input [41:0] insn;
-input [41:0] xIR;
+input [31:0] insn;
+input [31:0] xIR;
 output [8:0] dRa;
 reg [8:0] dRa;
 output [8:0] dRb;
@@ -42,9 +45,10 @@ reg [8:0] dRb;
 output [8:0] dRc;
 reg [8:0] dRc;
 
-wire [6:0] iOpcode = insn[41:35];
-wire [6:0] xOpcode = xIR[41:35];
-wire [6:0] xFunc = xIR[6:0];
+wire [6:0] iOpcode = insn[31:25];
+wire [6:0] xOpcode = xIR[31:25];
+wire [5:0] xFunc = xIR[5:0];
+wire [6:0] iFunc7 = insn[6:0];
 
 always @(posedge clk)
 if (rst) begin
@@ -55,55 +59,58 @@ end
 else begin
 	if (advanceI) begin
 		// Default settings, to be overridden
-		dRa <= {AXC,insn[34:30]};
-		dRb <= {AXC,insn[29:25]};
-		dRc <= {AXC,insn[24:20]};
+		dRa <= {AXC,insn[24:20]};
+		dRb <= {AXC,insn[19:15]};
+		dRc <= {AXC,insn[14:10]};
 		casex(iOpcode)
+		`MISC:
+			case(iFunc7)
+			`IRET:	begin
+					dRa <= {AXC,5'd25};
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+			`ERET:	begin
+					dRa <= {AXC,5'd24};
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+			default:
+					begin
+					dRa <= 9'd0;
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+			endcase
+		`CALL,`JMP,`NOPI:
+					begin
+					dRa <= 9'd0;
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
 		`RET:		begin
 					dRa <= {AXC,5'd30};
 					dRb <= {AXC,5'd31};
+					dRc <= 9'd0;
 					end
-		`SETLO:		dRa <= {AXC,insn[36:32]};
-		`SETHI:		dRa <= {AXC,insn[36:32]};
-		`SM,`LM:
-			begin
-			dRa <= {AXC,1'b1,insn[34:31]};
-			casex(insn[30:0])
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1:	dRb <= {AXC,5'd1};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxx10:	dRb <= {AXC,5'd2};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxxxxx100:	dRb <= {AXC,5'd3};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxxxx1000:	dRb <= {AXC,5'd4};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxxx10000:	dRb <= {AXC,5'd5};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxxx100000:	dRb <= {AXC,5'd6};
-			31'bxxxxxxxxxxxxxxxxxxxxxxxx1000000:	dRb <= {AXC,5'd7};
-			31'bxxxxxxxxxxxxxxxxxxxxxxx10000000:	dRb <= {AXC,5'd8};
-			31'bxxxxxxxxxxxxxxxxxxxxxx100000000:	dRb <= {AXC,5'd9};
-			31'bxxxxxxxxxxxxxxxxxxxxx1000000000:	dRb <= {AXC,5'd10};
-			31'bxxxxxxxxxxxxxxxxxxxx10000000000:	dRb <= {AXC,5'd11};
-			31'bxxxxxxxxxxxxxxxxxxx100000000000:	dRb <= {AXC,5'd12};
-			31'bxxxxxxxxxxxxxxxxxx1000000000000:	dRb <= {AXC,5'd13};
-			31'bxxxxxxxxxxxxxxxxx10000000000000:	dRb <= {AXC,5'd14};
-			31'bxxxxxxxxxxxxxxxx100000000000000:	dRb <= {AXC,5'd15};
-			31'bxxxxxxxxxxxxxxx1000000000000000:	dRb <= {AXC,5'd16};
-			31'bxxxxxxxxxxxxxx10000000000000000:	dRb <= {AXC,5'd17};
-			31'bxxxxxxxxxxxxx100000000000000000:	dRb <= {AXC,5'd18};
-			31'bxxxxxxxxxxxx1000000000000000000:	dRb <= {AXC,5'd19};
-			31'bxxxxxxxxxxx10000000000000000000:	dRb <= {AXC,5'd20};
-			31'bxxxxxxxxxx100000000000000000000:	dRb <= {AXC,5'd21};
-			31'bxxxxxxxxx1000000000000000000000:	dRb <= {AXC,5'd22};
-			31'bxxxxxxxx10000000000000000000000:	dRb <= {AXC,5'd23};
-			31'bxxxxxxx100000000000000000000000:	dRb <= {AXC,5'd24};
-			31'bxxxxxx1000000000000000000000000:	dRb <= {AXC,5'd25};
-			31'bxxxxx10000000000000000000000000:	dRb <= {AXC,5'd26};
-			31'bxxxx100000000000000000000000000:	dRb <= {AXC,5'd27};
-			31'bxxx1000000000000000000000000000:	dRb <= {AXC,5'd28};
-			31'bxx10000000000000000000000000000:	dRb <= {AXC,5'd29};
-			31'bx100000000000000000000000000000:	dRb <= {AXC,5'd30};
-			31'b1000000000000000000000000000000:	dRb <= {AXC,5'd31};
-			default:	dRb <= {AXC,5'd0};
-			endcase
-			end
-		default:	dRa <= {AXC,insn[34:30]};
+		`BLTI,`BLEI,`BGTI,`BGEI,
+		`BLTUI,`BLEUI,`BGTUI,`BGEUI,
+		`BEQI,`BNEI:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`SLTI,`SLEI,`SGTI,`SGEI,
+		`SLTUI,`SLEUI,`SGTUI,`SGEUI,
+		`SEQI,`SNEI:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`SETLO:		dRa <= {AXC,insn[26:22]};
+		`SETMID:	dRa <= {AXC,insn[26:22]};
+		`SETHI:		dRa <= {AXC,insn[26:22]};
+		default:	dRa <= {AXC,insn[24:20]};
 		endcase
 	end
 	else if (advanceR) begin
@@ -115,9 +122,9 @@ else begin
 	if (advanceX) begin
 		if (xOpcode==`R) begin
 			if (xFunc==`EXEC) begin
-				dRa <= b[34:30];
-				dRb <= b[29:25];
-				dRc <= b[24:20];
+				dRa <= b[24:20];
+				dRb <= b[19:15];
+				dRc <= b[14:10];
 			end
 		end
 	end
