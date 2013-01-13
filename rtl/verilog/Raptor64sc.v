@@ -113,7 +113,9 @@ reg [31:0] ndIR;		// next dIR
 reg [63:0] pc;
 wire [63:0] pchistoric;
 reg pccap;
-reg [63:0] ErrorEPC,EPC,IPC;
+reg [63:0] ErrorEPC;
+reg [63:0] EPC [0:15];
+reg [63:0] IPC [0:15];
 reg [63:0] dpc,xpc,m1pc,m2pc,wpc;
 reg dpcv,xpcv,m1pcv,m2pcv,wpcv;	// PC valid indicators
 wire [63:0] rfoa,rfob,rfoc;
@@ -126,11 +128,10 @@ reg [4:0] cstate;
 reg dbranch_taken,xbranch_taken;
 reg [63:0] mutex_gate;
 reg [63:0] TBA;		// Trap Base Address
-reg [1:0] dhwxtype,xhwxtype,m1hwxtype,m2hwxtype,whwxtype;
 reg [8:0] dextype,xextype,m1extype,m2extype,wextype,textype;
 reg [3:0] epat [0:255];
 reg [7:0] eptr;
-reg [3:0] dAXC,xAXC,m1AXC,m2AXC;
+reg [3:0] dAXC,xAXC,m1AXC,m2AXC,wAXC;
 wire [3:0] AXC = epat[eptr];
 reg dtinit;
 reg dcache_on;
@@ -193,7 +194,7 @@ wire advanceX_edge;
 wire takb;
 wire advanceX,advanceM1,advanceW;
 reg m1IsLoad,m2IsLoad;
-reg m1IsIO;
+//reg m1IsIO;
 reg m1IsStore,m2IsStore,wIsStore;
 reg m1clkoff,m2clkoff,m3clkoff,m4clkoff,wclkoff;
 reg dFip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
@@ -334,6 +335,7 @@ reg [31:0] insnkey;
 wire syscall509 = 32'b0000000_11000_0000_11111110_10010111;
 wire [63:0] bevect = {syscall509,syscall509};
 
+// Xilinx Core Generator Component
 Raptor64_icache_ram u1
 (
 	.clka(clk), // input clka
@@ -393,6 +395,7 @@ reg wrhit;
 reg wr_dcache;
 
 // cache RAM 32Kb
+// Xilinx Core Generator Component
 Raptor64_dcache_ram u10
 (
 	.clka(clk), // input clka
@@ -407,17 +410,19 @@ Raptor64_dcache_ram u10
 );
 
 
+// Xilinx Core Generator Component
+// tag RAM 512 b
 Raptor64_dcache_tagram u11
 (
 	.clka(clk), // input clka
 	.ena(dtinit | (adr_o[5:3]==3'b111)), // input ena
 	.wea(dtinit | (dcaccess & ack_i)), // input [0 : 0] wea
-	.addra({1'b0,adr_o[14:6]}), // input [9 : 0] addra
-	.dina(dtinit ? {1'b0,adr_o[63:15]} : {1'b1,adr_o[63:15]}), // input [48 : 0] dina
+	.addra(adr_o[14:6]), // input [8 : 0] addra
+	.dina({~dtinit,adr_o[63:15]}), // input [49 : 0] dina
 
 	.clkb(~clk), // input clkb
-	.addrb({1'b0,pea[14:6]}), // input [9 : 0] addrb
-	.doutb(dtgout) // output [48 : 0] doutb
+	.addrb(pea[14:6]), // input [8 : 0] addrb
+	.doutb(dtgout) // output [49 : 0] doutb
 );
 
 assign dhit = (dtgout=={1'b1,pea[63:15]});
@@ -535,6 +540,7 @@ wire fpmul_uf,fpaddsub_uf,fpdiv_uf;
 
 
 `ifdef FLOATING_POINT
+// Xilinx Core Generator Components
 
 Raptor64_fpCmp u60
 (
@@ -609,13 +615,13 @@ else begin
 	end
 	if (advanceX) begin
 		if (xOpcode==`FP) begin
-			if (xFunc6==6'b000000)	// FDADD
+			if (xFunc6==`FDADD)	// FDADD
 				fltctr <= 6'd12;
-			else if (xFunc6==6'b000001)	// FDSUB
+			else if (xFunc6==`FDSUB)	// FDSUB
 				fltctr <= 6'd12;
-			else if (xFunc6==6'b000010)	// FDMUL
+			else if (xFunc6==`FDMUL)	// FDMUL
 				fltctr <= 6'd12;
-			else if (xFunc6==6'b000011)	// FDDIV
+			else if (xFunc6==`FDDIV)	// FDDIV
 				fltctr <= 6'd12;
 			else if (xFunc6==6'b000100)	// unordered
 				fltctr <= 6'd2;
@@ -631,7 +637,7 @@ else begin
 				fltctr <= 6'd2;
 			else if (xFunc6==6'b110100)	// greater than or equal
 				fltctr <= 6'd2;
-			else if (xFunc6==6'b000101)	// ItoFD
+			else if (xFunc6==`FDI2F)	// ItoFD
 				fltctr <= 6'd7;
 			else if (xFunc6==6'b000110)	// FFtoI
 				fltctr <= 6'd6;
@@ -799,7 +805,7 @@ wire [15:0] bcdmulo;
 Raptor64_addsub u21 (xIR,a,b,imm,xAddsubo);
 Raptor64_logic   u9 (xIR,a,b,imm,xLogico);
 Raptor64_set    u15 (xIR,a,b,imm,xSeto);
-Raptor64_bitfield u16(xIR, rolo, b, xBitfieldo, masko);
+Raptor64_bitfield u16(xIR, a, b, xBitfieldo, masko);
 Raptor64_shift  u17 (xIR, a, b, masko, xShifto, rolo);
 BCDMul2 u22 (a[7:0],b[7:0],bcdmulo);
 
@@ -832,6 +838,7 @@ casex(xOpcode)
 	`MOV:	xData1 = a;
 	`SQRT:	xData1 = sqrt_out;
 	`SWAP:	xData1 = {a[31:0],a[63:32]};
+	`RBO:	xData1 = {a[7:0],a[15:8],a[23:16],a[31:24],a[39:32],a[47:40],a[55:48],a[63:56]};
 	
 	`REDOR:		xData1 = |a;
 	`REDAND:	xData1 = &a;
@@ -877,8 +884,8 @@ casex(xOpcode)
 `endif
 		`ASID:			xData1 = ASID;
 		`Tick:			xData1 = tick;
-		`EPC:			xData1 = EPC;
-		`IPC:			xData1 = IPC;
+		`EPC:			xData1 = EPC[xAXC];
+		`IPC:			xData1 = IPC[xAXC];
 		`TBA:			xData1 = TBA;
 		`ERRADR:		xData1 = errorAddress;
 		`AXC:			xData1 = xAXC;
@@ -945,7 +952,7 @@ casex(xOpcode)
 		xData1 = a + imm;
 `LW,`LH,`LC,`LB,`LHU,`LCU,`LBU,`LWR,`LF,`LFD,`LP,`LFP,`LFDP,`LEA:
 		xData1 = a + imm;
-`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SP,`SFP,`SFDP:
+`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SP,`SFP,`SFDP,`STBC:
 		xData1 = a + imm;
 `MEMNDX:
 		xData1 = a + (b << scale) + imm;
@@ -987,15 +994,42 @@ overflow u3 (.op(xOpcode==`RR && xFunc==`SUB), .a(a[63]), .b(b[63]), .s(xAddsubo
 
 wire dbz_error = ((xOpcode==`DIVSI||xOpcode==`DIVUI) && imm==64'd0) || (xOpcode==`RR && (xFunc6==`DIVS || xFunc6==`DIVU) && b==64'd0);
 wire ovr_error = ((xOpcode==`ADDI || xOpcode==`SUBI) && v_ri) || ((xOpcode==`RR && (xFunc6==`SUB || xFunc6==`ADD)) && v_rr);
+// ToDo: add more priv violations
 wire priv_violation = !KernelMode && (xOpcode==`MISC &&
 	(xFunc==`IRET || xFunc==`ERET || xFunc==`CLI || xFunc==`SEI ||
-	 xFunc==`TLBP || xFunc==`TLBR || xFunc==`TLBWR || xFunc==`TLBWI
+	 xFunc==`TLBP || xFunc==`TLBR || xFunc==`TLBWR || xFunc==`TLBWI || xFunc==`IEPP
 	));
-wire illegal_insn = (xOpcode==7'd19 || xOpcode==7'd47 || xOpcode==7'd54 || xOpcode==7'd55 || xOpcode==7'd63 || xOpcode==7'd71 ||
-		xOpcode==7'd90 || xOpcode==7'd91 || xOpcode==7'd92 || xOpcode==7'd93 || xOpcode==7'd106 || xOpcode==7'd107)
+// ToDo: detect illegal instructions in the hives (sub-opcodes)
+wire illegal_insn = (
+		xOpcode==7'd19 ||
+		xOpcode==7'd20 ||
+		xOpcode==7'd28 ||
+		xOpcode==7'd29 ||
+		xOpcode==7'd30 ||
+		xOpcode==7'd31 ||
+		xOpcode==7'd47 ||
+		xOpcode==7'd54 ||
+		xOpcode==7'd55 ||
+		xOpcode==7'd63 ||
+		xOpcode==7'd71 ||
+		xOpcode==7'd90 ||
+		xOpcode==7'd91 ||
+		xOpcode==7'd92 ||
+		xOpcode==7'd93 ||
+		xOpcode==7'd106 ||
+		xOpcode==7'd107 ||
+		xOpcode==7'd124 ||
+		xOpcode==7'd125 ||
+		xOpcode==7'd126 ||
+		xOpcode==7'd127
+		)
 		;
 
 //-----------------------------------------------------------------------------
+// For performance and core size reasons, the following should really decode
+// the opcodes in the decode stage, then pass the decoding information forward
+// using regs. However the core is trickier to get working that way; decoding
+// in multiple stages is simpler.
 //-----------------------------------------------------------------------------
 //wire dIsLoad =
 //	dOpcode==`LW || dOpcode==`LH || dOpcode==`LB || dOpcode==`LWR ||
@@ -1046,7 +1080,7 @@ wire xIsDiv = (xOpcode==`RR && (xFunc6==`DIVU || xFunc6==`DIVS || xFunc6==`MODU 
 wire xIsCnt = xOpcode==`R && (xFunc6==`CTLZ || xFunc6==`CTLO || xFunc6==`CTPOP);
 reg m1IsCnt,m2IsCnt;
 
-
+// Have to set the xIsLoad/xIsStore flag to false when xIR is nopped out
 wire xIsLoad =
 	xOpcode==`LW || xOpcode==`LH || xOpcode==`LB || xOpcode==`LWR ||
 	xOpcode==`LHU || xOpcode==`LBU ||
@@ -1062,11 +1096,10 @@ wire xIsLoad =
 	)) ||
 	(xOpcode==`MISC && (xFunc==`SYSCALL))
 	;
-
 wire xIsStore =
 	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC || xOpcode==`SM ||
 	xOpcode==`SF || xOpcode==`SFD || xOpcode==`SP || xOpcode==`SFP || xOpcode==`SFDP ||
-	xOpcode==`SSH || xOpcode==`SSW ||
+	xOpcode==`SSH || xOpcode==`SSW || xOpcode==`STBC ||
 	(xOpcode==`MEMNDX && (
 		xFunc6==`SWX || xFunc6==`SHX || xFunc6==`SBX || xFunc6==`SCX || xFunc6==`SWCX ||
 		xFunc6==`SFX || xFunc6==`SFDX || xFunc6==`SPX ||
@@ -1099,9 +1132,15 @@ wire m1IsIn =
 		m1Func6==`INHUX || m1Func6==`INCUX || m1Func6==`INBUX
 	))
 	;
+wire m1IsOut = m1Opcode==`OUTW || m1Opcode==`OUTH || m1Opcode==`OUTC || m1Opcode==`OUTB ||
+	(m1Opcode==`MEMNDX && (
+		m1Func6==`OUTWX || m1Func6==`OUTHX || m1Func6==`OUTCX || m1Func6==`OUTBX
+	))
+	;
+
 wire m2IsInW = m2Opcode==`INW;
 wire xIsIO = xIsIn || xIsOut;
-
+wire m1IsIO = m1IsIn || m1IsOut;
 
 wire xIsFPLoo = xOpcode==`FPLOO;
 wire xIsFP = xOpcode==`FP;
@@ -1283,15 +1322,9 @@ if (rst_i) begin
 	m1IsStore <= 1'b0;
 	m2IsStore <= 1'b0;
 	wIsStore <= 1'b0;
-	m1IsIO <= 1'b0;
 	icaccess <= 1'b0;
 	dcaccess <= 1'b0;
 	prev_ihit <= 1'b0;
-	dhwxtype <= 2'b00;
-	xhwxtype <= 2'b00;
-	m1hwxtype <= 2'b00;
-	m2hwxtype <= 2'b00;
-	whwxtype <= 2'b00;
 	wFip <= 1'b0;
 	m2Fip <= 1'b0;
 	m1Fip <= 1'b0;
@@ -1306,6 +1339,10 @@ if (rst_i) begin
 	tick <= 64'd0;
 	cstate <= IDLE;
 	dAXC <= 4'd0;
+	xAXC <= 4'd0;
+	m1AXC <= 4'd0;
+	m2AXC <= 4'd0;
+	wAXC <= 4'd0;
 	xirqf <= 1'b0;
 	dextype <= 9'h00;
 	xextype <= 9'h00;
@@ -1399,7 +1436,6 @@ if (advanceI) begin
 		$display("*****************");
 		StatusHWI <= 1'b1;
 		nmi_edge <= 1'b0;
-		dhwxtype <= 2'b01;
 		dextype <= `EX_NMI;
 		dIR <= `NOP_INSN;
 		LoadNOPs <= 1'b1;
@@ -1411,14 +1447,13 @@ if (advanceI) begin
 		bu_im <= 1'b0;
 		im <= 1'b1;
 		StatusHWI <= 1'b1;
-		dhwxtype <= 2'b10;
 		dextype <= `EX_IRQ;
 		dIR <= `NOP_INSN;
 		LoadNOPs <= 1'b1;
 	end
 	// Are we filling the pipeline with NOP's as a result of a previous
 	// hardware interrupt ?
-	else if (|dhwxtype|dFip|LoadNOPs)
+	else if (|dFip|LoadNOPs)
 		dIR <= `NOP_INSN;
 `ifdef TLB
 	else if (ITLBMiss)
@@ -1444,11 +1479,6 @@ if (advanceI) begin
 //		if (!LoadNOPs)
 			pc <= fnIncPC(pc);
 		case(iOpcode)
-		`MISC:
-			case(iFunc)
-			`FIP:	dFip <= 1'b1;
-			default:	;
-			endcase
 		// We predict the return address by storing it in a return address stack
 		// during a call instruction, then popping it off the stack in a return
 		// instruction. The prediction will not always be correct, if it's wrong
@@ -1530,7 +1560,6 @@ end
 //
 if (advanceR) begin
 	xAXC <= dAXC;
-	xhwxtype <= dhwxtype;
 	xFip <= dFip;
 	xextype <= dextype;
 	xpc <= dpc;
@@ -1553,6 +1582,7 @@ if (advanceR) begin
 		imm <= {{56{dIR[7]}},dIR[7:0]};
 	`RET:	imm <= {49'h00000000,dIR[14:3],3'b000};
 	`MEMNDX:	imm <= dIR[7:6];
+	`STBC:		imm <= {{52{dIR[11]}},dIR[11:0]};
 	default:	imm <= {{49{dIR[14]}},dIR[14:0]};
 	endcase
 	scale <= dIR[9:8];
@@ -1560,12 +1590,13 @@ end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceX) begin
-	xRtZero <= 1'b1;
-	xextype <= `EX_NON;
-	xbranch_taken <= 1'b0;
-	xIR <= `NOP_INSN;
-	xpcv <= 1'b0;
-	xpc <= `RESET_VECTOR;
+	xRtZero <= #1 1'b1;
+	xextype <= #1 `EX_NON;
+	xbranch_taken <= #1 1'b0;
+	xIR <= #1 `NOP_INSN;
+	xpcv <= #1 1'b0;
+	xpc <= #1 `RESET_VECTOR;
+	xFip <= #1 1'b0;
 end
 
 //---------------------------------------------------------
@@ -1576,7 +1607,6 @@ end
 // - m1???? signals to M1 stage
 //---------------------------------------------------------
 if (advanceX) begin
-	m1hwxtype <= xhwxtype;
 	m1extype <= xextype;
 	m1Fip <= xFip;
 	m1Func <= xFunc;
@@ -1586,7 +1616,6 @@ if (advanceX) begin
 	m1IsLoad <= xIsLoad;
 	m1IsStore <= xIsStore;
 	m1IsCnt <= xIsCnt;
-	m1IsIO <= xIsIO;
 	m1Opcode <= xOpcode;
 	m1Rt <= xRtZero ? 9'd0 : xRt;
 	m1Data <= xData;
@@ -1621,7 +1650,27 @@ if (advanceX) begin
 		`ICACHE_OFF:	ICacheOn <= 1'b0;
 		`DCACHE_ON:		dcache_on <= 1'b1;
 		`DCACHE_OFF:	dcache_on <= 1'b0;
-		`IEPP:	eptr <= eptr + 8'd1;
+		`FIP:	begin
+				dIR <= `NOP_INSN;
+				xIR <= `NOP_INSN;
+				xRtZero <= 1'b1;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
+				dFip <= 1'b1;
+				xFip <= 1'b1;
+				m1Fip <= 1'b1;
+				end
+		`IEPP:	begin
+				eptr <= eptr + 8'd1;
+				dIR <= `NOP_INSN;
+				xIR <= `NOP_INSN;
+				xRtZero <= 1'b1;
+				xpcv <= 1'b0;
+				dpcv <= 1'b0;
+				dFip <= 1'b1;
+				xFip <= 1'b1;
+				m1Fip <= 1'b1;
+				end
 		`GRAN:	begin
 				rando <= rand;
 				m_z <= next_m_z;
@@ -1636,7 +1685,7 @@ if (advanceX) begin
 			if (StatusHWI) begin
 				StatusHWI <= 1'b0;
 				im <= 1'b0;
-				pc <= a;
+				pc <= IPC[xAXC];	//a;
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRtZero <= 1'b1;
@@ -1646,7 +1695,7 @@ if (advanceX) begin
 		`ERET:
 			if (StatusEXL) begin
 				StatusEXL <= 1'b0;
-				pc <= a;
+				pc <= EPC[xAXC];
 				dIR <= `NOP_INSN;
 				xIR <= `NOP_INSN;
 				xRtZero <= 1'b1;
@@ -1668,6 +1717,7 @@ if (advanceX) begin
 				xpcv <= 1'b0;
 				dpcv <= 1'b0;
 				ea <= {TBA[63:12],xIR[15:7],3'b000};
+				LoadNOPs <= 1'b1;
 				$display("EX SYSCALL thru %h",{TBA[63:12],xIR[15:7],3'b000});
 			end
 `ifdef TLB
@@ -1687,18 +1737,18 @@ if (advanceX) begin
 				dpcv <= 1'b0;
 			end
 		`MTSPR:
-			case(xIR[12:7])
+			case(xIR[11:6])
 `ifdef TLB
 			`PageTableAddr:	PageTableAddr <= a[63:13];
 			`BadVAddr:		BadVAddr <= a[63:13];
 `endif
 			`ASID:			ASID <= a[7:0];
-			`EPC:			EPC <= a;
+//			`EPC:			EPC <= a;
 			`TBA:			TBA <= {a[63:12],12'h000};
 //			`AXC:			AXC <= a[3:0];
 			`NON_ICACHE_SEG:	nonICacheSeg <= a[63:32];
 			`FPCR:			rm <= a[31:30];
-			`IPC:			IPC <= a;
+//			`IPC:			IPC <= a;
 			`SRAND1:		begin
 							m_z <= a;
 							end
@@ -1723,7 +1773,7 @@ if (advanceX) begin
 	// JMP and CALL change the program counter immediately in the IF stage.
 	// There's no work to do here. The pipeline does not need to be cleared.
 	`JMP:	;
-	`CALL:	m1Data <= fnIncPC(xpc);
+	`CALL:	;//m1Data <= fnIncPC(xpc);
 	
 	`JAL:
 `ifdef BTB
@@ -1864,6 +1914,7 @@ if (advanceX) begin
 			xRtZero <= 1'b1;
 			xpcv <= 1'b0;
 			dpcv <= 1'b0;
+			LoadNOPs <= 1'b1;
 		end
 
 	`INW:
@@ -1906,7 +1957,7 @@ if (advanceX) begin
 			3'b110:	sel_o <= 8'b01000000;
 			3'b111:	sel_o <= 8'b10000000;
 			endcase
-			adr_o <= xData;
+			adr_o <= xData1;
 			end
 	`OUTW:
 			begin
@@ -1969,6 +2020,11 @@ if (advanceX) begin
 			ea <= xData1;
 			$display("EX MEMOP %h", xData1);
 			end
+//	`STBC:
+//			begin
+//			m1Data <= {8{xIR[19:12]}};
+//			ea <= xData1;
+//			end
 	`SSH:	begin
 			case(xRt)
 			`SR:	m1Data <= {2{sr}};
@@ -2179,17 +2235,17 @@ end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceM1) begin
-	m1IR <= `NOP_INSN;
-	m1Opcode <= `NOPI;
-	m1Rt <= 9'd0;
-	m1clkoff <= 1'b0;
-	m1pc <= `RESET_VECTOR;
-	m1pcv <= 1'b0;
-	m1extype <= `EX_NON;
+	m1IR <= #1 `NOP_INSN;
+	m1Opcode <= #1 `NOPI;
+	m1Rt <= #1 9'd0;
+	m1clkoff <= #1 1'b0;
+	m1Fip <= #1 1'b0;
+	m1pc <= #1 `RESET_VECTOR;
+	m1pcv <= #1 1'b0;
+	m1extype <= #1 `EX_NON;
 	m1IsLoad <= #1 1'b0;
 	m1IsStore <= #1 1'b0;
 	m1IsCnt <= #1 1'b0;
-	m1IsIO <= #1 1'b0;
 	m1IsCacheElement <= #1 1'b0;
 end
 
@@ -2211,7 +2267,6 @@ end
 //-----------------------------------------------------------------------------
 if (advanceM1) begin
 	m2extype <= m1extype;
-	m2hwxtype <= m1hwxtype;
 	m2Addr <= pea;
 	m2Data <= m1Data;
 	m2Fip <= m1Fip;
@@ -2220,7 +2275,7 @@ if (advanceM1) begin
 	m2IR <= m1IR;
 	m2Opcode <= m1Opcode;
 	m2Func <= m1Func;
-	m2IsLoad <= m1IsLoad;
+	m2IsLoad <= #1 m1IsLoad;
 	m2IsStore <= #1 m1IsStore;
 	m2IsCnt <= m1IsCnt;
 	m2Func <= m1Func;
@@ -2672,6 +2727,7 @@ else if (advanceM2) begin
 	m2Addr <= 64'd0;
 	m2Data <= #1 64'd0;
 	m2clkoff <= #1 1'b0;
+	m2Fip <= #1 1'b0;
 	m2pcv <= #1 1'b0;
 	m2pc <= #1 `RESET_VECTOR;
 	m2extype <= #1 `EX_NON;
@@ -2689,7 +2745,6 @@ end
 //-----------------------------------------------------------------------------
 if (advanceM2) begin
 	wextype <= #1 m2extype;
-	whwxtype <= #1 m2hwxtype;
 	wpc <= #1 m2pc;
 	wpcv <= #1 m2pcv;
 	wFip <= #1 m2Fip;
@@ -2700,6 +2755,7 @@ if (advanceM2) begin
 	wData <= #1 m2Data;
 	wRt <= #1 m2Rt;
 	wclkoff <= #1 m2clkoff;
+	wAXC <= #1 m2AXC;
 	
 	// There's not an error is a prefetch is taking place (m2Rt=0).
 	if (((m2IsLoad&&m2Rt[4:0]!=5'd0)|m2IsStore)&err_i) begin
@@ -2824,6 +2880,7 @@ else if (advanceW) begin
 	wOpcode <= `NOPI;
 	wIsStore <= 1'b0;
 	wclkoff <= 1'b0;
+	wFip <= 1'b0;
 	wpcv <= 1'b0;
 	wpc <= `RESET_VECTOR;
 end
@@ -2856,24 +2913,38 @@ if (advanceW) begin
 				end
 		default:	;
 		endcase
+	`MISC:
+		case(wFunc)
+		`SYSCALL:
+			begin
+				if (wIR[24:20]==5'd25)
+					IPC[wAXC] <= wData;
+				else
+					EPC[wAXC] <= wData;
+			end
+		endcase
+	`R:
+		case(wIR[5:0])
+		`MTSPR:
+			case(wIR[11:6])
+			`IPC:	IPC[wAXC] <= wData;
+			`EPC:	EPC[wAXC] <= wData;
+			endcase
+		endcase
 	endcase
 	if (wclkoff)
 		clk_en <= 1'b0;
 	else
 		clk_en <= 1'b1;
-	if (|whwxtype) begin
-		dhwxtype <= 2'b00;
-		xhwxtype <= 2'b00;
-		m1hwxtype <= 2'b00;
-		m2hwxtype <= 2'b00;
-		whwxtype <= 2'b00;
-	end
+	// FIP/IEPP:
+	// Jump back to the instruction following the FIP/IEPP
 	if (wFip) begin
 		wFip <= 1'b0;
 		m2Fip <= 1'b0;
 		m1Fip <= 1'b0;
 		xFip <= 1'b0;
 		dFip <= 1'b0;
+		pc <= fnIncPC(wpc);
 	end
 	//---------------------------------------------------------
 	// WRITEBACK (WB') - part two:
@@ -2950,6 +3021,7 @@ IDLE:
 		bl_o <= 5'd7;
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
+		sel_o <= 8'hFF;
 		adr_o <= {pea[63:6],6'h00};
 		cstate <= DCACT;
 	end
@@ -2959,6 +3031,7 @@ IDLE:
 		cti_o <= 3'b010;		// burst access
 		cyc_o <= 1'b1;
 		stb_o <= 1'b1;
+		sel_o <= 8'hFF;
 		if (ICacheAct) begin
 			bl_o <= 5'd7;
 			adr_o <= {ppc[63:6],6'h00};
@@ -2981,6 +3054,7 @@ ICACT1:
 			cti_o <= 3'b000;	// back to non-burst mode
 			cyc_o <= 1'b0;
 			stb_o <= 1'b0;
+			sel_o <= 8'h00;
 			tmem[adr_o[12:6]] <= {1'b1,adr_o[63:13]};	// This will cause ihit to go high
 			tvalid[adr_o[12:6]] <= 1'b1;
 			icaccess <= 1'b0;
@@ -3007,6 +3081,7 @@ ICACT2:
 			cti_o <= 3'b000;	// back to non-burst mode
 			cyc_o <= 1'b0;
 			stb_o <= 1'b0;
+			sel_o <= 8'h00;
 			icaccess <= 1'b0;
 			cstate <= IDLE;
 		end
@@ -3021,6 +3096,7 @@ DCACT:
 			cti_o <= 3'b000;	// back to non-burst mode
 			cyc_o <= 1'b0;
 			stb_o <= 1'b0;
+			sel_o <= 8'h00;
 			dcaccess <= 1'b0;
 			cstate <= IDLE;
 		end

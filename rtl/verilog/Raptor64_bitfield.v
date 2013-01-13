@@ -27,39 +27,43 @@
 //
 //=============================================================================
 //
-module Raptor64_bitfield(xIR, rolo, b, o, masko);
+module Raptor64_bitfield(xIR, a, b, o, masko);
 input [31:0] xIR;
-input [63:0] rolo;
+input [63:0] a;
 input [63:0] b;
 output [63:0] o;
 reg [63:0] o;
 output [63:0] masko;
 
 reg [63:0] o1;
+reg [63:0] o2;
 wire [6:0] xOpcode = xIR[31:25];
-wire [4:0] xFunc5 = xIR[4:0];
+wire [2:0] xFunc3 = xIR[2:0];
 
 // generate mask
 reg [63:0] mask;
 assign masko = mask;
-wire [5:0] mb = xIR[10:5];
-wire [5:0] me = xIR[16:11];
+wire [5:0] mb = xIR[8:3];
+wire [5:0] me = xIR[14:9];
 integer nn,n;
 always @(mb or me or nn)
 	for (nn = 0; nn < 64; nn = nn + 1)
 		mask[nn] <= (nn >= mb) ^ (nn <= me) ^ (me >= mb);
 
-always @(xOpcode,xFunc5,mask,b,rolo,mb)
+always @(xOpcode,xFunc3,mask,b,a,mb)
 case (xOpcode)
-`SHFTI:
-	case(xFunc5)
-	`BFINS: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? rolo[n] : b[n]; end
-	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? 1'b1 : b[n]; end
-	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? 1'b0 : b[n]; end
-	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? ~b[n] : b[n]; end
+`BITFIELD:
+	case(xFunc3)
+	`BFINS: 	begin
+					o2 = a << mb;
+					for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? o2[n] : b[n];
+				end
+	`BFSET: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? 1'b1 : a[n]; end
+	`BFCLR: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? 1'b0 : a[n]; end
+	`BFCHG: 	begin for (n = 0; n < 64; n = n + 1) o[n] = mask[n] ? ~a[n] : a[n]; end
 	`BFEXT:		begin
 					for (n = 0; n < 64; n = n + 1)
-						o1[n] = mask[n] ? b[n] : 1'b0;
+						o1[n] = mask[n] ? a[n] : 1'b0;
 					o = o1 >> mb;
 				end
 	default:	o = 64'd0;

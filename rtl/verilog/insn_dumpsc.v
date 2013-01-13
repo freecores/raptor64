@@ -56,7 +56,7 @@
 			`SHRI:	$display("SHRI r%d,r%d,#%d",insn[19:15],insn[24:20],insn[14:9]);
 			`ROLI:	$display("ROLI r%d,r%d,#%d",insn[19:15],insn[24:20],insn[14:9]);
 			`RORI:	$display("RORI r%d,r%d,#%d",insn[19:15],insn[24:20],insn[14:9]);
-			`ROLAMI:	$display("ROLAMI r%d,r%d,#%d",insn[19:15],insn[24:20],insn[14:9]);
+			`SHLUI:	$display("SHLUI r%d,r%d,#%d",insn[19:15],insn[24:20],insn[14:9]);
 			endcase
 		`BTRR:
 			case(insn[4:0])
@@ -81,12 +81,14 @@
 		`ADDUI:	$display("ADDUI r%d,r%d,#%d",insn[19:15],insn[24:20],{{49{insn[14]}},insn[14:0]});
 		`SUBI:	$display("SUBI r%d,r%d,#%d",insn[19:15],insn[24:20],{{49{insn[14]}},insn[14:0]});
 		`SUBUI:	$display("SUBUI r%d,r%d,#%d",insn[19:15],insn[24:20],{{49{insn[14]}},insn[14:0]});
+		`DIVUI:	$display("DIVUI r%d,r%d,#%d",insn[19:15],insn[24:20],{49'd0,insn[14:0]});
+		`DIVSI:	$display("DIVSI r%d,r%d,#%d",insn[19:15],insn[24:20],{49'd0,insn[14:0]});
 		`ANDI:	$display("ANDI r%d,r%d,#%d",insn[19:15],insn[24:20],{{49{insn[14]}},insn[14:0]});
 		`ORI:	$display("ORI  r%d,r%d,#%d",insn[19:15],insn[24:20],{49'd0,insn[14:0]});
 		`XORI:	$display("XORI r%d,r%d,#%d",insn[19:15],insn[24:20],{49'd0,insn[14:0]});
 		`JMP:	$display("JMP  %h",{insn[24:0],2'b00});
 		`CALL:	$display("CALL %h",{insn[24:0],2'b00});
-		`JAL:	$display("JAL");
+		`JAL:	$display("JAL %h,",insn[19:15]);
 		`RET:	$display("RET R%d,R%d,#%h",insn[24:20],insn[19:15],{{49{insn[14]}},insn[14:0]});
 		`BEQI:	$display("BEQI r%d,#%d,%h)",insn[24:20],insn[7:0],{{50{insn[19]}},insn[19:8]});
 		`BNEI:	$display("BNEI r%d,#%d,%h)",insn[24:20],insn[7:0],{{50{insn[19]}},insn[19:8]});
@@ -99,29 +101,29 @@
 		`BGTUI:	$display("BGTUI r%d,#%d,%h)",insn[24:20],insn[7:0],{{50{insn[19]}},insn[19:8]});
 		`BGEUI:	$display("BGEUI r%d,#%d,%h)",insn[24:20],insn[7:0],{{50{insn[19]}},insn[19:8]});
 		`NOPI:	$display("NOP");
-		`SB:	$display("SB r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`SC:	$display("SC r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`SH:	$display("SH r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`SW:	$display("SW r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LEA:	$display("LEA r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LB:	$display("LB r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LBU:	$display("LBU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LC:	$display("LC r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LCU:	$display("LCU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LH:	$display("LH r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LHU:	$display("LHU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`LW:	$display("LW r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INB:	$display("INB r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INBU:	$display("INBU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INCH:	$display("INCH r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INCU:	$display("INCU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INH:	$display("INH r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INHU:	$display("INHU r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`INW:	$display("INW r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`OUTB:	$display("OUTB r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`OUTC:	$display("OUTC r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`OUTH:	$display("OUTH r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
-		`OUTW:	$display("OUTW r%d,%d[r%d]",insn[19:15],{{49{insn[24]}},insn[14:0]},insn[24:20]);
+		`SB:	$display("SB r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`SC:	$display("SC r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`SH:	$display("SH r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`SW:	$display("SW r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LEA:	$display("LEA r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LB:	$display("LB r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LBU:	$display("LBU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LC:	$display("LC r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LCU:	$display("LCU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LH:	$display("LH r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LHU:	$display("LHU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`LW:	$display("LW r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INB:	$display("INB r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INBU:	$display("INBU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INCH:	$display("INCH r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INCU:	$display("INCU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INH:	$display("INH r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INHU:	$display("INHU r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`INW:	$display("INW r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`OUTB:	$display("OUTB r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`OUTC:	$display("OUTC r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`OUTH:	$display("OUTH r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
+		`OUTW:	$display("OUTW r%d,%d[r%d]",insn[19:15],{{49{insn[14]}},insn[14:0]},insn[24:20]);
 		`MEMNDX:
 			case(insn[5:0]+32)
 			`SB:	$display("SB r%d,[r%d+r%d<<%d]",insn[14:10],insn[24:20],insn[19:15],insn[9:8]);

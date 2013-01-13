@@ -82,6 +82,10 @@ else begin
 					dRc <= 9'd0;
 					end
 			endcase
+		`R:	begin dRb <= 9'd0; dRc <= 9'd0; end
+		`RR: dRc <= 9'd0;
+		`TRAPcc:	dRc <= 9'd0;
+		`TRAPcci:	begin dRb <= 9'd0; dRc <= 9'd0; end
 		`CALL,`JMP,`NOPI:
 					begin
 					dRa <= 9'd0;
@@ -93,6 +97,20 @@ else begin
 					dRb <= {AXC,5'd31};
 					dRc <= 9'd0;
 					end
+		`LB,`LBU,`LH,`LHU,`LC,`LCU,`LW,`LP,`LSH,`LSW,`LF,`LFD,`LFP,`LFDP,`LWR:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`SB,`SC,`SH,`SW,`SP,`SSH,`SSW,`SF,`SFD,`SFP,`SFDP,`SWC:
+					dRc <= 9'd0;
+		`INB,`INBU,`INCH,`INCU,`INH,`INHU,`INW:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`OUTB,`OUTC,`OUTH,`OUTW:
+					dRc <= 9'd0;
 		`BLTI,`BLEI,`BGTI,`BGEI,
 		`BLTUI,`BLEUI,`BGTUI,`BGEUI,
 		`BEQI,`BNEI:
@@ -100,6 +118,7 @@ else begin
 					dRb <= 9'd0;
 					dRc <= 9'd0;
 					end
+		`BTRI:		dRc <= 9'd0;
 		`SLTI,`SLEI,`SGTI,`SGEI,
 		`SLTUI,`SLEUI,`SGTUI,`SGEUI,
 		`SEQI,`SNEI:
@@ -107,9 +126,20 @@ else begin
 					dRb <= 9'd0;
 					dRc <= 9'd0;
 					end
-		`SETLO:		dRa <= {AXC,insn[26:22]};
-		`SETMID:	dRa <= {AXC,insn[26:22]};
-		`SETHI:		dRa <= {AXC,insn[26:22]};
+		`ADDI,`ADDUI,`SUBI,`SUBUI,`CMPI,`CMPUI,
+		`ANDI,`XORI,`ORI,`MULUI,`MULSI,`DIVUI,`DIVSI:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`JAL:
+					begin
+					dRb <= 9'd0;
+					dRc <= 9'd0;
+					end
+		`SETLO:		begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
+		`SETMID:	begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
+		`SETHI:		begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
 		default:	dRa <= {AXC,insn[24:20]};
 		endcase
 	end

@@ -24,7 +24,7 @@
 module Raptor64Div(rst, clk, ld, sgn, isDivi, a, b, imm, qo, ro, dvByZr, done);
 parameter DIV=3'd3;
 parameter IDLE=3'd4;
-parameter DONE=4'd5;
+parameter DONE=3'd5;
 input clk;
 input rst;
 input ld;
@@ -61,6 +61,7 @@ if (rst) begin
 	r <= 64'd0;
 	qo <= 64'd0;
 	ro <= 64'd0;
+	cnt <= 8'd0;
 	state <= IDLE;
 end
 else
@@ -80,6 +81,7 @@ IDLE:
 			q <= a;
 			bb <= isDivi ? imm : b;
 			so <= 1'b0;
+			$display("bb=%d", isDivi ? imm : b);
 		end
 		dvByZr <= isDivi ? imm==64'd0 : b==64'd0;
 		r <= 64'd0;

@@ -50,7 +50,7 @@ if (advanceR) begin
 	casex(dOpcode)
 	`MISC:
 		case(dFunc)
-		`SYSCALL:	xRt <= {dAXC,dIR[24:20]};
+		`SYSCALL:	xRt <= 9'd0;
 		default:	xRt <= 9'd0;
 		endcase
 	`R:

@@ -62,6 +62,7 @@
 `define		SGN		6'd8
 `define		MOV		6'd9
 `define		SWAP	6'd13
+`define		RBO		6'd14
 `define		CTLZ	6'd16
 `define		CTLO	6'd17
 `define		CTPOP	6'd18
@@ -141,7 +142,6 @@
 `define		ROL		6'd42
 `define		ROR		6'd43
 `define		SHR		6'd44
-`define 	ROLAM	6'd45
 `define		SHLU	6'd46
 
 //`define		NOP		7'd60
@@ -165,18 +165,12 @@
 `define     BCD_SUB 6'd62
 
 `define SHFTI	7'd3
-`define		SHLI		5'd0
-`define 	SHRUI		5'd1
-`define 	ROLI		5'd2
-`define 	SHRI		5'd3
-`define 	RORI		5'd4
-`define 	ROLAMI		5'd5
-`define		SHLUI		5'd6
-`define 	BFINS		5'd8
-`define 	BFSET		5'd9
-`define 	BFCLR		5'd10
-`define 	BFCHG		5'd11
-`define 	BFEXT		5'd12
+`define		SHLI		4'd0
+`define 	SHRUI		4'd1
+`define 	ROLI		4'd2
+`define 	SHRI		4'd3
+`define 	RORI		4'd4
+`define		SHLUI		4'd6
 `define ADDI	7'd4
 `define ADDUI	7'd5
 `define SUBI	7'd6
@@ -218,6 +212,13 @@
 `define		TGTUI	5'd9
 `define		TRAI	5'd10
 `define		TRNI	5'd11
+
+`define BITFIELD	7'd21
+`define 	BFINS		3'd0
+`define 	BFSET		3'd1
+`define 	BFCLR		3'd2
+`define 	BFCHG		3'd3
+`define 	BFEXT		3'd4
 `define	MUX		7'd22
 `define	MYST	7'd23
 `define CALL	7'd24
@@ -292,6 +293,8 @@
 `define 	LEAX	6'd45
 `define 	LMX		6'd46
 `define 	SMX		6'd47
+
+`define STBC	7'd54
 
 `define SSH		7'd56
 `define SSW		7'd57

@@ -38,7 +38,7 @@ output [63:0] rolo;
 
 wire [6:0] xOpcode = xIR[31:25];
 wire [5:0] xFunc = xIR[5:0];
-wire [4:0] xFunc5 = xIR[4:0];
+wire [3:0] xFunc4 = xIR[3:0];
 
 wire [127:0] shlxo = {64'd0,a} << b[5:0];
 wire [127:0] shruxo = {a,64'd0} >> b[5:0];
@@ -48,7 +48,7 @@ assign rolo = {shlxo[127:64]|shlxo[63:0]};
 wire [63:0] roro = {shruxo[127:64]|shruxo[63:0]};
 wire [63:0] shro = ~(~a >> b[5:0]);
 
-always @(xOpcode,xFunc,xFunc5,shlo,shruo,rolo,roro,shro,mask)
+always @(xOpcode,xFunc,xFunc4,shlo,shruo,rolo,roro,shro,mask)
 case(xOpcode)
 `RR:
 	case(xFunc)
@@ -58,18 +58,16 @@ case(xOpcode)
 	`ROL:	o = rolo;
 	`ROR:	o = roro;
 	`SHR:	o = shro;
-	`ROLAM:	o = rolo & mask;
 	default:	o = 64'd0;
 	endcase
 `SHFTI:
-	case(xFunc5)
+	case(xFunc4)
 	`SHLI:	o = shlo;
 	`SHLUI:	o = shlo;
 	`SHRUI:	o = shruo;
 	`ROLI:	o = rolo;
 	`RORI:	o = roro;
 	`SHRI:	o = shro;
-	`ROLAMI:	o = rolo & mask;
 	default:	o = 64'd0;
 	endcase
 default:	o = 64'd0;
