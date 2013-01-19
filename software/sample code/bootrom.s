@@ -1,7 +1,10 @@
 ; ============================================================================
-; (C) 2012,2013 Robert Finch, Stratford
-; All Rights Reserved.
-; robfinch<remove>@opencores.org
+;        __
+;   \\__/ o\    (C) 2012-2013  Robert Finch, Stratford
+;    \  __ /    All rights reserved.
+;     \/_//     robfinch<remove>@opencores.org
+;       ||
+;  
 ;
 ; This source file is free software: you can redistribute it and/or modify 
 ; it under the terms of the GNU Lesser General Public License as published 
@@ -23,10 +26,16 @@ LF	EQU	0x0A
 TAB	EQU	0x09
 CTRLC	EQU	0x03
 CTRLH	EQU	0x08
+CTRLI	EQU	0x09
+CTRLJ	EQU	0x0A
+CTRLK	EQU	0x0B
+CTRLM   EQU 0x0D
 CTRLS	EQU	0x13
 CTRLX	EQU	0x18
 XON		EQU	0x11
 XOFF	EQU	0x13
+
+EX_IRQ	EQU	449
 
 DATA_PRESENT	EQU	0x01		; there is data preset at the serial port bc_uart3
 XMIT_NOT_FULL	EQU	0x20
@@ -90,21 +99,30 @@ TCBr29		EQU		0xE0
 TCBr30		EQU		0xE8
 TCBr31		EQU		0xF0
 
+SCREENGATE	EQU		0x00
+KEYBDGATE	EQU		0x01
+VIDEOGATE	EQU		0x02
+CARDGATE	EQU		0x03
 warmStart   EQU     0x1020
 usrJmp      EQU     0x1028
 TickIRQAddr		EQU		0x1030
 TaskBlock		EQU		0x1038
-tencount		EQU		0x13F8
 Milliseconds	EQU		0x1400
 Lastloc			EQU		0x1408
+CharColor	EQU		0x1410
 ScreenColor	EQU		0x1414
-CursorRow	EQU		0x1416
+CursorRow	EQU		0x1417
 CursorCol	EQU		0x1418
 CursorFlash	EQU		0x141A
 KeybdEcho	EQU		0x141C
 KeybdBuffer	EQU		0x1440
 KeybdHead	EQU		0x1450
 KeybdTail	EQU		0x1451
+sp_save		EQU		0x1460
+lr_save		EQU		0x1468
+r1_save		EQU		0x1470
+r2_save		EQU		0x1478
+r26_save	EQU		0x1480
 Score		EQU		0x1500
 Manpos		EQU		0x1508
 MissileActive	EQU		0x1510
@@ -148,10 +166,33 @@ r1save			EQU		0x20B0
 r2save			EQU		0x20B8
 AXCstart		EQU		0x20C0
 
+; Context startup address table
+;
+ctx0start		EQU		0x20D0
+ctx1start		EQU		0x20D8
+ctx2start		EQU		0x20E0
+ctx3start		EQU		0x20E8
+ctx4start		EQU		0x20F0
+ctx5start		EQU		0x20F8
+ctx6start		EQU		0x2100
+ctx7start		EQU		0x2108
+ctx8start		EQU		0x2110
+ctx9start		EQU		0x2118
+ctx10start		EQU		0x2120
+ctx11start		EQU		0x2128
+ctx12start		EQU		0x2130
+ctx13start		EQU		0x2138
+ctx14start		EQU		0x2140
+ctx15start		EQU		0x2148
+sp_saves		EQU		0x2200
+sp_saves_end	EQU		0x2280
 p100IRQvec		EQU		0x3000
 keybdIRQvec		EQU		0x3008
 serialIRQvec	EQU		0x3010
 rasterIRQvec	EQU		0x3018
+
+startSector	EQU		0x30F8
+BPB			EQU		0x3100
 
 TEXTSCR		EQU		0xD0_0000
 COLORSCR	EQU		0xD1_0000
@@ -169,6 +210,34 @@ UART_IS		EQU		0xDC_0A03
 UART_IE		EQU		0xDC_0A04
 UART_MC		EQU		0xDC_0A06
 DATETIME	EQU		0xDC_0400
+
+SPIMASTER	EQU		0xDC_0500
+SPI_MASTER_VERSION_REG	EQU	0x00
+SPI_MASTER_CONTROL_REG	EQU	0x01
+SPI_TRANS_TYPE_REG	EQU		0x02
+SPI_TRANS_CTRL_REG	EQU		0x03
+SPI_TRANS_STATUS_REG	EQU	0x04
+SPI_TRANS_ERROR_REG		EQU	0x05
+SPI_DIRECT_ACCESS_DATA_REG		EQU	0x06
+SPI_SD_ADDR_7_0_REG		EQU	0x07
+SPI_SD_ADDR_15_8_REG	EQU	0x08
+SPI_SD_ADDR_23_16_REG	EQU	0x09
+SPI_SD_ADDR_31_24_REG	EQU	0x0a
+SPI_RX_FIFO_DATA_REG	EQU	0x10
+SPI_RX_FIFO_DATA_COUNT_MSB	EQU	0x12
+SPI_RX_FIFO_DATA_COUNT_LSB  EQU 0x13
+SPI_RX_FIFO_CTRL_REG		EQU	0x14
+SPI_TX_FIFO_DATA_REG	EQU	0x20
+SPI_TX_FIFO_CTRL_REG	EQU	0x24
+SPI_INIT_SD			EQU		0x01
+SPI_TRANS_START		EQU		0x01
+SPI_TRANS_BUSY		EQU		0x01
+SPI_INIT_NO_ERROR	EQU		0x00
+SPI_READ_NO_ERROR	EQU		0x00
+RW_READ_SD_BLOCK	EQU		0x02
+RW_WRITE_SD_BLOCK	EQU		0x03
+
+
 PIC			EQU		0xDC_0FF0
 PIC_IE		EQU		0xDC_0FF2
 
@@ -180,12 +249,19 @@ PSGADSR0	EQU		0xD5_0006
 
 SPRRAM		EQU		0xD8_0000
 AC97		EQU		0xDC_1000
+TMP			EQU		0xDC_0300
 LED			EQU		0xDC_0600
+ETHMAC		EQU		0xDC_2000
+CONFIGREC	EQU		0xDC_FFFF
+MIIMODER	EQU		0x28
+MIIADDRESS	EQU		0x30
 GACCEL		EQU		0xDA_E000
 RASTERIRQ	EQU		0xDA_0100
 BOOT_STACK	EQU		0xFFFF_FFFF_FFFE_FFF8
 SPRITEREGS	EQU		0xDA_D000
 BITMAPSCR	EQU		0x00000001_00200000
+
+BOOTJMP		EQU		0x100800204
 
 txempty	EQU		0x40
 rxfull	EQU		0x01
@@ -194,22 +270,18 @@ rxfull	EQU		0x01
 ; Internal variables follow:
 ;
 		bss
-		org		0x1038
+		org		0x1048
 txtWidth	db	0		; BIOS var =56
 txtHeight	db	0		; BIOS var =31
 cursx	db		0		; cursor x position
 cursy	db		0		; cursor y position
 pos		dh		0		; text screen position
-		org		0x1040
 charToPrint		dc		0
 fgColor			db		0
 bkColor			db		0
 cursFlash		db		0	; flash the cursor ?
 
-lineLinkTbl		fill.b	25,0	; screen line link table
-		align 8
-
-		org		0x1080
+lineLinkTbl		fill.b	47,0	; screen line link table
 typef   db      0   ; variable / expression type
         align   8
 OSSP	dw	1	; OS value of sp
@@ -256,14 +328,44 @@ TXT		equ		0x1_00600000	; Beginning of program area
 	jmp		KeybdGetChar
 	jmp		DisplayChar
 	jmp		DisplayString
+	jmp		DisplayNum
+	jmp		CalcScreenLoc
+	jmp		ClearScreen
+	jmp		DisplayWord
 
 start:
 ;	lea		MSGRAM,a1
 ;	jsr		DisplayString
 
 ColdStart:
-	icache_on				; turn on the ICache
+	icache_off				; turn on the ICache
 	dcache_off				; turn on the DCache
+
+; Make sure semaphores are available by closing the gates.
+; We don't know what power up state is.
+
+	cmgi	#KEYBDGATE
+	cmgi	#VIDEOGATE
+
+; Initialize the context startup address table with NULL
+
+	xor		r1,r1,r1
+	sw		r1,ctx0start
+	sw		r1,ctx1start
+	sw		r1,ctx2start
+	sw		r1,ctx3start
+	sw		r1,ctx4start
+	sw		r1,ctx5start
+	sw		r1,ctx6start
+	sw		r1,ctx7start
+	sw		r1,ctx8start
+	sw		r1,ctx9start
+	sw		r1,ctx10start
+	sw		r1,ctx11start
+	sw		r1,ctx12start
+	sw		r1,ctx13start
+	sw		r1,ctx14start
+	sw		r1,ctx15start
 
 ; Initialize the context schedule with all contexts treated equally
 ; There are only 16 contexts, but 256 schedule slots. Each context is
@@ -284,88 +386,72 @@ ict1:
 ; We cannot use a loop for this. Fortunately there's only 16 contexts.
 ;
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP0
 	iepp
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP1
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP2
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP3
 	iepp		
-	nop
-	nop
 
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP4
 	iepp
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP5
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP6
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP7
 	iepp		
-	nop
-	nop
 	
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP8
 	iepp
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP9
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP10
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP11
 	iepp		
-	nop
-	nop
 	
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP12
 	iepp
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP13
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP14
 	iepp		
-	nop
-	nop
 	lea		r25,ctxstart
+	mtspr	IPC,r25
 	lea		r30,STACKTOP15
 	iepp		
-	nop
-	nop
 
 ; Ensure that context zero is the active context
 ;
@@ -373,8 +459,6 @@ ctxstart3:
 	mfspr	r1,AXC			
 	beq		r1,r0,ctxstart2
 	iepp
-	nop
-	nop
 	bra		ctxstart3
 ctxstart2:	
 	sb		r1,AXCstart		; save off the startup context which should be context zero
@@ -400,17 +484,27 @@ csj5:
 	sw		r1,[r3]
 	addui	r3,r3,#8
 	loop	r2,csj5
+	lea		r1,VideoSC		; Video BIOS vector
+	sw		r1,0xCD0
+	lea		r1,SCCARDSC		; SD Card BIOS vector
+	sw		r1,0xCE8
+	lea		r1,RTCSC		; Real time clock vector
+	sw		r1,0xD00
 	lea		r1,KeybdSC		; keyboard BIOS vector
 	sw		r1,0xD08
 	lea		r1,irqrout
 	sw		r1,0xE08		; set IRQ vector
+	lea		r1,ui_irout
+	sw		r1,0xF78		; set unimplemented instruction vector
 	lea		r1,dberr_rout
 	sw		r1,0xFE0		; set Bus error vector
 	lea		r1,iberr_rout
 	sw		r1,0xFE8		; set Bus error vector
 	lea		r1,nmirout
 	sw		r1,0xFF0		; set NMI vector
-	
+
+; set system interrupt hook vectors
+
 	lea		r1,KeybdIRQ
 	sw		r1,keybdIRQvec
 	lea		r1,Pulse100
@@ -423,7 +517,16 @@ csj5:
 	;-------------------------------
 	; Initialize I/O devices
 	;-------------------------------
+	inbu	r1,CONFIGREC
+	bfext	r1,r1,#4,#4
+	beq		r1,r0,skip5
+	call	tmp_init
+skip5:
+	inbu	r1,CONFIGREC
+	bfext	r1,r1,#5,#5
+	beq		r1,r0,skip4
 	call	SerialInit
+skip4:
 	call	KeybdInit
 	call	PICInit
 	call	SetupRasterIRQ
@@ -431,6 +534,7 @@ csj5:
 ;	call	HelloWorld
 	setlo	r3,#0xCE		; blue on blue
 	sc		r3,ScreenColor
+	sc		r3,CharColor
 	lc		r3,0x1414
 	setlo	r3,#32
 	sc		r3,0x1416		; we do a store, then a load through the dcache
@@ -440,31 +544,116 @@ csj5:
 dcokay:
 	sc		r0,NextToRunTCB
 	sc		r0,RunningTCB
+	lw		r1,#2			; get rid of startup keyboard glitchs by trying to get a character
+	syscall	#417
+	lw		r1,#2			; get rid of startup keyboard glitchs by trying to get a character
+	syscall	#417
+
+	; wait for screen to be available
 	call	ClearScreen
 	call	ClearBmpScreen
+
+; Test whether or not the sprite controller is present. Skip
+; Initialization if it isn't.
+
+	inb		r1,CONFIGREC
+	bfext	r1,r1,#0,#0
+	beq		r1,r0,skip1
 	call	RandomizeSprram
-	sc		r0,CursorRow
-	sc		r0,CursorCol
-	setlo	r1,#1
+skip1:
+
+	sb		r0,CursorRow
+	sb		r0,CursorCol
+	lw		r1,#1
 	sb		r1,CursorFlash
 	lea		r1,MSGSTART
 	call	DisplayStringCRLF
-	jmp		Monitor
+
+; Test whether or not sound generator is present
+; skip initialization and beep if not present
+
+	inb		r1,CONFIGREC
+	bfext	r1,r1,#2,#2
+	beq		r1,r0,skip2
 	call	SetupAC97		; and Beep
-	setlo	r3,#4
-	outb	r3,LED
+	lw		r1,#4
+	outb	r1,LED
 	call	Beep
+skip2:
+
+	lea		r1,context1disp	; start a display
+	sw		r1,ctx1start
+
+; Startup Ethernet access ?
+;
+	inb		r1,CONFIGREC
+	bfext	r1,r1,#1,#1
+	beq		r1,r0,skip3
+	lea		r1,eth_main
+	sw		r1,ctx2start
+skip3:
+
+	lea		r1,RandomLines
+	sw		r1,ctx3start
+	call	spi_init
+	bne		r1,r0,skip_spi_read
+	call	spi_read_boot
+	call	loadBootFile
+skip_spi_read:
+	jmp		Monitor
 
 j4:
 	jmp		Monitor
 	bra		j4
 
-; for now hang the contexts
+; The contexts wait for a context startup address to be placed in the
+; startup table. Once an address is in the table, a call to the context
+; code will be made. The default is a NULL pointer, which
+; causes the context to loop around back to here while waiting for a
+; code to run.
 ;
 ctxstart1:
+	lea		r1,ctx0start	; r1 = context start table base
+	mfspr	r2,AXC			; r2 = index into start table
+	lw		r1,[r1+r2*8]	; r1 = context start address
+	beq		r1,r0,ctx12
+	jal		lr,[r1]			; perform a call to the context code
+
+; We might as well move to the next context, since there's nothing
+; to do. This can be accomplished by tirggering a IRQ interrupt.
+; We can't just increment the excution pattern pointer, because that
+; would only switch the register set and not the program counter.
+; An interrupt saves the program counter, and restores it from the
+; IPC context register.
+;
+ctx12:
+	sei					; causes a priv violation. don't allow interrupts during syscall
+	nop					; wait for sei to take effect
+	nop
+	nop
+	syscall	#EX_IRQ	
 	bra		ctxstart1
 
 ;	call	ramtest
+
+context1disp:
+
+; once we've started, clear the start vector so that the context
+; isn't continuously restarted.
+;
+	sw		r0,ctx1start
+	lea		r3,TEXTSCR
+	lw		r1,#'V'
+	lw		r2,#330
+	lw		r4,#47
+	call	AsciiToScreen
+ctx11:
+	inch	r1,[r3+r2]
+	addui	r1,r1,#1
+	outc	r1,[r3+r2]
+	addui	r2,r2,#168
+	loop	r4,ctx11
+	bra		context1disp
 
 ;-----------------------------------------
 ; Hello World!
@@ -498,10 +687,11 @@ MSGSTART:
 
 ;----------------------------------------------------------
 ; Initialize programmable interrupt controller (PIC)
-;  0 = nmi
+;  0 = nmi (parity error)
 ;  1 = keyboard reset
 ;  2 = 1000Hz pulse (context switcher)
 ;  3 = 100Hz pulse (cursor flash)
+;  4 = ethmac
 ;  8 = uart
 ; 13 = raster interrupt
 ; 15 = keyboard char
@@ -510,7 +700,7 @@ PICInit:
 	lea		r1,PICret
 	sw		r1,TickIRQAddr
 	; enable: raster irq,
-	setlo	r1,#0xA00F	; enable nmi,kbd_rst,and kbd_irq
+	setlo	r1,#0x800F	; enable nmi,kbd_rst,and kbd_irq
 	; A10F enable serial IRQ
 	outc	r1,PIC_IE
 PICret:
@@ -793,39 +983,272 @@ srxirq8:
 	bra		sirq1
 
 ;==============================================================================
+; Video BIOS
+; Video interrupt #410
+;
+; Function in R1
+; 0x02 = Set Cursor Position	r2 = row, r3 = col 
+; 0x03 = Get Cursor position	returns r1 = row, r2 = col
+; 0x06 = Scroll screen up
+; 0x09 = Display character+attribute, r2=char, r3=attrib, r4=#times
+; 0x0A = Display character, r2 = char, r3 = # times
+; 0x0C = Display Pixel r2 = x, r3 = y, r4 = color
+; 0x0D = Get pixel  r2 = x, r3 = y
+; 0x14 = Display String	r2 = pointer to string
+; 0x15 = Display number r2 = number, r3 = # digits
+; 0x16 = Display String + CRLF   r2 = pointer to string
+; 0x17 = Display Word r2 as hex = word
+; 0x18 = Display Half word as hex r2 = half word
+; 0x19 = Display Charr char in hex r2 = char
+; 0x1A = Display Byte in hex r2 = byte
+;==============================================================================
+;
+VideoSC:
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	sw		sp,sp_saves[r26]	; save sp in save area
+	shlui	r26,r26,#8			; 2k for stack
+	mov		sp,r26
+	addui	sp,sp,#0x100008000	; base stacks address
+	subui	sp,sp,#8
+	sw		lr,[sp]
+Video1:
+	omgi	lr,#VIDEOGATE
+	bne		lr,r0,Video1
+	beqi	r1,#0x02,Video_x02
+	beqi	r1,#0x03,Video_x03
+	beqi	r1,#0x06,Video_x06
+	beqi	r1,#0x09,Video_x09
+	beqi	r1,#0x0A,Video_x0A
+	beqi	r1,#0x0C,Video_x0C
+	beqi	r1,#0x0C,Video_x0D
+	beqi	r1,#0x14,Video_x14
+	beqi	r1,#0x15,Video_x15
+	beqi	r1,#0x16,Video_x16
+	beqi	r1,#0x17,Video_x17
+	beqi	r1,#0x1A,Video_x1A
+	bra		VideoRet
+
+Video_x02:
+	sb		r2,CursorRow
+	sb		r3,CursorCol
+	call	CalcScreenLoc
+	bra		VideoRet
+
+Video_x03:
+	lbu		r1,CursorRow
+	lbu		r2,CursorCol
+	bra		VideoRet
+
+Video_x06:
+	call	ScrollUp
+	bra		VideoRet
+
+Video_x09:
+	sc		r3,CharColor
+	mov		r1,r2
+Video_x09a:
+	call	DisplayChar
+	loop	r4,Video_x09a
+	bra		VideoRet
+
+Video_x0A:
+	mov		r1,r2
+Video_x0Aa:
+	call	DisplayChar
+	loop	r3,Video_x0Aa
+	bra		VideoRet
+
+Video_x0C:
+	sh		r2,GACCEL+8		; x0
+	sh		r3,GACCEL+12	; y0
+	sh		r4,GACCEL+0		; color
+	lw		r1,#1
+	sh		r1,GACCEL+60	; DRAW PIXEL command
+	bra		VideoRet
+
+Video_x0D:
+	sh		r2,GACCEL+8		; x0
+	sh		r3,GACCEL+12	; y0
+	lw		r1,#8
+	sh		r1,GACCEL+60	; GET PIXEL command
+	nop						; let command start
+	nop
+	nop
+vxd1:
+	lhu		r1,GACCEL+56	; wait for state = IDLE
+	bne		r1,r0,vxd1
+	lhu		r1,GACCEL+52
+	bra		VideoRet
+
+Video_x14:
+	mov		r1,r2
+	call	DisplayString
+	bra		VideoRet
+
+Video_x15:
+	mov		r1,r2
+	mov		r2,r3
+	call	DisplayNum
+	bra		VideoRet
+
+Video_x16:
+	mov		r1,r2
+	call	DisplayStringCRLF
+	bra		VideoRet
+
+Video_x17:
+	mov		r1,r2
+	call	DisplayWord
+	bra		VideoRet
+
+Video_x1A:
+	mov		r1,r2
+	call	DisplayByte
+	bra		VideoRet
+
+VideoRet:
+	cmgi	#VIDEOGATE
+	lw		lr,[sp]
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	lw		sp,sp_saves[r26]	; get back the stack
+	eret
+
+;==============================================================================
+; BIOS interrupt #413
+; 0x00  initialize
+; 0x01	read sector		r2 = sector #, r3 = pointer to buffer
+; 0x02	write sector
+;==============================================================================
+;
+SDCARDSC:
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	sw		sp,sp_saves[r26]	; save sp in save area
+	shlui	r26,r26,#8			; 2k for stack
+	mov		sp,r26
+	addui	sp,sp,#0x100008000	; base stacks address
+	subui	sp,sp,#8
+	sw		lr,[sp]
+SDC_1:
+	omgi	lr,#CARDGATE
+	bne		lr,r0,SDC_1
+	beqi	r1,#0,SDC_x00
+	beqi	r1,#1,SDC_x01
+	beqi	r1,#2,SDC_x02
+	bra		SDCRet
+SDC_x00:
+	call	spi_init
+	bra		SDCRet
+SDC_x01:
+	mov		r1,r2
+	mov		r2,r3
+	call	spi_read_sector
+	bra		SDCRet
+SDC_x02:
+SDCRet:
+	cmgi	#CARDGATE
+	lw		lr,[sp]
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	lw		sp,sp_saves[r26]	; get back the stack
+	eret
+
+;==============================================================================
+; Real time clock BIOS
+; BIOS interrupt #416
+;
+; Function
+; 0x00 = get system tick
+; 0x01 = get date/time
+; 0x02 = set date/time
+;==============================================================================
+;
+RTCSC:
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	sw		sp,sp_saves[r26]	; save sp in save area
+	shlui	r26,r26,#8			; 2k for stack
+	mov		sp,r26
+	addui	sp,sp,#0x100008000	; base stacks address
+	subui	sp,sp,#8
+	sw		lr,[sp]
+	;
+	beqi	r1,#0x00,RTC_x00
+	beqi	r1,#0x01,RTC_x01
+RTC_x00:
+	mfspr	r1,TICK
+	bra		RTCRet
+RTC_x01:
+	outw	r0,DATETIME+24		; trigger a snapshot
+	nop
+	inw		r1,DATETIME			; get the snapshotted date and time
+	bra		RTCRet
+RTCRet:
+	lw		lr,[sp]
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	lw		sp,sp_saves[r26]	; get back the stack
+	eret
+
+;==============================================================================
 ; Keyboard BIOS
 ; BIOS interrupt #417
 ;
 ; Function in R1
-; 0 = initialize keyboard
-; 1 = set keyboard echo
-; 2 = get keyboard character
-; 3 = check for key available
+; 0x00 = initialize keyboard
+; 0x01 = set keyboard echo
+; 0x02 = get keyboard character from buffer
+; 0x03 = check for key available in buffer
+; 0x04 = check for key directly at keyboard port
+; 0x05 = get keyboard character directly from keyboard port (blocks)
 ;==============================================================================
 ;
 KeybdSC:
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	sw		sp,sp_saves[r26]	; save sp in save area
+	shlui	r26,r26,#8			; 2k for stack
+	mov		sp,r26
+	addui	sp,sp,#0x100008000	; base stacks address
 	subui	sp,sp,#8
 	sw		lr,[sp]
-	bnei	r1,#0,kbdsc1
+kbdsc5:
+	omgi	lr,#KEYBDGATE
+	bne		lr,r0,kbdsc5
+	beqi	r1,#0,kbd_x00
+	beqi	r1,#1,kbd_x01
+	beqi	r1,#2,kbd_x02
+	beqi	r1,#3,kbd_x03
+	beqi	r1,#4,kbd_x04
+	beqi	r1,#5,kbd_x05
+	bra		kbdscRet
+kbd_x00:
 	call	KeybdInit
 	bra		kbdscRet
-kbdsc1:
-	bnei	r1,#1,kbdsc2
+kbd_x01:
 	mov		r1,r2
 	call	SetKeyboardEcho
 	bra		kbdscRet
-kbdsc2:
-	bnei	r1,#2,kbdsc3
+kbd_x02:
 	call	KeybdGetChar
 	bra		kbdscRet
-kbdsc3:
-	bnei	r1,#3,kbdsc4
+kbd_x03:
 	call	KeybdCheckForKey
 	bra		kbdscRet
-kbdsc4:
+kbd_x04:
+	call	KeybdCheckForKeyDirect
+	bra		kbdscRet
+kbd_x05:
+	call	KeybdGetCharDirect
+	bra		kbdscRet
 kbdscRet:
+	cmgi	#KEYBDGATE
 	lw		lr,[sp]
-	addui	sp,sp,#8
+	mfspr	r26,AXC				; get context
+	shlui	r26,r26,#3			; *8
+	lw		sp,sp_saves[r26]	; get back the stack
 	eret
 
 ;------------------------------------------------------------------------------
@@ -950,6 +1373,69 @@ gk1:
 
 ;==============================================================================
 ;==============================================================================
+tmp_init:
+	; wait for the rst1626 to go low
+	lw		r2,#10000000	; retry for up to several seconds
+tmp_init4:
+	beq		r2,r0,tmp_init5
+	subui	r2,r2,#1
+	inch	r1,TMP+2	; read the status reg
+	blt		r1,r0,tmp_init4
+tmp_init5:
+
+	lw		r1,#0x51	; Start temperature conversion
+	outc	r1,TMP
+
+	; wait a bit for the trigger to take effect
+	lw		r1,#2500
+tmp_init1:
+	loop	r1,tmp_init1
+
+	; wait for the rst1626 to go low
+	lw		r2,#10000000	; retry for up to several seconds
+tmp_init2:
+	beq		r2,r0,tmp_init3
+	subui	r2,r2,#1
+	inch	r1,TMP+2	; read the status reg
+	blt		r1,r0,tmp_init2
+tmp_init3:
+	ret
+
+tmp_read:
+	subui	sp,sp,#24
+	sw		lr,[sp]
+	sw		r1,8[sp]
+	sw		r2,16[sp]
+
+	lw		r1,#25000000	; wait about 1 second or so
+tmp_read1:
+	loop	r1,tmp_read1
+	lw		r1,#0xAC	; issue read temperature conversion
+	outc	r1,TMP
+
+	; wait a bit for the trigger to take effect
+	lw		r1,#2500
+tmp_read3:
+	loop	r1,tmp_read3
+
+	; wait for the rst1626 to go low
+	lw		r2,#10000000
+tmp_read2:
+	inch	r1,TMP+2	; read the status reg
+	beq		r2,r0,tmp_read4
+	subui	r2,r2,#1
+	blt		r1,r0,tmp_read2
+tmp_read4:
+	inch	r1,TMP+2		; read the temperature
+	lw		r2,#5			; five digits
+	call	DisplayNum
+	lw		lr,[sp]
+	lw		r1,8[sp]
+	lw		r2,16[sp]
+	ret		#24
+
+;==============================================================================
+;==============================================================================
 ;------------------------------------------------------------------------------
 ; 100 Hz interrupt
 ; - takes care of "flashing" the cursor
@@ -962,10 +1448,10 @@ Pulse100:
 	inch	r1,334[r2]
 	addui	r1,r1,#1
 	outc	r1,334[r2]
-	call	DisplayDatetime
+;	call	DisplayDatetime
 	call	SelectNextToRunTCB
 	call	SwitchTask
-	sb		r0,0xFFFF_FFFF_FFFF_0010	; clear interrupt
+	outb	r0,0xDCFFFC		; clear interrupt
 ;	lw		r1,TickIRQAddr
 ;	jal		r31,[r1]
 ;	lw		r1,Milliseconds
@@ -1186,7 +1672,7 @@ ScrollUp:
 	subu	r2,r2,r1			; one less row
 	lea		r3,TEXTSCR
 scrup1:
-	inch	r4,[r3+r1]			; indexed addressing example
+	inch	r4,[r3+r1*2]		; indexed addressing example
 	outc	r4,[r3]
 	addui	r3,r3,#2
 	loop	r2,scrup1
@@ -1237,7 +1723,7 @@ AsciiToScreen:
 	bleui	r1,#'Z',atoscr1
 	bgtui   r1,#'z',atoscr1
 	bltui	r1,#'a',atoscr1
-	subi	r1,r1,#0x60
+	subui	r1,r1,#0x60
 atoscr1:
 	ori		r1,r1,#0x100
 	ret
@@ -1261,16 +1747,16 @@ stasc1:
 ;------------------------------------------------------------------------------
 ;
 CalcScreenLoc:
-	lc		r1,CursorRow
+	lbu		r1,CursorRow
 	andi	r1,r1,#0x7f
 	lea		r3,TEXTREG
 	inch	r2,TEXT_COLS[r3]
 	mulu	r2,r2,r1
-	lc		r1,CursorCol
+	lbu		r1,CursorCol
 	andi	r1,r1,#0x7f
 	addu	r2,r2,r1
 	outc	r2,TEXT_CURPOS[r3]
-	shli	r2,r2,#1
+	shlui	r2,r2,#1
 	addui	r1,r2,#TEXTSCR			; r1 = screen location
 	ret
 
@@ -1286,19 +1772,21 @@ DisplayChar:
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	sc		r0,CursorCol		; just set cursor column to zero on a CR
+	sb		r0,CursorCol		; just set cursor column to zero on a CR
 	bra		dcx7
 dccr:
+;	beqi	r1,#CTRLK,dccr1
 	bnei	r1,#0x91,dcx6		; cursor right ?
+dccr1:
 	subui	sp,sp,#32
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r2,CursorCol
+	lbu		r2,CursorCol
 	beqi	r2,#56,dcx7
 	addui	r2,r2,#1
-	sc		r2,CursorCol
+	sb		r2,CursorCol
 dcx7:
 	call	CalcScreenLoc
 	lw		lr,24[sp]
@@ -1307,40 +1795,46 @@ dcx7:
 	lw		r1,[sp]
 	ret		#32
 dcx6:
+;	beqi	r1,#CTRLI,dccu1
 	bnei	r1,#0x90,dcx8		; cursor up ?
+dccu1:
 	subui	sp,sp,#32
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r2,CursorRow
+	lbu		r2,CursorRow
 	beqi	r2,#0,dcx7
 	subui	r2,r2,#1
-	sc		r2,CursorRow
+	sb		r2,CursorRow
 	bra		dcx7
 dcx8:
+;	beqi	r1,#CTRLJ,dccl1
 	bnei	r1,#0x93,dcx9		; cursor left ?
+dccl1:
 	subui	sp,sp,#32
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r2,CursorCol
+	lbu		r2,CursorCol
 	beqi	r2,#0,dcx7
 	subui	r2,r2,#1
-	sc		r2,CursorCol
+	sb		r2,CursorCol
 	bra		dcx7
 dcx9:
+;	beqi	r1,#CTRLM,dccd1
 	bnei	r1,#0x92,dcx10		; cursor down ?
+dccd1:
 	subui	sp,sp,#32
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r2,CursorRow
+	lbu		r2,CursorRow
 	beqi	r2,#30,dcx7
 	addui	r2,r2,#1
-	sc		r2,CursorRow
+	sb		r2,CursorRow
 	bra		dcx7
 dcx10:
 	bnei	r1,#0x94,dcx11			; cursor home ?
@@ -1349,12 +1843,12 @@ dcx10:
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r2,CursorCol
+	lbu		r2,CursorCol
 	beq		r2,r0,dcx12
-	sc		r0,CursorCol
+	sb		r0,CursorCol
 	bra		dcx7
 dcx12:
-	sc		r0,CursorRow
+	sb		r0,CursorRow
 	bra		dcx7
 dcx11:
 	subui	sp,sp,#48
@@ -1366,18 +1860,18 @@ dcx11:
 	sw		lr,40[sp]
 	bnei	r1,#0x99,dcx13		; delete ?
 	call	CalcScreenLoc
-	or		r3,r0,r1			; r3 = screen location
-	lc		r1,CursorCol		; r1 = cursor column
+	mov		r3,r1				; r3 = screen location
+	lbu		r1,CursorCol		; r1 = cursor column
 	bra		dcx5
 dcx13:
 	bnei	r1,#CTRLH,dcx3		; backspace ?
-	lc		r2,CursorCol
+	lbu		r2,CursorCol
 	beq		r2,r0,dcx4
 	subui	r2,r2,#1
-	sc		r2,CursorCol
+	sb		r2,CursorCol
 	call	CalcScreenLoc		; a0 = screen location
-	or		r3,r0,r1			; r3 = screen location
-	lc		r1,CursorCol
+	mov		r3,r1				; r3 = screen location
+	lbu		r1,CursorCol
 dcx5:
 	inch	r2,2[r3]
 	outc	r2,[r3]
@@ -1392,12 +1886,14 @@ dcx5:
 	bra		dcx4
 dcx3:
 	beqi	r1,#'\n',dclf	; linefeed ?
-	or		r4,r0,r1		; save r1 in r4
+	mov		r4,r1			; save r1 in r4
 	call	CalcScreenLoc	; r1 = screen location
-	or		r3,r0,r1		; r3 = screen location
-	or		r1,r0,r4		; restore r1
+	mov		r3,r1			; r3 = screen location
+	mov		r1,r4			; restore r1
 	call	AsciiToScreen	; convert ascii char to screen char
 	outc	r1,[r3]
+	lc		r1,CharColor
+	outc	r1,0x10000[r3]
 	call	IncCursorPos
 	bra		dcx4
 dclf:
@@ -1422,12 +1918,12 @@ IncCursorPos:
 	sw		r2,8[sp]
 	sw		r3,16[sp]
 	sw		lr,24[sp]
-	lc		r1,CursorCol
+	lbu		r1,CursorCol
 	addui	r1,r1,#1
-	sc		r1,CursorCol
+	sb		r1,CursorCol
 	inch	r2,TEXTREG+TEXT_COLS
 	bleu	r1,r2,icc1
-	sc		r0,CursorCol		; column = 0
+	sb		r0,CursorCol		; column = 0
 	bra		icr1
 IncCursorRow:
 	subui	sp,sp,#32
@@ -1436,13 +1932,13 @@ IncCursorRow:
 	sw		r3,16[sp]
 	sw		lr,24[sp]
 icr1:
-	lc		r1,CursorRow
+	lbu		r1,CursorRow
 	addui	r1,r1,#1
-	sc		r1,CursorRow
+	sb		r1,CursorRow
 	inch	r2,TEXTREG+TEXT_ROWS
 	bleu	r1,r2,icc1
 	subui	r2,r2,#1			; backup the cursor row, we are scrolling up
-	sc		r2,CursorRow
+	sb		r2,CursorRow
 	call	ScrollUp
 icc1:
 	call	CalcScreenLoc
@@ -1457,7 +1953,7 @@ icc1:
 ;------------------------------------------------------------------------------
 ;
 DisplayString:
-	subi	sp,sp,#24
+	subui	sp,sp,#24
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		lr,16[sp]
@@ -1482,7 +1978,7 @@ DisplayStringCRLF:
 	addui	r30,r30,#8
 
 CRLF:
-	subui	r30,r30,#16
+	subui	sp,sp,#16
 	sw		r1,[sp]
 	sw		lr,8[sp]
 	setlo	r1,#'\r'
@@ -1492,6 +1988,11 @@ CRLF:
 	lw		lr,8[sp]
 	lw		r1,[sp]
 	ret		#16
+
+; Call the Tiny BASIC routine to display a number
+;
+DisplayNum:
+	jmp		PRTNUM
 
 ;------------------------------------------------------------------------------
 ; Display nybble in r1
@@ -1528,6 +2029,38 @@ DisplayByte:
 	ret		#16
 
 ;------------------------------------------------------------------------------
+; Display the char in r1
+;------------------------------------------------------------------------------
+;
+DisplayCharr:
+	subui	sp,sp,#16
+	sw		r1,[sp]
+	sw		lr,8[sp]
+	rori	r1,r1,#8	
+	call	DisplayByte
+	roli	r1,r1,#8
+	call	DisplayByte
+	lw		lr,8[sp]
+	lw		r1,[sp]
+	ret		#16
+
+;------------------------------------------------------------------------------
+; Display the half-word in r1
+;------------------------------------------------------------------------------
+;
+DisplayHalf:
+	subui	sp,sp,#16
+	sw		r1,[sp]
+	sw		lr,8[sp]
+	rori	r1,r1,#16
+	call	DisplayCharr
+	roli	r1,r1,#16
+	call	DisplayCharr
+	lw		lr,8[sp]
+	lw		r1,[sp]
+	ret		#16
+
+;------------------------------------------------------------------------------
 ; Display the 64 bit word in r1
 ;------------------------------------------------------------------------------
 ;
@@ -1551,7 +2084,7 @@ dspwd1:
 ; destroys r1,r3
 ;------------------------------------------------------------------------------
 ;
-DisplayMem:
+DisplayMemB:
 	subui	sp,sp,#24
 	sw		r1,[sp]
 	sw		r3,8[sp]
@@ -1564,13 +2097,54 @@ DisplayMem:
 dspmem1:
 	setlo	r1,#' '
 	call	DisplayChar
-	lb		r1,[r2]
+	lbu		r1,[r2]
 	call	DisplayByte
 	addui	r2,r2,#1
 	loop	r3,dspmem1
 	call	CRLF
 	lw		lr,16[sp]
 	lw		r3,8[sp]
+	lw		r1,[sp]
+	ret		#24
+
+DisplayMemC:
+	subui	sp,sp,#24
+	sw		r1,[sp]
+	sw		r3,8[sp]
+	sw		lr,16[sp]
+	setlo	r1,#':'
+	call	DisplayChar
+	mov		r1,r2
+	call	DisplayWord
+	setlo	r3,#3
+dspmemc1:
+	setlo	r1,#' '
+	call	DisplayChar
+	lcu		r1,[r2]
+	call	DisplayCharr
+	addui	r2,r2,#2
+	loop	r3,dspmemc1
+	call	CRLF
+	lw		lr,16[sp]
+	lw		r3,8[sp]
+	lw		r1,[sp]
+	ret		#24
+
+DisplayMemW:
+	subui	sp,sp,#24
+	sw		r1,[sp]
+	sw		lr,16[sp]
+	setlo	r1,#':'
+	call	DisplayChar
+	mov		r1,r2
+	call	DisplayWord
+	setlo	r1,#' '
+	call	DisplayChar
+	lw		r1,[r2]
+	call	DisplayWord
+	addui	r2,r2,#8
+	call	CRLF
+	lw		lr,16[sp]
 	lw		r1,[sp]
 	ret		#24
 
@@ -1589,7 +2163,7 @@ BinToBCD:
 	setlo	r2,#10
 	setlo	r8,#19		; number of digits to produce - 1
 bta1:
-	mod		r3,r1,r2
+	modu	r3,r1,r2
 	shli	r3,r3,#60	; shift result to uppermost bits
 	shli	r7,r5,#60	; copy low order nybble of r5 to r4 topmost nybble
 	shrui	r4,r4,#4
@@ -1695,7 +2269,9 @@ btos2:
 
 
 ;==============================================================================
+; System Monitor Program
 ;==============================================================================
+;
 Monitor:
 	lea		sp,STACKTOP0	; top of stack; reset the stack pointer
 	sb		r0,KeybdEcho	; turn off keyboard echo
@@ -1707,6 +2283,8 @@ PromptLn:
 ; Get characters until a CR is keyed
 ;
 Prompt3:
+;	lw		r1,#2			; get keyboard character
+;	syscall	#417
 	call	KeybdGetChar
 	beqi	r1,#-1,Prompt3	; wait for a character
 	beqi	r1,#CR,Prompt1
@@ -1716,9 +2294,9 @@ Prompt3:
 ; Process the screen line that the CR was keyed on
 ;
 Prompt1:
-	sc		r0,CursorCol	; go back to the start of the line
+	sb		r0,CursorCol	; go back to the start of the line
 	call	CalcScreenLoc	; r1 = screen memory location
-	or		r3,r1,r0
+	mov		r3,r1
 	inch	r1,[r3]
 	addui	r3,r3,#2
 	call	ScreenToAscii
@@ -1732,19 +2310,38 @@ Prompt1:
 Prompt2:
 	beqi	r1,#':',Editmem		; $: - edit memory
 	beqi	r1,#'D',Dumpmem		; $D - dump memory
-	beqi	r1,#'B',CSTART		; $B - start tiny basic
+	beqi	r1,#'F',Fillmem		; $F - fill memory
+Prompt7:
+	bnei	r1,#'B',Prompt4		; $B - start tiny basic
+	jmp		CSTART
+Prompt4:
 	beqi	r1,#'J',ExecuteCode	; $J - execute code
-	beqi	r1,#'L',LoadS19		; $L - load S19 file
-	beqi	r1,#'?',DisplayHelp	; $? - display help
+	bnei	r1,#'L',Prompt9	; $L - load S19 file
+	jmp		LoadSector
+Prompt9:
+	bnei	r1,#'?',Prompt10	; $? - display help
+	lea		r1,HelpMsg
+	call	DisplayString
+	jmp		Monitor
+Prompt10:
 	beqi	r1,#'C',TestCLS		; $C - clear screen
-	beqi	r1,#'R',RandomLinesCall
-	beqi	r1,#'I',Invaders
-	beqi	r1,#'P',Piano
-	bra		Monitor
+	bnei	r1,#'R',Prompt12
+	jmp		RandomLinesCall
+Prompt12:
+	bnei	r1,#'I',Prompt13
+	jmp		Invaders
+Prompt13:
+	bnei	r1,#'P',Prompt14
+	jmp		Piano
+Prompt14:
+	bnei	r1,#'T',Prompt15
+	call	tmp_read
+Prompt15:
+	jmp		Monitor
 
 RandomLinesCall:
 	call	RandomLines
-	bra		Monitor
+	jmp		Monitor
 
 TestCLS:
 	inch	r1,[r3]
@@ -1759,26 +2356,22 @@ TestCLS:
 	sb		r0,CursorCol
 	sb		r0,CursorRow
 	call	CalcScreenLoc
-	bra		Monitor
+	jmp		Monitor
 	
-DisplayHelp:
-	setlo	r1,HelpMsg
-	call	DisplayString
-	bra		Monitor
-
-	align	16
 HelpMsg:
 	db	"? = Display help",CR,LF
 	db	"CLS = clear screen",CR,LF
 	db	": = Edit memory bytes",CR,LF
 	db	"L = Load S19 file",CR,LF
-	db	"D = Dump memory",CR,LF
+	db	"D[B|C|H|W] = Dump memory",CR,LF
+	db	"F[B|C|H|W] = Fill memory",CR,LF
 	db	"B = start tiny basic",CR,LF
 	db	"J = Jump to code",CR,LF
 	db	"I = Invaders",CR,LF
 	db	"R = Random lines",CR,LF
+	db	"T = get temperature",CR,LF
 	db	"P = Piano",CR,LF,0
-	align	16
+	align	4
 
 ;------------------------------------------------------------------------------
 ; Ignore blanks in the input
@@ -1813,7 +2406,7 @@ edtmem1:
 	sb		r1,[r5]
 	addui	r5,r5,#1
 	loop	r4,edtmem1
-	bra		Monitor
+	jmp		Monitor
 
 ;------------------------------------------------------------------------------
 ; Execute code at the specified address.
@@ -1823,26 +2416,95 @@ ExecuteCode:
 	call	ignBlanks
 	call	GetHexNumber
 	jal		r31,[r1]
-	bra     Monitor
+	jmp     Monitor
+
+LoadSector:
+	call	ignBlanks
+	call	GetHexNumber
+	lw		r2,#0x3800
+	call	spi_read_sector
+	jmp		Monitor
 
 ;------------------------------------------------------------------------------
 ; Do a memory dump of the requested location.
 ;------------------------------------------------------------------------------
 ;
 DumpMem:
+	inch	r1,[r3]
+	addui	r3,r3,#2
+	call	ScreenToAscii
+	mov		r6,r1			; r6 = fill type character
 	call	ignBlanks
-	call	GetHexNumber
+	call	GetHexNumber	; get start address of dump
 	mov		r2,r1
+	call	ignBlanks
+	call	GetHexNumber	; get number of bytes to dump
+	shrui	r1,r1,#3		; 1/8 as many dump rows
+	bnei	r1,#0,Dumpmem2
+	lw		r1,#1			; dump at least one row
+Dumpmem2:
 	call	CRLF
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
-	call	DisplayMem
+	beqi	r6,#'W',DumpmemW
+;	beqi	r6,#'H',DumpmemH
+	beqi	r6,#'C',DumpmemC
+DumpmemB:
+	call	DisplayMemB
+	loop	r1,DumpmemB
+	jmp		Monitor
+DumpmemC:
+	call	DisplayMemC
+	loop	r1,DumpmemC
+	jmp		Monitor
+DumpmemW:
+	call	DisplayMemW
+	loop	r1,DumpmemW
+	jmp		Monitor
+
+;	call	DisplayMem
+;	call	DisplayMem
+;	call	DisplayMem
+;	call	DisplayMem
+;	call	DisplayMem
+;	call	DisplayMem
+;	call	DisplayMem
 	bra		Monitor
+
+Fillmem:
+	inch	r1,[r3]
+	addui	r3,r3,#2
+	call	ScreenToAscii
+	mov		r6,r1			; r6 = fill type character
+	call	ignBlanks
+	call	GetHexNumber	; get start address of dump
+	mov		r2,r1
+	call	ignBlanks
+	call	GetHexNumber	; get number of bytes to fill
+	mov		r5,r1
+	call	ignBlanks
+	call	GetHexNumber	; get the fill byte
+	beqi	r6,#'C',FillmemC
+	beqi	r6,#'H',FillmemH
+	beqi	r6,#'W',FillmemW
+FillmemB:
+	sb		r1,[r2]
+	addui	r2,r2,#1
+	loop	r5,FillmemB
+	jmp		Monitor
+FillmemC:
+	sc		r1,[r2]
+	addui	r2,r2,#2
+	loop	r5,FillmemC
+	jmp		Monitor
+FillmemH:
+	sh		r1,[r2]
+	addui	r2,r2,#4
+	loop	r5,FillmemH
+	jmp		Monitor
+FillmemW:
+	sw		r1,[r2]
+	addui	r2,r2,#8
+	loop	r5,FillmemW
+	jmp		Monitor
 
 ;------------------------------------------------------------------------------
 ; Get a hexidecimal number. Maximum of sixteen digits.
@@ -1981,7 +2643,7 @@ ProcessS8:
 ProcessS9:
 	call	S19Get16BitAddress
 	sw		r5,S19StartAddress
-	bra		Monitor
+	jmp		Monitor
 
 S19Get16BitAddress:
 	subui	sp,sp,#8
@@ -2063,11 +2725,13 @@ sgc1:
 ;--------------------------------------------------------------------------
 ; Draw random lines on the bitmap screen.
 ;--------------------------------------------------------------------------
+;
 RandomLines:
 	subui	sp,sp,#24
 	sw		r1,[sp]
 	sw		r3,8[sp]
 	sw		lr,16[sp]
+	sw		r0,ctx3start	; prevent restarting context over and over again
 rl5:
 	gran
 	mfspr	r1,rand			; select a random color
@@ -2076,33 +2740,34 @@ rl1:						; random X0
 	gran
 	mfspr	r1,rand
 	lw		r3,#1364
-	mod		r1,r1,r3
+	modu	r1,r1,r3
 	outh	r1,GACCEL+8
 rl2:						; random X1
 	gran
 	mfspr	r1,rand
 	lw		r3,#1364
-	mod		r1,r1,r3
+	modu	r1,r1,r3
 	outh	r1,GACCEL+16
 rl3:						; random Y0
 	gran
 	mfspr	r1,rand
 	lw		r3,#768
-	mod		r1,r1,r3
+	modu	r1,r1,r3
 	outh	r1,GACCEL+12
 rl4:						; random Y1
 	gran
 	mfspr	r1,rand
 	lw		r3,#768
-	mod		r1,r1,r3
+	modu	r1,r1,r3
 	outh	r1,GACCEL+20
 	setlo	r1,#2			; draw line command
 	outh	r1,GACCEL+60
 rl8:
-	call	KeybdGetChar
-	beqi	r1,#CTRLC,rl7
-	beqi	r1,#'r',rl5
-	bra		rl8
+;	call	KeybdGetChar
+;	beqi	r1,#CTRLC,rl7
+	inch	r1,GACCEL+56	; ensure controller is in IDLE state
+	bne		r1,r0,rl8
+	bra		rl5
 rl7:
 	lw		lr,16[sp]
 	lw		r3,8[sp]
@@ -2138,9 +2803,9 @@ sac974:
 sac971:						; wait for status to register 0xF (all ready)
 	call	KeybdGetChar	; see if we needed to CTRL-C
 	beqi	r1,#CTRLC,sac973
-	outc	r1,AC97+0x68	; wait for dirty bit to clear
+	inch	r1,AC97+0x68	; wait for dirty bit to clear
 	bne		r1,r0,sac971
-	outc	r1,AC97+0x26	; check status at reg h26, wait for
+	inch	r1,AC97+0x26	; check status at reg h26, wait for
 	andi	r1,r1,#0x0F		; analogue to be ready
 	bnei	r1,#0x0F,sac974
 sac973:
@@ -2153,7 +2818,7 @@ sac973:
 sac972:
 	call	KeybdGetChar
 	beqi	r1,#CTRLC,sac975
-	outc	r1,AC97+0x68	; wait for dirty bits to clear
+	inch	r1,AC97+0x68	; wait for dirty bits to clear
 	bne		r1,r0,sac972	; wait a while for the settings to take effect
 sac975:
 	lw		lr,8[sp]
@@ -2184,14 +2849,14 @@ Beep:
 	outc	r1,PSGADSR0
 	ori		r1,r0,#0x1104	; gate, output enable, triangle waveform
 	outc	r1,PSGCTRL0
-	ori		r1,r0,#25000000	; delay about 1s
+	ori		r1,r0,#2500000	; delay about 1s
 beep1:
 	loop	r1,beep1
 	setlo	r1,#13
 	outb	r1,LED
 	ori		r1,r0,#0x0104	; gate off, output enable, triangle waveform
 	outc	r1,PSGCTRL0
-	ori		r1,r0,#25000000	; delay about 1s
+	ori		r1,r0,#2500000	; delay about 1s
 beep2:
 	loop	r1,beep2
 	setlo	r1,#16
@@ -2328,30 +2993,37 @@ rirq8:
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 DisplayDatetime:
-	subui	sp,sp,#32
+	subui	sp,sp,#48
 	sw		r1,[sp]
 	sw		r2,8[sp]
 	sw		r3,16[sp]
+	sw		r4,24[sp]
+	sw		r5,32[sp]
 	sw		lr,24[sp]
 	call	CursorOff
-	lc		r2,CursorRow
-	lc		r3,CursorCol
-	outw	r0,DATETIME+24		; trigger a snapshot
-	lw		r1,#46				; move cursor down to last display line
-	sc		r1,CursorRow
-	lw		r1,#64
-	sc		r1,CursorCol
-	inw		r1,DATETIME			; get the snapshotted date and time
+	lw		r1,#3				; get cursor position
+	syscall	#410
+	mov		r4,r1				; r4 = row
+	mov		r5,r2				; r5 = col
+	lw		r1,#2				; set cursor position
+	lw		r2,#46				; move cursor down to last display line
+	lw		r3,#64
+	syscall	#410
+	lw		r1,#1				; get the snapshotted date and time
+	syscall	#416
 	call	DisplayWord			; display on screen
-	sc		r2,CursorRow		; restore cursor position
-	sc		r3,CursorCol
-	call	CalcScreenLoc
+	lw		r1,#2				; restore cursor position
+	mov		r2,r4				; r2 = row
+	mov		r3,r5				; r3 = col
+	syscall	#410
 	call	CursorOn
 	lw		lr,24[sp]
 	lw		r3,16[sp]
 	lw		r2,8[sp]
 	lw		r1,[sp]
-	ret		#32
+	lw		r4,24[sp]
+	lw		r5,32[sp]
+	ret		#48
 
 ;==============================================================================
 ;==============================================================================
@@ -2537,6 +3209,740 @@ InvadersEnd:
 
 ;==============================================================================
 ;==============================================================================
+;
+; Initialize the SD card
+; Returns
+; r = 0 if successful, 1 otherwise
+;
+spi_init:
+	subui	sp,sp,#24
+	sw		lr,[sp]
+	sw		r2,8[sp]
+	sw		r3,16[sp]
+	lea		r3,SPIMASTER
+	lw		r1,#SPI_INIT_SD
+	outb	r1,SPI_TRANS_TYPE_REG[r3]
+	lw		r1,#SPI_TRANS_START
+	outb	r1,SPI_TRANS_CTRL_REG[r3]
+	nop
+spi_init1:
+	inb		r1,SPI_TRANS_STATUS_REG[r3]
+	mov		r2,r1							; note: some time needs to be wasted
+	mov		r1,r2							; between status reads.
+	beqi	r1,#SPI_TRANS_BUSY,spi_init1
+	inb		r1,SPI_TRANS_ERROR_REG[r3]
+	bfext	r1,r1,#1,#0
+	bne		r1,#SPI_INIT_NO_ERROR,spi_error
+	lea		r1,spi_init_ok_msg
+	call	DisplayString
+	xor		r1,r1,r1
+	bra		spi_init_exit
+spi_error:
+	call	DisplayByte
+	lea		r1,spi_init_error_msg
+	call	DisplayString
+	lw		r1,#1
+spi_init_exit:
+	lw		lr,[sp]
+	lw		r2,8[sp]
+	lw		r3,16[sp]
+	ret		#24
+
+
+; SPI read sector
+;
+; r1= sector number to read
+; r2= address to place read data
+; Returns:
+; r1 = 0 if successful
+;
+spi_read_sector:
+	subui	sp,sp,#40
+	sw		lr,[sp]
+	sw		r5,8[sp]
+	sw		r2,16[sp]
+	sw		r3,24[sp]
+	sw		r4,32[sp]
+	lea		r3,SPIMASTER
+
+	; spi master wants a byte address, so we multiply the sector number
+	; by 512.
+	shlui	r1,r1,#9
+	outb	r1,SPI_SD_ADDR_7_0_REG[r3]
+	shrui	r1,r1,#8
+	outb	r1,SPI_SD_ADDR_15_8_REG[r3]
+	shrui	r1,r1,#8
+	outb	r1,SPI_SD_ADDR_23_16_REG[r3]
+	shrui	r1,r1,#8
+	outb	r1,SPI_SD_ADDR_31_24_REG[r3]
+	
+	; Force the reciever fifo to be empty, in case a prior error leaves it
+	; in an unknown state.
+	lw		r1,#1
+	outb	r1,SPI_RX_FIFO_CTRL_REG[r3]
+
+	lw		r1,#RW_READ_SD_BLOCK
+	outb	r1,SPI_TRANS_TYPE_REG[r3]
+	lw		r1,#SPI_TRANS_START
+	outb	r1,SPI_TRANS_CTRL_REG[r3]
+	nop
+spi_read_sect1:
+	inb		r1,SPI_TRANS_STATUS_REG[r3]
+	mov		r4,r1							; just a delay between consecutive status reg reads
+	mov		r1,r4
+	beqi	r1,#SPI_TRANS_BUSY,spi_read_sect1
+	inb		r1,SPI_TRANS_ERROR_REG[r3]
+	bfext	r1,r1,#3,#2
+	bnei	r1,#SPI_READ_NO_ERROR,spi_read_error
+	lw		r4,#512		; read 512 bytes from fifo
+spi_read_sect2:
+	inb		r1,SPI_RX_FIFO_DATA_REG[r3]
+	sb		r1,[r2]
+	addui	r2,r2,#1
+	loop	r4,spi_read_sect2
+	xor		r1,r1,r1
+	bra		spi_read_ret
+spi_read_error:
+	call	DisplayByte
+	lea		r1,spi_read_error_msg
+	call	DisplayString
+	lw		r1,#1
+spi_read_ret:
+	lw		lr,[sp]
+	lw		r5,8[sp]
+	lw		r2,16[sp]
+	lw		r3,24[sp]
+	lw		r4,32[sp]
+	ret		#40
+
+; Read the boot sector from the disk.
+; Must find it first by looking for the signature bytes 'EB' and '55AA'.
+;
+spi_read_boot:
+	subui	sp,sp,#32
+	sw		lr,[sp]
+	sw		r2,8[sp]
+	sw		r3,16[sp]
+	sw		r5,24[sp]
+	sw		r0,startSector					; default starting sector
+	lw		r3,#500	;1934720						; number of sectors to read (up to 1GB)
+	lw		r5,#0							; r5 = starting address
+spi_read_boot1:
+	mov		r1,r5							; r1 = sector number
+	lw		r2,#8							; eight digits
+	sb		r0,CursorCol
+	call	DisplayNum						; Display the sector number being checked
+	mov		r1,r5							; r1 = sector number
+	lw		r2,#0x100800000					; r2 = target address
+	call	spi_read_sector
+
+; The following displays the contents of the sector
+;	lw		r1,#0x10
+;	lw		r2,#0x3800
+;spi_read_boot5:
+;	call	DisplayMemB
+;	loop	r1,spi_read_boot5
+
+	addui	r5,r5,#1						; move to next sector
+	lbu		r1,0x100800000
+	cmpui	r2,r1,#0xEB
+	beq		r2,r0,spi_read_boot2
+spi_read_boot3:
+	loop	r3,spi_read_boot1
+	lw		r1,#1							; r1 = 1 for error
+	bra		spi_read_boot4
+spi_read_boot2:
+	lea		r1,msgFoundEB
+	call	DisplayString
+	lbu		r1,0x1008001FE					; check for 0x55AA signature
+	bnei	r1,#0x55,spi_read_boot3
+	lbu		r1,0x1008001FF
+	bnei	r1,#0xAA,spi_read_boot3
+	subui	r1,r5,#1
+	sw		r1,startSector
+	xor		r1,r1,r1						; r1 = 0, for okay status
+spi_read_boot4:
+	lw		lr,[sp]
+	lw		r2,8[sp]
+	lw		r3,16[sp]
+	lw		r5,24[sp]
+	ret		#32
+
+msgFoundEB:
+	db	"Found EB code.",CR,LF,0
+	.align 4
+
+; Load the FAT tables into memory
+;
+loadFAT:
+	subui	sp,sp,#8
+	sw		lr,[sp]
+	lcu		r3,0x100800016					; sectors per FAT
+	lbu		r2,0x100800010					; number of FATs
+	mulu	r3,r3,r2						; offset
+	lea		r2,0x100800200					; where to place FAT
+	lcu		r5,0x10080000E					; r5 = # reserved sectors before FAT
+	lw		r6,startSector
+	addu	r5,r5,r6
+loadFAT1:
+	mov		r1,r5							; r1 = sector #
+	call	spi_read_sector
+	addui	r5,r5,#1
+	addui	r2,r2,#512						; advance 512 bytes
+	loop	r3,loadFAT1
+	lw		lr,[sp]
+	ret		#8
+
+; Load the root directory from disk
+; r2 = where to place root directory in memory
+;
+loadRootDirectory:
+	lcu		r3,0x100800016					; sectors per FAT
+	lbu		r4,0x100800010					; number of FATs
+	mulu	r3,r3,r4						; offset
+	lcu		r4,0x10080000E					; r2 = # reserved sectors before FAT
+	addu	r3,r3,r4						; r3 = root directory sector number
+	lw		r6,startSector
+	addu	r5,r3,r6						; r5 = root directory sector number
+	; we have to use two byte loads here because the number is at an unaligned data address
+	lbu		r7,0x100800011					; r7 <= number of root directory entries
+	lbu		r8,0x100800012
+	shlui	r8,r8,#8
+	or		r7,r7,r8
+	mov		r8,r7							; r8 = number of root directory entries
+	shlui	r7,r7,#5						; r7 *=32 = size of root directory table (bytes)
+	shrui	r7,r7,#9						; r7 /= 512 = number of sectors in root directory
+	mov		r3,r7
+loadRootDir1:
+	mov		r1,r5
+	call	spi_read_sector
+	addui	r5,r5,#1
+	addui	r2,r2,#512
+	loop	r3,loadRootDir1
+
+loadBootFile:
+	; For now we cheat and just go directly to sector 512.
+	bra		loadBootFileTmp
+
+	lcu		r3,0x100800016					; sectors per FAT
+	lbu		r2,0x100800010					; number of FATs
+	mulu	r3,r3,r2						; offset
+	lcu		r2,0x10080000E					; r2 = # reserved sectors before FAT
+	addu	r3,r3,r2						; r3 = root directory sector number
+	; we have to use two byte loads here because the number is at an unaligned data address
+	lbu		r7,0x100800011					; r7 <= number of root directory entries
+	lbu		r8,0x100800012
+	shlui	r8,r8,#8
+	or		r7,r7,r8
+	mov		r8,r7							; r8 = number of root directory entries
+	shlui	r7,r7,#5						; r7 *=32 = size of root directory table (bytes)
+	shrui	r7,r7,#9						; r7 /= 512 = number of sectors in root directory
+
+; now we need to fetch the sectors of the root directory and put them somewhere in
+; memory
+;
+loadBootFile4:
+	lw		r1,[r3]							; get filename
+	cmpui	r1,r1,#0x454C4946544F4F42		; "BOOTFILE"
+	beq		r1,r0,loadBootFile5
+loadBootFile3:
+	addui	r3,r3,#32						; move to next directory entry
+	loop	r7,loadBootFile4
+; boot file not found
+
+; here we found the file in the directory
+;
+loadBootFile5:
+	lcu		r2,0x1a[r3]						; get starting cluster
+	lcu		r7,0x100800011					; r7 = number of root directory entries
+	shlui	r7,r7,#5						; r7 *=32 = size of root directory table (bytes)
+	shrui	r7,r7,#9						; r7 /= 512 = number of sectors in root directory
+
+loadBootFileTmp:
+	; We load the number of sectors per cluster, then load a single cluster of the file.
+	; This is 16kib
+	lbu		r3,0x10080000D					; sectors per cluster
+	lea		r2,0x100800200					; where to place FAT in memory
+	lw		r5,startSector					; r5=start sector of disk
+	addui	r5,r5,#512						; r5= sector 512
+loadBootFile1:
+	mov		r1,r5							; r1=sector to read
+	call	spi_read_sector
+	addui	r5,r5,#1						; r5 = next sector
+	addui	r2,r2,#512
+	loop	r3,loadBootFile1
+	lhu		r1,0x100800200					; make sure it's bootable
+	bnei	r1,#0x544F4F42,loadBootFile2
+	lw		r1,#0x16
+	lea		r1,msgJumpingToBoot
+	call	DisplayString
+	lw		r1,#0x100800204
+	jal		lr,[r1]
+	jmp		Monitor
+loadBootFile2:
+	lea		r1,msgNotBootable
+	call	DisplayString
+	jmp		Monitor
+
+msgJumpingToBoot:
+	db	"Jumping to boot",0	
+msgNotBootable:
+	db	"SD card not bootable.",0
+spi_init_ok_msg:
+	db "SD card initialized okay.",0
+spi_init_error_msg:
+	db	": error occurred initializing the SD card.",0
+spi_boot_error_msg:
+	db	"SD card boot error",0
+spi_read_error_msg:
+	db	"SD card read error",0
+
+	.align	4
+
+;==============================================================================
+; Ethernet
+;==============================================================================
+my_MAC1	EQU	0x00
+my_MAC2	EQU	0xFF
+my_MAC3	EQU	0xEE
+my_MAC4	EQU	0xF0
+my_MAC5	EQU	0xDA
+my_MAC6	EQU	0x42
+
+	.bss
+eth_unique_id	dw		0
+
+	.code
+
+; Initialize the ethmac controller.
+; Supply a MAC address, set MD clock
+;
+eth_init:
+	lea		r3,ETHMAC
+	lw		r1,#0x64			; 100
+	sh		r1,MIIMODER[r3]
+	lw		r1,#7				; PHY address
+	sh		r1,MIIADDRESS[r3]
+	lw		r1,#0xEEF0DA42
+	sh		r1,0x40[r3]			; MAC0
+	lw		r1,#0x00FF
+	sh		r1,0x44[r3]			; MAC1
+	ret
+
+; Request a packet and display on screen
+; r1 = address where to put packet
+;
+eth_request_packet:
+	subui	sp,sp,#24
+	sw		r3,[sp]
+	sw		r2,8[sp]
+	sw		r4,16[sp]
+	lea		r3,ETHMAC
+	lw		r2,#4				; clear rx interrupt
+	sh		r2,4[r3]
+	sh		r1,0x604[r3]		; storage address
+	lw		r2,#0xe000			; enable interrupt
+	sh		r2,0x600[r3]
+eth1:
+	nop
+	inh		r2,4[r3]
+	bfext	r2,r2,#2,#2			; get bit #2
+	beq		r2,r0,eth1
+	inh		r2,0x600[r3]		; get from descriptor
+	shrui	r2,r2,#16
+	lw		r3,#0
+	lea		r4,TEXTSCR+7560		; second last line of screen
+eth20:
+	lbu		r2,[r1+r3]			; get byte
+	sc		r2,[r4+r3*2]		; store to screen
+	addui	r3,r3,#1
+	cmpui	r2,r3,#83
+	bne		r2,r0,eth20
+	lw		r3,[sp]
+	lw		r2,8[sp]
+	lw		r4,16[sp]
+	ret		#24
+
+; r1 = packet address
+;
+eth_interpret_packet:
+	subui	sp,sp,#16
+	sw		r3,[sp]
+	sw		r2,8[sp]
+	lbu		r2,12[r1]
+	lbu		r3,13[r1]
+	bnei	r2,#8,eth2			; 0x806 ?
+	bnei	r3,#6,eth2
+	lw		r1,#2				; return r1 = 2 for ARP
+eth5:
+	lw		r3,[sp]
+	lw		r2,8[sp]
+	ret		#16
+eth2:
+	bnei	r2,#8,eth3			; 0x800 ?
+	bnei	r3,#0,eth3
+	lbu		r2,23[r1]
+	bnei	r2,#1,eth4
+	lw		r1,#1
+	bra		eth5				; return 1 ICMP
+eth4:
+	bnei	r2,#0x11,eth6
+	lw		r1,#3				; return 3 for UDP
+	bra		eth5
+eth6:
+	bnei	r2,#6,eth7
+	lw		r1,#4				; return 4 for TCP
+	bra		eth5
+eth7:
+eth3:
+	xor		r1,r1,r1			; return zero for unknown
+	lw		r3,[sp]
+	lw		r2,8[sp]
+	ret		#16
+
+; r1 = address of packet to send
+; r2 = packet length
+;
+eth_send_packet:
+	subui	sp,sp,#16
+	sw		r3,[sp]
+	sw		r4,8[sp]
+	lea		r3,ETHMAC
+	; wait for tx buffer to be clear
+eth8:
+	inh		r4,0x400[r3]
+	bfext	r4,r4,#15,#15
+	beqi	r4,#1,eth8
+	lw		r4,#1			; clear tx interrupt
+	sh		r4,4[r3]
+	; set address
+	sh		r1,0x404[r3]
+	; set the packet length field and enable interrupts
+	shlui	r2,r2,#16
+	ori		r2,r2,#0xF000
+	sh		r2,0x400[r3]
+	lw		r4,8[sp]
+	lw		r3,[sp]
+	ret		#16
+
+; Only for IP type packets (not ARP)
+; r1 = rx buffer address
+; r2 = swap flag
+; Returns:
+; r1 = data start index
+;
+eth_build_packet:
+	subui	sp,sp,#64
+	sw		r3,[sp]
+	sw		r4,8[sp]
+	sw		r5,16[sp]
+	sw		r6,24[sp]
+	sw		r7,32[sp]
+	sw		r8,40[sp]
+	sw		r9,48[sp]
+	sw		r10,56[sp]
+	lbu		r3,6[r1]
+	lbu		r4,7[r1]
+	lbu		r5,8[r1]
+	lbu		r6,9[r1]
+	lbu		r7,10[r1]
+	lbu		r8,11[r1]
+	; write to destination header
+	sb		r3,[r1]
+	sb		r4,1[r1]
+	sb		r5,2[r1]
+	sb		r6,3[r1]
+	sb		r7,4[r1]
+	sb		r8,5[r1]
+	; write to source header
+	lw		r3,#my_MAC1
+	sb		r3,6[r1]
+	lw		r3,#my_MAC2
+	sb		r3,7[r1]
+	lw		r3,#my_MAC3
+	sb		r3,8[r1]
+	lw		r3,#my_MAC4
+	sb		r3,9[r1]
+	lw		r3,#my_MAC5
+	sb		r3,10[r1]
+	lw		r3,#my_MAC6
+	sb		r3,11[r1]
+	bnei	r2,#1,eth16			// if (swap)
+	lbu		r3,26[r1]
+	lbu		r4,27[r1]
+	lbu		r5,28[r1]
+	lbu		r6,29[r1]
+	; read destination
+	lbu		r7,30[r1]
+	lbu		r8,31[r1]
+	lbu		r9,32[r1]
+	lbu		r10,33[r1]
+	; write to sender
+	sb		r7,26[r1]
+	sb		r8,27[r1]
+	sb		r9,28[r1]
+	sb		r10,29[r1]
+	; write destination
+	sb		r3,30[r1]
+	sb		r4,31[r1]
+	sb		r5,32[r1]
+	sb		r6,33[r1]
+eth16:
+	lw		r3,eth_unique_id
+	addui	r3,r3,#1
+	sw		r3,eth_unique_id
+	sb		r3,19[r1]
+	shrui	r3,r3,#8
+	sb		r3,18[r1]
+	lbu		r3,14[r1]
+	andi	r3,r3,#0xF
+	shlui	r3,r3,#2		; *4
+	addui	r1,r3,#14		; return datastart in r1
+	lw		r3,[sp]
+	lw		r4,8[sp]
+	lw		r5,16[sp]
+	lw		r6,24[sp]
+	lw		r7,32[sp]
+	lw		r8,40[sp]
+	lw		r9,48[sp]
+	lw		r10,56[sp]
+	ret		#64
+
+; Compute IPv4 checksum of header
+; r1 = packet address
+; r2 = data start
+;
+eth_checksum:
+	subui	sp,sp,#24
+	sw		r3,[sp]
+	sw		r4,8[sp]
+	sw		r5,16[sp]
+	; set checksum to zero
+	sb		r0,24[r1]
+	sb		r0,25[r1]
+	xor		r3,r3,r3		; r3 = sum = zero
+	lw		r4,#14
+eth15:
+	mov		r5,r2
+	subui	r5,r5,#1		; r5 = datastart - 1
+	bge		r4,r5,eth14
+	lbu		r5,[r1+r4]		; shi = [rx_addr+i]
+	lbu		r6,1[r1+r4]		; slo = [rx_addr+i+1]
+	shlui	r5,r5,#8
+	or		r5,r5,r6		; shilo
+	addu	r3,r3,r5		; sum = sum + shilo
+	addui	r4,r4,#2		; i = i + 2
+	bra		eth15
+eth14:
+	mov		r5,r3			; r5 = sum
+	andi	r3,r3,#0xffff
+	shrui	r5,r5,#16
+	addu	r3,r3,r5
+	com		r3,r3
+	sb		r3,25[r1]		; low byte
+	shrui	r3,r3,#8
+	sb		r3,24[r1]		; high byte
+	sw		r3,[sp]
+	sw		r4,8[sp]
+	sw		r5,16[sp]
+	ret		#24	
+
+; r1 = packet address
+; returns r1 = 1 if this IP
+;	
+eth_verifyIP:
+	subui	sp,sp,#32
+	sw		r2,[sp]
+	sw		r3,8[sp]
+	sw		r4,16[sp]
+	sw		r5,24[sp]
+	lbu		r2,30[r1]
+	lbu		r3,31[r1]
+	lbu		r4,32[r1]
+	lbu		r5,33[r1]
+	; Check for general broadcast
+	bnei	r2,#0xFF,eth11
+	bnei	r3,#0xFF,eth11
+	bnei	r4,#0xFF,eth11
+	bnei	r5,#0xFF,eth11
+eth12:
+	lw		r1,#1
+eth13:
+	lw		r2,[sp]
+	lw		r3,8[sp]
+	lw		r4,16[sp]
+	lw		r5,24[sp]
+	ret		#32
+eth11:
+	mov		r1,r2
+	shlui	r1,r1,#8
+	or		r1,r1,r3
+	shlui	r1,r1,#8
+	or		r1,r1,r4
+	shlui	r1,r1,#8
+	or		r1,r1,r5
+	beqi	r1,#0xC0A8012A,eth12
+	xor		r1,r1,r1
+	bra		eth13
+
+
+eth_main:
+	call	eth_init
+eth_loop:
+	xor		r1,r1,r1		
+	lw		r1,#0x1_00000000		; memory address zero
+	call	eth_request_packet
+	call	eth_interpret_packet	; r1 = packet type
+
+	bnei	r1,#1,eth10
+	mov		r2,r1					; save off r1, r2 = packet type
+	lw		r1,#0x1_00000000		; memory address zero
+	call	eth_verifyIP
+	mov     r3,r1
+	mov     r1,r2					; r1 = packet type again
+	bnei	r3,#1,eth10
+
+	lw		r1,#0x1_00000000		; memory address zero
+	lw		r2,#1
+	call	eth_build_packet
+	mov		r3,r1					; r3 = icmpstart
+	lw		r1,#0x1_00000000		; memory address zero
+	sb		r0,[r1+r3]				; [rx_addr+icmpstart] = 0
+	lbu		r2,17[r1]
+	addui	r2,r2,#14				; r2 = len
+	mov		r6,r2					; r6 = len
+	lbu		r4,2[r1+r3]				; shi
+	lbu		r5,3[r1+r3]				; slo
+	shlui	r4,r4,#8
+	or		r4,r4,r5				; sum = {shi,slo};
+	com		r4,r4					; sum = ~sum
+	subui	r4,r4,#0x800			; sum = sum - 0x800
+	com		r4,r4					; sum = ~sum
+	sb		r4,3[r1+r3]
+	shrui	r4,r4,#8
+	sb		r4,2[r1+r3]
+	mov		r2,r3
+	call	eth_checksum
+	lw		r1,#0x1_00000000		; memory address zero
+	mov		r2,r6
+	call	eth_send_packet
+	jmp		eth_loop
+eth10:
+	; r2 = rx_addr
+	bnei	r1,#2,eth_loop		; Do we have ARP ?
+;	xor		r2,r2,r2			; memory address zero
+	lw		r2,#1_00000000
+	; get the opcode
+	lbu		r13,21[r2]
+	bnei	r13,#1,eth_loop		; ARP request
+	; get destination IP address
+	lbu		r9,38[r2]
+	lbu		r10,39[r2]
+	lbu		r11,40[r2]
+	lbu		r12,41[r2]
+	; set r15 = destination IP
+	mov		r15,r9
+	shlui	r15,r15,#8
+	or		r15,r15,r10
+	shlui	r15,r15,#8
+	or		r15,r15,r11
+	shlui	r15,r15,#8
+	or		r15,r15,r12
+	; Is it our IP ?
+	bnei	r15,#0xC0A8012A,eth_loop; //192.168.1.42
+	; get source IP address
+	lbu		r5,28[r2]
+	lbu		r6,29[r2]
+	lbu		r7,30[r2]
+	lbu		r8,31[r2]
+	; set r14 = source IP
+	mov		r14,r5
+	shlui	r14,r14,#8
+	or		r14,r14,r6
+	shlui	r14,r14,#8
+	or		r14,r14,r7
+	shlui	r14,r14,#8
+	or		r14,r14,r8
+	; Get the source MAC address
+	lbu		r16,22[r2]
+	lbu		r17,23[r2]
+	lbu		r18,24[r2]
+	lbu		r19,25[r2]
+	lbu		r20,26[r2]
+	lbu		r21,27[r2]
+	; write to destination header
+	sb		r16,[r2]
+	sb		r17,1[r2]
+	sb		r18,2[r2]
+	sb		r19,3[r2]
+	sb		r20,4[r2]
+	sb		r21,5[r2]
+	; and write to ARP destination
+	sb		r16,32[r2]
+	sb		r17,33[r2]
+	sb		r18,34[r2]
+	sb		r19,35[r2]
+	sb		r20,36[r2]
+	sb		r21,37[r2]
+	; write to source header
+;	stbc	#0x00,6[r2]
+;	stbc	#0xFF,7[r2]
+;	stbc	#0xEE,8[r2]
+;	stbc	#0xF0,9[r2]
+;	stbc	#0xDA,10[r2]
+;	stbc	#0x42,11[r2]
+	sb		r0,6[r2]
+	lw		r1,#0xFF
+	sb		r1,7[r2]
+	lw		r1,#0xEE
+	sb		r1,8[r2]
+	lw		r1,#0xF0
+	sb		r1,9[r2]
+	lw		r1,#0xDA
+	sb		r1,10[r2]
+	lw		r1,#0x42
+	sb		r1,11[r2]
+	; write to ARP source
+;	stbc	#0x00,22[r2]
+;	stbc	#0xFF,23[r2]
+;	stbc	#0xEE,24[r2]
+;	stbc	#0xF0,25[r2]
+;	stbc	#0xDA,26[r2]
+;	stbc	#0x42,27[r2]
+	sb		r0,22[r2]
+	lw		r1,#0xFF
+	sb		r1,23[r2]
+	lw		r1,#0xEE
+	sb		r1,24[r2]
+	lw		r1,#0xF0
+	sb		r1,25[r2]
+	lw		r1,#0xDA
+	sb		r1,26[r2]
+	lw		r1,#0x42
+	sb		r1,27[r2]
+	; swap sender / destination IP
+	; write sender
+	sb		r9,28[r2]
+	sb		r10,29[r2]
+	sb		r11,30[r2]
+	sb		r12,31[r2]
+	; write destination
+	sb		r5,38[r2]
+	sb		r6,39[r2]
+	sb		r7,40[r2]
+	sb		r8,41[r2]
+	; change request to reply
+;	stbc	#2,21[r2]
+	lw		r1,#2
+	sb		r1,21[r2]
+	mov		r1,r2			; r1 = packet address
+	lw		r2,#0x2A		; r2 = packet length
+	call	eth_send_packet
+	jmp		eth_loop
+
+	
+;==============================================================================
+;==============================================================================
 ;****************************************************************;
 ;                                                                ;
 ;		Tiny BASIC for the Raptor64                              ;
@@ -2610,28 +4016,28 @@ CSTART:
 	lw		sp,ENDMEM	; initialize stack pointer
 	subui	sp,sp,#8
 	sw      lr,[sp]    ; save off return address
-	sc		r0,CursorRow	; set screen output
-	sc		r0,CursorCol
+	sb		r0,CursorRow	; set screen output
+	sb		r0,CursorCol
 	sb		r0,CursorFlash
-	sw		r0,pos
+	sh		r0,pos
 	lw		r2,#0x10000020	; black chars, yellow background
-	sh		r2,charToPrint
+;	sh		r2,charToPrint
 	call	ClearScreen
 	lea		r1,msgInit	;	tell who we are
-	call	PRMESGAUX
+;	call	PRMESGAUX
 	lea		r1,msgInit	;	tell who we are
 	call	PRMESG
 	lw		r1,TXTBGN	;	init. end-of-program pointer
 	sw		r1,TXTUNF
 	lw		r1,ENDMEM	;	get address of end of memory
-	subui	r1,r1,#2048	; 	reserve 2K for the stack
+	subui	r1,r1,#4096	; 	reserve 4K for the stack
 	sw		r1,STKBOT
-	subui   r1,r1,#8192 ;   1000 vars
+	subui   r1,r1,#16384 ;   1000 vars
 	sw      r1,VARBGN
 	call    clearVars   ; clear the variable area
 	lw      r1,VARBGN   ; calculate number of bytes free
 	lw		r3,TXTUNF
-	sub     r1,r1,r3
+	subu    r1,r1,r3
 	setlo	r2,#0
 	call	PRTNUM
 	lea		r1,msgBytesFree
@@ -2751,7 +4157,7 @@ ST5:
 ; executed if none of the other table items are matched.
 ;
 ; Character-matching tables:
-	align	8
+
 TAB1:
 	db	"LIS",'T'+0x80        ; Direct commands
 	db	"LOA",'D'+0x80
@@ -2873,7 +4279,7 @@ TAB10_1
     dw  XP_OR
     dw  XP_ORX
 
-	.align	16
+	.align	4
 
 ;*
 ; r3 = match flag (trashed)
@@ -4652,7 +6058,7 @@ PU1:
 ; return r1 = pointer to end of line + 1
 
 PRTSTG:
-    sub     sp,sp,#32
+    subui   sp,sp,#32
     sw		r5,[sp]
     sw		r5,8[sp]
     sw		r7,16[sp]
@@ -4682,8 +6088,7 @@ QTSTG:
 	subui	sp,sp,#8
 	sw		lr,[sp]
 	setlo	r3,#'"'
-	setlo	r4,#<QT3
-	sethi	r4,#>QT3
+	lea		r4,QT3
 	call	TSTC		; *** QTSTG ***
 	setlo	r2,#'"'		; it is a "
 QT1:
@@ -4695,15 +6100,13 @@ QT1:
 	bra		RUNNXL		; if so, run next line
 QT3:
 	setlo	r3,#''''
-	setlo	r4,#<QT4
-	sethi	r4,#>QT4
+	lea		r4,QT4
 	call	TSTC		; is it a single quote?
 	setlo	r2,#''''	; if so, do same as above
 	bra		QT1
 QT4:
 	setlo	r3,#'_'
-	setlo	r4,#<QT5
-	sethi	r4,#>QT5
+	lea		r4,QT5
 	call	TSTC		; is it an underline?
 	setlo	r1,#CR		; if so, output a CR without LF
 	call	GOOUT
@@ -4740,15 +6143,16 @@ PRTNUM:
 	sw		r6,16[sp]
 	sw		r7,24[sp]
 	sw		lr,32[sp]
-	ori		r7,r0,#NUMWKA	; r7 = pointer to numeric work area
+	lea		r7,NUMWKA	; r7 = pointer to numeric work area
 	mov		r6,r1		; save number for later
 	mov		r5,r2		; r5 = min number of chars
-	bgt		r1,r0,PN1	; is it negative? if not
+	bgt		r1,r0,PN2	; is it negative? if not
 	neg		r1,r1		; else make it positive
 	subui	r5,r5,#1	; one less for width count
-PN1:
+PN2:
 	lw		r3,#10
-	mod		r2,r1,r3	; r2 = r1 mod 10
+PN1:
+	modu	r2,r1,r3	; r2 = r1 mod 10
 	divui	r1,r1,#10	; r1 /= 10 divide by 10
 	addui	r2,r2,#'0'	; convert remainder to ascii
 	sb		r2,[r7]		; and store in buffer
@@ -4762,7 +6166,7 @@ PN3:
 	call	GOOUT
 	loop	r5,PN3
 PN4:
-	bgt		r6,r0,PN5	; is number negative?
+	bge		r6,r0,PN5	; is number negative?
 	setlo	r1,#'-'		; if so, display the sign
 	call	GOOUT
 PN5:
@@ -4789,17 +6193,16 @@ PRTHEXNUM:
 	sw		r7,16[sp]
 	sw		r8,24[sp]
 	sw		lr,32[sp]
-	setlo	r7,#<NUMWKA	; r7 = pointer to numeric work area
-	sethi	r7,#>NUMWKA
+	lea		r7,NUMWKA	; r7 = pointer to numeric work area
 	or		r6,r1,r0	; save number for later
 	setlo	r5,#20		; r5 = min number of chars
-	or		r4,r1,r0
+	mov		r4,r1
 	bgt		r4,r0,PHN1		; is it negative? if not
 	neg		r4,r4			; else make it positive
-	sub		r5,r5,#1	; one less for width count
+	subui	r5,r5,#1	; one less for width count
 	setlo	r8,#20		; maximum of 10 digits
 PHN1:
-	or		r1,r4,r0
+	mov		r1,r4
 	andi	r1,r1,#15
 	blt		r1,#10,PHN7
 	addui	r1,r1,#'A'-10
@@ -4808,9 +6211,9 @@ PHN7:
 	add		r1,r1,#'0'		; convert remainder to ascii
 PHN8:
 	sb		r1,[r7]		; and store in buffer
-	add		r7,r7,#1
-	sub		r5,r5,#1	; decrement width
-	shru	r4,r4,#4
+	addui	r7,r7,#1
+	subui	r5,r5,#1	; decrement width
+	shrui	r4,r4,#4
 	beq		r4,r0,PHN6			; is it zero yet ?
 	loop	r8,PHN1		; safety
 PHN6:	; test pad count
@@ -4824,7 +6227,7 @@ PHN4:
 	setlo	r1,#'-'		; if so, display the sign
 	call	GOOUT
 PHN5:
-	sub		r7,r7,#1
+	subui	r7,r7,#1
 	lb		r1,[r7]		; now unstack the digits and display
 	call	GOOUT
 	cmpui	r1,r7,#NUMWKA
@@ -4883,7 +6286,7 @@ TSTC
 	addui	sp,sp,#16
 	jal		r0,[r4]		; jump to the routine
 TC1:
-	add		r8,r8,#1	; if equal, bump text pointer
+	addui	r8,r8,#1	; if equal, bump text pointer
 	lw		r1,8[sp]
 	lw		lr,[sp]
 	ret		#16
@@ -4908,17 +6311,16 @@ TN1:
 	lb		r3,[r8]
 	bltui	r3,#'0',TSNMRET	; is it less than zero?
 	bgtui	r3,#'9',TSNMRET	; is it greater than nine?
-	setlo	r4,#0xFFFFFFFF
-	sethi	r4,#0x07FFFFFF
+	lw		r4,#0x07FFFFFF_FFFFFFFF
 	bleu	r1,r4,TN2	; see if there's room for new digit
-	setlo	r1,msgNumTooBig
+	lea		r1,msgNumTooBig
 	bra		ERROR		; if not, we've overflowd
 TN2:
 	mului	r1,r1,#10	; quickly multiply result by 10
-	addi	r8,r8,#1	; adjust text pointer
+	addui	r8,r8,#1	; adjust text pointer
 	andi	r3,r3,#0x0F	; add in the new digit
-	add		r1,r1,r3
-	addi	r2,r2,#1	; increment the no. of digits
+	addu	r1,r1,r3
+	addui	r2,r2,#1	; increment the no. of digits
 	bra		TN1
 TSNMRET:
 	lw		lr,[sp]
@@ -4940,7 +6342,7 @@ IGB2:
 	beqi	r1,#' ',IGB1	; see if it's a space
 	bnei	r1,#'\t',IGBRET	; or a tab
 IGB1:
-	add		r8,r8,#1		; increment the text pointer
+	addui	r8,r8,#1		; increment the text pointer
 	bra		IGB2
 IGBRET:
 	lw		r1,[sp]
@@ -4958,11 +6360,11 @@ IGBRET:
 TOUPBUF:
 	subui	sp,sp,#8
 	sw		lr,[sp]
-	setlo	r8,BUFFER	; set up text pointer
+	lea		r8,BUFFER	; set up text pointer
 	setlo	r3,#0		; clear quote flag
 TOUPB1:
 	lb		r1,[r8]		; get the next text char.
-	add		r8,r8,#1
+	addui	r8,r8,#1
 	beqi	r1,#CR,TOUPBRT		; is it end of line?
 	beqi	r1,#'"',DOQUO	; a double quote?
 	beqi	r1,#'''',DOQUO	; or a single quote?
@@ -4972,7 +6374,7 @@ TOUPB1:
 	bra		TOUPB1		; and go back for more
 DOQUO:
 	bne		r3,r0,DOQUO1; are we inside quotes?
-	or		r3,r1,r0	; if not, toggle inside-quotes flag
+	mov		r3,r1		; if not, toggle inside-quotes flag
 	bra		TOUPB1
 DOQUO1:
 	bne		r3,r1,TOUPB1		; make sure we're ending proper quote
@@ -4986,9 +6388,9 @@ TOUPBRT:
 ; ===== Convert the character in r1 to upper case
 ;
 toUpper
-	blt		r1,#'a',TOUPRET	; is it < 'a'?
-	bgt		r1,#'z',TOUPRET	; or > 'z'?
-	sub		r1,r1,#32	; if not, make it upper case
+	blti	r1,#'a',TOUPRET	; is it < 'a'?
+	bgti	r1,#'z',TOUPRET	; or > 'z'?
+	subui	r1,r1,#32	; if not, make it upper case
 TOUPRET
 	ret
 
@@ -5002,7 +6404,7 @@ CHKIO:
 	subui	sp,sp,#8	; save link reg
 	sw		lr,[sp]
 	call	GOIN		; get input if possible
-	beq		r1,#-1,CHKRET2		; if Zero, no input
+	beqi	r1,#-1,CHKRET2		; if Zero, no input
 	bnei	r1,#CTRLC,CHKRET	; is it control-C?
 	jmp		WSTART		; if so, do a warm start
 CHKRET2:
@@ -5028,8 +6430,8 @@ PRMESG:
 	sw		lr,8[sp]
 	mov     r5,r1       ; r5 = pointer to message
 PRMESG1:
-	add		r5,r5,#1
-	lb		r1,-1[r5]	; 	get the char.
+	addui	r5,r5,#1
+	lbu		r1,-1[r5]	; 	get the char.
 	beq		r1,r0,PRMRET
 	call	GOOUT		;else display it trashes r4
 	bra		PRMESG1
@@ -5074,7 +6476,7 @@ OUTC:
 	jmp		DisplayChar
 
 
-; ===== Input a character from the console into register D0 (or
+; ===== Input a character from the console into register R1 (or
 ;	return Zero status if there's no character available).
 ;
 INC:
@@ -5128,8 +6530,7 @@ BYEBYE:
 ;	MOVE.B	#228,D7 	return to Tutor
 ;	TRAP	#14
 
-	.align	16
-msgInit db	CR,LF,"Raptor64 Tiny BASIC v1.0",CR,LF,"(C) 2012  Robert Finch",CR,LF,LF,0
+msgInit db	CR,LF,"Raptor64 Tiny BASIC v1.0",CR,LF,"(C) 2013  Robert Finch",CR,LF,LF,0
 OKMSG	db	CR,LF,"OK",CR,LF,0
 msgWhat	db	"What?",CR,LF,0
 SRYMSG	db	"Sorry."
@@ -5239,6 +6640,7 @@ iberr_rout:
 	wait
 	jmp		start
 dberr_rout:
+	lw		sp,#0x100200100
 	lea		r1,msgdberr
 	call	DisplayString
 	mfspr	r1,ERRADR
@@ -5267,43 +6669,69 @@ msgEPC:
 	db	" EPC: ",0
 msgiberr:
 	db	"Err fetching instruction at: ",0
-	.align	16
+	.align	4
 
 ;------------------------------------------------------------------------------
 ; IRQ routine
+;
+; Interrupts are automatically disabled at the time of the interrupt in order
+; to prevent nested interrupts from occuring. Interrupts are re-enabled by
+; the IRET instruction at the end of the interrupt routine. If the interrupt
+; turns out to not match a hardware interrupt, then a software context
+; switching interrupt is assumed.
+;
+; This routine uses it's own private interrupt stack; the stack of the
+; interrupted context is not used at all. A couple of working registers are
+; saved off not on the stack. We can get away with this because nested
+; interrupts are not allowed.
 ;------------------------------------------------------------------------------
 ;
 irqrout:
-	subui	sp,sp,#32
-	sw		r1,[sp]					; save off a working register
-	sw		r2,8[sp]				; and a second work register
-	sw		r26,16[sp]				; save off implicit constant builder reg
-	sw		lr,24[sp]				
+	sw		sp,sp_save				; use our own private stack for interrupt processing
+	sw		lr,lr_save				; so, save off the sp and working registers
+	sw		r26,r26_save
+	sw		r1,r1_save
+	sw		r2,r2_save
+
+	lw		sp,#0x1_00001000		; the second two kbytes
 	inch	r1,PIC					; r1= which IRQ line is active
+
+; Dispatch fork, in order of required timeliness
+
+	beqi	r1,#2,irq1000Hz
+	beqi	r1,#3,irq100Hz
+	beqi	r1,#8,irqSerial
+	beqi	r1,#13,irqRaster
+	beqi	r1,#15,irqKeybd
+	beqi	r1,#1,irqColdStart		; CTRL-ALT-DEL interrupt
+
+; Here, none of the hardware interrupts were active so
+; assume software context switch interrupt
+;
+	lw		sp,sp_save
+	lw		lr,lr_save
+	lw		r26,r26_save
+	lw		r1,r1_save
+	lw		r2,r2_save
+	iepp
+	iret
 	
 ; 1000 Hz interrupt
-; This IRQ must be fast, so it's placed inline
+; This IRQ must be fast, so it's placed inline. It's also the first
+; IRQ checked for in the interrupt dispatch.
 ; Increments the millisecond counter, and switches to the next context
 ;
 irq1000Hz:
-	bnei	r1,#2,irq100Hz
-	outb	r0,0xFFFFFFFF_FFFF0000	; acknowledge interrupt
+	outb	r0,0xDCFFFD				; acknowledge interrupt
 	lw		r1,Milliseconds			; increment milliseconds count
 	addui	r1,r1,#1
 	sw		r1,Milliseconds
-	lea		r2,TEXTSCR
-	inch	r1,332[r2]
-	addui	r1,r1,#1
-	outc	r1,332[r2]
-	lw		lr,24[sp]				
-	lw		r26,16[sp]				; restore registers from stack
-	lw		r2,8[sp]
-	lw		r1,[sp]
-	addui	sp,sp,#32				; restore stack pointer
+	lw		sp,sp_save
+	lw		lr,lr_save
+	lw		r26,r26_save
+	lw		r1,r1_save
+	lw		r2,r2_save
 	iepp							; move to the next context
-	nop
-	nop
-	nop
 	iret							; return to the next context
 
 ; 100 Hz interrupt
@@ -5311,49 +6739,90 @@ irq1000Hz:
 ; we call a subroutine.
 ;
 irq100Hz:
-	bnei	r1,#3,irqSerial
 	lw		r1,p100IRQvec
 ;	jal		lr,[r1]
 	call	Pulse100
-	bra		irqret
+irqret:
+	lw		sp,sp_save
+	lw		lr,lr_save
+	lw		r26,r26_save
+	lw		r1,r1_save
+	lw		r2,r2_save
+	iret
 
 irqSerial:
-	bnei	r1,#8,irqRaster
 	lw		r1,serialIRQvec
 	jal		lr,[r1]
 	bra		irqret
 
 irqRaster:
-	bnei	r1,#13,irqKeybd
 	lw		r1,rasterIRQvec
 ;	jal		lr,[r1]
 	call	RasterIRQfn
 	bra		irqret
 
 irqKeybd:
-	beqi	r1,#1,ColdStart			; CTRL-ALT-DEL interrupt
-	bnei	r1,#15,irqret
 	lw		r1,keybdIRQvec
 	call	KeybdIRQ
 ;	jal		lr,[r1]
+	bra		irqret
 
-irqret:
-	lw		lr,24[sp]				
-	lw		r26,16[sp]				; restore registers from stack
-	lw		r2,8[sp]
-	lw		r1,[sp]
-	addui	sp,sp,#32				; restore stack pointer
-	iret
+irqColdStart:
+	jmp		ColdStart
 
-;-------------------------------------------
+;------------------------------------------------------------------------------
 ; NMI routine
-;-------------------------------------------
+;
+; The NMI line is tied to the parity error signal. But also any non-initialized
+; interrupts get sent here.
+;------------------------------------------------------------------------------
+;
 nmirout:
+	sw		sp,sp_save
+	sw		r1,r1_save
+	sw		r26,r26_save
+	lw		sp,#0x100001000
+	outb	r0,0xDCFFFE		; acknowledge interrupt
+	lea		r1,msgPerr
+	call	DisplayString
+	mfspr	r1,IPC
+	call	DisplayWord
+	call	CRLF
+	lw		sp,sp_save
+	lw		r1,r1_save
+	lw		r26,r26_save
 	iret
+
+msgPerr:
+	db	"Parity error at: ",0
+
+
+;-------------------------------------------
+; Unimplemented instructions end up here
+;-------------------------------------------
+	.align 4
+ui_irout:
+	subui	sp,sp,#8
+	sw		r1,[sp]
+	lea		r1,msgUnimp
+	call	DisplayString
+	mfspr	r1,IPC
+	call	DisplayWord
+	call	CRLF
+	lw		r1,[sp]
+	addui	sp,sp,#8
+	; hang the context
+ui_irout1:
+	bra		ui_irout1
+	iret
+
+msgUnimp:
+	db	"Unimplemented instruction at: ",0
 
 ;-------------------------------------------
 ; Handle miss on Data TLB
 ;-------------------------------------------
+	.align	4
 DTLBHandler:
 	sw		r1,0xFFFF_FFFF_FFFF_0000
 	sw		r2,0xFFFF_FFFF_FFFF_0008
@@ -5387,16 +6856,15 @@ dh1:
 	nop
 	nop
 
-	; NMI vector
 	org     0xFFFF_FFFF_FFFF_FFE0
-	jmp		nmirout
-	nop
-	nop
+	dw		0		; 
+	dw		0		;
 	
-	; RST vector
+; RST vector
 	org		0xFFFF_FFFF_FFFF_FFF0
 	jmp		start
-	nop
-	nop
 
+; ROM checksum goes here
 
+	org		0xFFFF_FFFF_FFFF_FFF8
+	dw		0
