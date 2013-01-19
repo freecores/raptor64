@@ -30,6 +30,8 @@ wire [15:0] pic_dato;
 wire tc_ack;
 wire pic_ack;
 reg pulse1000Hz,pulse100Hz;
+wire [7:0] config_rec;
+reg [7:0] config_reco;
 
 wire uart_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_0A);
 wire rast_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDA_01);
@@ -37,11 +39,20 @@ wire AC97_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_10);
 wire spr_ack =  sys_iocyc && sys_stb && (sys_adr[23:16]==8'hD8);
 wire Led_ack =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_06);
 wire dt_ack  =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_04);
-wire p100ack =  sys_iocyc && sys_stb && (sys_adr[63:0]==64'hFFFFFFFF_FFFF0010);
-wire p1000ack =  sys_iocyc && sys_stb && (sys_adr[63:0]==64'hFFFFFFFF_FFFF0000);
+wire p100ack =  sys_iocyc && sys_stb && (sys_adr[23:0]==24'hDCFFFC);
+wire p1000ack =  sys_iocyc && sys_stb && (sys_adr[23:0]==24'hDCFFFD);
+wire config_rec_ack = sys_iocyc && sys_stb && sys_adr[23:0]==24'hDCFFFF;
+wire perr_ack = sys_iocyc && sys_stb && sys_adr[23:0]==24'hDCFFFE;
+wire tmp_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC03);
 
 assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
-assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack|dt_ack|p100ack|p1000ack;
+assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack|dt_ack|p100ack|p1000ack|config_rec_ack|tmp_ack|perr_ack;
+
+assign config_rec = 8'b0000_0111;
+
+always @(config_rec_ack)
+	config_reco <= config_rec_ack ? config_rec : 8'd0;
+
 
 initial begin
 	clk = 1;
@@ -819,7 +830,7 @@ case(sys_adr)// | 64'hFFFF_FFFF_FFFF_0000)
 64'hFFFFFFFFFFFFFFF8:	romout <= 64'h37800000000DE000;
 default:	romout <= 64'd0;
 endcase
-assign sys_dbi = br_dato|keybdout|stk_dato|scr_dato| {4{tc_dato}} | {4{pic_dato}};
+assign sys_dbi = br_dato|keybdout|stk_dato|scr_dato| {4{tc_dato}} | {4{pic_dato}} | {8{config_reco}};
 
 
 Raptor64sc u1

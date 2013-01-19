@@ -28,7 +28,7 @@
 // avoided, which would otherwise occur.
 //=============================================================================
 
-module Raptor64_SetOperandRegs(rst, clk, advanceI, advanceR, advanceX, b, AXC, insn, xIR, dRa, dRb, dRc);
+module Raptor64_SetOperandRegs(rst, clk, advanceI, advanceR, advanceX, b, AXC, xAXC, insn, xIR, dRa, dRb, dRc);
 input rst;
 input clk;
 input advanceI;
@@ -36,6 +36,7 @@ input advanceR;
 input advanceX;
 input [63:0] b;
 input [3:0] AXC;
+input [3:0] xAXC;
 input [31:0] insn;
 input [31:0] xIR;
 output [8:0] dRa;
@@ -152,9 +153,9 @@ else begin
 	if (advanceX) begin
 		if (xOpcode==`R) begin
 			if (xFunc==`EXEC) begin
-				dRa <= b[24:20];
-				dRb <= b[19:15];
-				dRc <= b[14:10];
+				dRa <= {xAXC,b[24:20]};
+				dRb <= {xAXC,b[19:15]};
+				dRc <= {xAXC,b[14:10]};
 			end
 		end
 	end

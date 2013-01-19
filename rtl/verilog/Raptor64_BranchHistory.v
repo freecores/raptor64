@@ -26,10 +26,11 @@
 //
 //=============================================================================
 //
-module Raptor64_BranchHistory(rst, clk, advanceX, xIR, pc, xpc, takb, predict_taken);
+module Raptor64_BranchHistory(rst, clk, advanceX, xIRvalid, xIR, pc, xpc, takb, predict_taken);
 input rst;
 input clk;
 input advanceX;
+input xIRvalid;
 input [31:0] xIR;
 input [63:0] pc;
 input [63:0] xpc;
@@ -57,7 +58,7 @@ wire isxBranchI = (xOpcode==`BEQI || xOpcode==`BNEI ||
 					xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
 					xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI)
 				;
-wire isxBranch = isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BTRI || xOpcode==`BTRR;
+wire isxBranch = xIRvalid && (isxBranchI || xOpcode==`TRAPcc || xOpcode==`TRAPcci || xOpcode==`BTRI || xOpcode==`BTRR);
 
 // Two bit saturating counter
 reg [1:0] xbits_new;

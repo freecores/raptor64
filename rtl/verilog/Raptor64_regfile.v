@@ -25,11 +25,12 @@
 //
 //=============================================================================
 
-module Raptor64_regfile(clk, advanceR, advanceW, dRa, dRb, dRc, dpc,
+module Raptor64_regfile(clk, advanceR, advanceW, wIRvalid, dRa, dRb, dRc, dpc,
 	xRt, m1Rt, m2Rt, wRt, tRt, xData, m1Data, m2Data, wData, tData, nxt_a, nxt_b, nxt_c);
 input clk;
 input advanceR;
 input advanceW;
+input wIRvalid;
 input [8:0] dRa;
 input [8:0] dRb;
 input [8:0] dRc;
@@ -55,7 +56,7 @@ syncRam512x64_1rw3r u1
 	.wrst(1'b0),
 	.wclk(clk),
 	.wce(advanceW),
-	.we(1'b1),
+	.we(wIRvalid),
 	.wadr(wRt),
 	.i(wData),
 	.wo(),

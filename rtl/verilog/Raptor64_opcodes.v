@@ -77,7 +77,9 @@
 `define         SR				6'd00
 `define         TLBIndex    	6'd01
 `define         TLBRandom		6'd02
+`define			VER				6'd03
 `define         PageTableAddr	6'd04
+`define			CORE			6'd05
 `define         BadVAddr        6'd08
 `define         TLBPhysPage0	6'd10
 `define         TLBPhysPage1	6'd11
@@ -311,6 +313,7 @@
 `define INBU	7'd68
 `define INCU	7'd69
 `define INHU	7'd70
+`define OUTBC	7'd71
 `define OUTB	7'd72
 `define OUTC	7'd73
 `define OUTH	7'd74
