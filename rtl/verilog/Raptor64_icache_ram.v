@@ -1,14 +1,12 @@
-`include "Raptor64_opcodes.v"
 `timescale 1ns / 1ps
 //=============================================================================
 //        __
-//   \\__/ o\    (C) 2011,2012  Robert Finch
+//   \\__/ o\    (C) 2013  Robert Finch
 //    \  __ /    All rights reserved.
 //     \/_//     robfinch<remove>@opencores.org
 //       ||
 //  
-//	Raptor64_addsub.v
-//  - addsub datapath operations
+//	Raptor64_icache_ram.v
 //
 //  
 // This source file is free software: you can redistribute it and/or modify 
@@ -27,42 +25,28 @@
 //
 //=============================================================================
 //
-module Raptor64_addsub(xIR, a, b, imm, o);
-input [31:0] xIR;
-input [63:0] a;
-input [63:0] b;
-input [63:0] imm;
-output [63:0] o;
-reg [63:0] o;
+module Raptor64_icache_ram(wclk, we, adr, d, rclk, pc, insn);
+input wclk;
+input we;
+input [13:0] adr;
+input [63:0] d;
+input rclk;
+input [13:0] pc;
+output [31:0] insn;
 
-wire [6:0] xOpcode = xIR[31:25];
-wire [5:0] xFunc = xIR[5:0];
-wire [7:0] bcdaddo,bcdsubo;
+reg [31:0] ramLo [0:2047];
+reg [31:0] ramHi [0:2047];
+reg [13:2] radr;
 
-BCDAdd u1(.ci(1'b0),.a(a[7:0]),.b(b[7:0]),.o(bcdaddo),.c());
-BCDSub u2(.ci(1'b0),.a(a[7:0]),.b(b[7:0]),.o(bcdsubo),.c());
+always @(posedge wclk)
+	if (we) begin
+		ramLo[adr[13:3]] <= d[31: 0];
+		ramHi[adr[13:3]] <= d[63:32];
+	end
 
-always @(xOpcode,xFunc,a,b,imm,bcdaddo,bcdsubo)
-case (xOpcode)
-`RR:
-	case(xFunc)
-	`ADD:	o = a + b;
-	`ADDU:	o = a + b;
-	`SUB:	o = a - b;
-	`SUBU:	o = a - b;
-	`BCD_ADD:	o = bcdaddo;
-	`BCD_SUB:	o = bcdsubo;
-	default:	o = 64'd0;
-	endcase
-`INB,`INCH,`INH,`INW,`INCU,`INHU,`INBU,
-`OUTB,`OUTC,`OUTH,`OUTW,`OUTBC,
-`LW,`LH,`LC,`LB,`LHU,`LCU,`LBU,`LEA,`LF,`LFD,`LWR,
-`SW,`SH,`SC,`SB,`SF,`SFD,`SWC,
-`ADDI,`ADDUI:
-		o = a + imm;
-`SUBI:	o = a - imm;
-`SUBUI:	o = a - imm;
-default:	o = 64'd0;
-endcase
+always @(posedge rclk)
+	radr <= pc[13:2];
+
+assign insn = radr[2] ? ramHi[radr[13:3]] : ramLo[radr[13:3]];
 
 endmodule

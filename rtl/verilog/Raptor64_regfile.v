@@ -81,44 +81,42 @@ syncRam512x64_1rw3r u1
 );
 
 
-reg [63:0] nxt_a;
-always @(dRa or xData or m1Data or m2Data or wData or tData or rfoa or dpc or xRt or m1Rt or m2Rt or wRt or tRt)
-	casex(dRa)
-	9'bxxxx00000:	nxt_a <= 64'd0;
-	9'bxxxx11101:	nxt_a <= dpc;
-	xRt:	nxt_a <= xData;
-	m1Rt:	nxt_a <= m1Data;
-	m2Rt:	nxt_a <= m2Data;
-	wRt:	nxt_a <= wData;
-	tRt:	nxt_a <= tData;
-	default:	nxt_a <= rfoa;
-	endcase
+//	casex(dRa)
+//	9'bxxxx00000:	nxt_a <= 64'd0;
+//	9'bxxxx11101:	nxt_a <= dpc;
+//	xRt:	nxt_a <= xData;
+//	m1Rt:	nxt_a <= m1Data;
+//	m2Rt:	nxt_a <= m2Data;
+//	wRt:	nxt_a <= wData;
+//	tRt:	nxt_a <= tData;
+//	default:	nxt_a <= rfoa;
+//	endcase
 
-reg [63:0] nxt_b;
-always @(dRb or xData or m1Data or m2Data or wData or tData or rfob or dpc or xRt or m1Rt or m2Rt or wRt or tRt)
-	casex(dRb)
-	9'bxxxx00000:	nxt_b <= 64'd0;
-	9'bxxxx11101:	nxt_b <= dpc;
-	xRt:	nxt_b <= xData;
-	m1Rt:	nxt_b <= m1Data;
-	m2Rt:	nxt_b <= m2Data;
-	wRt:	nxt_b <= wData;
-	tRt:	nxt_b <= tData;
-	default:	nxt_b <= rfob;
-	endcase
-
-reg [63:0] nxt_c;
-always @(dRc or xData or m1Data or m2Data or wData or tData or rfoc or dpc or xRt or m1Rt or m2Rt or wRt or tRt)
-	casex(dRc)
-	9'bxxxx00000:	nxt_c <= 64'd0;
-	9'bxxxx11101:	nxt_c <= dpc;
-	xRt:	nxt_c <= xData;
-	m1Rt:	nxt_c <= m1Data;
-	m2Rt:	nxt_c <= m2Data;
-	wRt:	nxt_c <= wData;
-	tRt:	nxt_c <= tData;
-	default:	nxt_c <= rfoc;
-	endcase
+//reg [63:0] nxt_b;
+//always @(dRb or xData or m1Data or m2Data or wData or tData or rfob or dpc or xRt or m1Rt or m2Rt or wRt or tRt)
+//	casex(dRb)
+//	9'bxxxx00000:	nxt_b <= 64'd0;
+//	9'bxxxx11101:	nxt_b <= dpc;
+//	xRt:	nxt_b <= xData;
+//	m1Rt:	nxt_b <= m1Data;
+//	m2Rt:	nxt_b <= m2Data;
+//	wRt:	nxt_b <= wData;
+//	tRt:	nxt_b <= tData;
+//	default:	nxt_b <= rfob;
+//	endcase
+//
+//reg [63:0] nxt_c;
+//always @(dRc or xData or m1Data or m2Data or wData or tData or rfoc or dpc or xRt or m1Rt or m2Rt or wRt or tRt)
+//	casex(dRc)
+//	9'bxxxx00000:	nxt_c <= 64'd0;
+//	9'bxxxx11101:	nxt_c <= dpc;
+//	xRt:	nxt_c <= xData;
+//	m1Rt:	nxt_c <= m1Data;
+//	m2Rt:	nxt_c <= m2Data;
+//	wRt:	nxt_c <= wData;
+//	tRt:	nxt_c <= tData;
+//	default:	nxt_c <= rfoc;
+//	endcase
 
 
 endmodule

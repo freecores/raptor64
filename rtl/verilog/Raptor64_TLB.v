@@ -105,13 +105,13 @@ initial begin
 end
 
 wire unmappedArea = pc[63:52]==12'hFFD || pc[63:52]==12'hFFE || pc[63:52]==12'hFFF;
-wire unmappedDataArea = ea[63:52]==12'hFFD || ea[63:52]==12'hFFE || ea[63:52]==12'hFFF;
-wire m1UnmappedDataArea = pea[63:13]>=12'hFFD;
+wire unmappedDataArea = ea[63:52]==12'hFFD || ea[63:52]==12'hFFE || ea[63:52]==12'hFFF || ea[63:52]==12'h000;
+wire m1UnmappedDataArea = pea[63:52]==12'hFFD || pea[63:52]==12'hFFE || pea[63:52]==12'hFFF || pea[63:52]==12'h000;
 
 always @(posedge clk)
 if (rst) begin
-	Random <= 4'hF;
-	Wired <= 4'd0;
+	Random <= 3'h7;
+	Wired <= 3'd0;
 end
 else begin
 	if (Random==Wired)
@@ -128,10 +128,10 @@ else begin
 		`TLBWired:		Wired <= dati[2:0];
 		`TLBIndex:		Index <= dati[5:0];
 		`TLBRandom:	Random <= dati[2:0];
-		`TLBPageMask:	HTLBPageMask <= {dati[63:13],13'd0};
-		`TLBVirtPage:	HTLBVirtPage <= {dati[63:13],13'd0};
-		`TLBPhysPage0:	HTLBPhysPage0 <= {dati[63:13],13'd0};
-		`TLBPhysPage1:	HTLBPhysPage1 <= {dati[63:13],13'd0};
+		`TLBPageMask:	HTLBPageMask <= dati[63:13];
+		`TLBVirtPage:	HTLBVirtPage <= dati[63:13];
+		`TLBPhysPage0:	HTLBPhysPage0 <= dati[63:13];
+		`TLBPhysPage1:	HTLBPhysPage1 <= dati[63:13];
 		`TLBASID:	begin
 					HTLBValid <= dati[0];
 					HTLBD <= dati[1];
@@ -154,7 +154,7 @@ else begin
 		HTLBD <= TLBD[i];
 		HTLBValid <= TLBValid[i];
 	end
-	if (wTlbwi) begin
+	else if (wTlbwi) begin
 		TLBVirtPage[i] <= HTLBVirtPage;
 		TLBPhysPage0[i] <= HTLBPhysPage0;
 		TLBPhysPage1[i] <= HTLBPhysPage1;
@@ -163,7 +163,7 @@ else begin
 		TLBD[i] <= HTLBD;
 		TLBValid[i] <= HTLBValid;
 	end
-	if (wTlbwr) begin
+	else if (wTlbwr) begin
 		TLBVirtPage[i] <= HTLBVirtPage;
 		TLBPhysPage0[i] <= HTLBPhysPage0;
 		TLBPhysPage1[i] <= HTLBPhysPage1;

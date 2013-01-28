@@ -91,6 +91,9 @@ if (advanceR) begin
 		`NOPI:		xRt <= 9'd0;
 		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 					xRt <= 9'd0;
+		`IMM1:		xRt <= 9'd0;
+		`IMM2:		xRt <= 9'd0;
+		`IMM3:		xRt <= 9'd0;
 		default:	xRt <= {dAXC,dIR[19:15]};
 		endcase
 	end

@@ -98,6 +98,10 @@
 `define			ERRADR			6'd24
 `define			TBA				6'd25
 `define			NON_ICACHE_SEG	6'd26
+`define			CS				6'd27
+`define			DS				6'd28
+`define			SS				6'd29
+`define			ES				6'd30
 `define			FPCR			6'd32
 `define			IPC				6'd33
 `define			RAND			6'd34
@@ -214,13 +218,23 @@
 `define		TGTUI	5'd9
 `define		TRAI	5'd10
 `define		TRNI	5'd11
-
+`define	SIMD	7'd20
+`define		SIMD_ADD	5'd0
+`define		SIMD_SUB	5'd1
+`define		SIMD_MUL	5'd2
+`define		SIMD_DIV	5'd3
+`define		SIMD_CMP	5'd4
+`define		SIMD_AND	5'd8
+`define		SIMD_OR		5'd9
+`define		SIMD_XOR	5'd10
 `define BITFIELD	7'd21
 `define 	BFINS		3'd0
 `define 	BFSET		3'd1
 `define 	BFCLR		3'd2
 `define 	BFCHG		3'd3
-`define 	BFEXT		3'd4
+`define 	BFEXTU		3'd4
+`define 	BFEXTS		3'd5
+`define		SEXT		3'd6
 `define	MUX		7'd22
 `define	MYST	7'd23
 `define CALL	7'd24
@@ -420,6 +434,9 @@
 `define SETLO	7'b11100xx
 `define SETMID	7'b11101xx
 `define SETHI	7'b11110xx
+`define IMM1	7'd124
+`define IMM2	7'd125
+`define IMM3	7'd126
 
 `define NOP_INSN	32'b1101111_0_00000000_00000000_00000000
 

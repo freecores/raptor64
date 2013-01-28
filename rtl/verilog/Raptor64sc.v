@@ -30,15 +30,14 @@
 //`define FLOATING_POINT		1
 //`define BTB					1
 //`define TLB		1
+//`define SIMD		1
+`define SEGMENTATION	1
 
 `define RESET_VECTOR	64'hFFFF_FFFF_FFFF_FFF0
 
-`define ITLB_MissHandler	64'hFFFF_FFFF_FFFF_FFC0
-`define DTLB_MissHandler	64'hFFFF_FFFF_FFFF_FFB0
-
 `define EX_NON			9'd000
 `define EX_TRAP			9'd32	// Trap exception
-`define EX_IRQ			9'd449	// interrupt
+`define EX_IRQ			9'd448	// base IRQ interrupt
 `define EX_DBZ			9'd488	// divide by zero
 `define EX_OFL			9'd489	// overflow
 `define EX_UNIMP_INSN	9'd495	// unimplemented instruction
@@ -52,7 +51,7 @@
 
 `include "Raptor64_opcodes.v"
 
-module Raptor64sc(rst_i, clk_i, nmi_i, irq_i, bte_o, cti_o, bl_o, iocyc_o,
+module Raptor64sc(rst_i, clk_i, nmi_i, irq_i, irq_no, bte_o, cti_o, bl_o, iocyc_o,
 	cyc_o, stb_o, ack_i, err_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr
 );
 parameter IDLE = 5'd1;
@@ -68,6 +67,7 @@ input rst_i;
 input clk_i;
 input nmi_i;
 input irq_i;
+input [4:0] irq_no;
 
 output [1:0] bte_o;		// burst type
 reg [1:0] bte_o;
@@ -101,44 +101,51 @@ input [63:5] sys_adr;
 reg [3:0] state;
 reg [5:0] fltctr;
 wire fltdone = fltctr==6'd0;
-reg resetA;
-reg im,bu_im;			// interrupt mask
+reg bu_im;			// interrupt mask
 reg im1;			// temporary interrupt mask for LM/SM
+reg [7:0] ie_fuse;	// interrupt enable fuse
+wire im = ~ie_fuse[7];
 reg [1:0] rm;		// fp rounding mode
 reg FXE;			// fp exception enable
 wire KernelMode;
 wire [31:0] sr = {bu_im,15'd0,im,1'b0,KernelMode,FXE,2'b00,10'b0};
-reg [31:0] dIR,xIR,m1IR,m2IR,wIR;
+reg [31:0] dIR,d1IR,xIR,m1IR,m2IR,wIR;
 reg [31:0] ndIR;		// next dIR
 reg [63:0] pc;			// ipc
 wire [63:0] pchistoric;
-reg pccap;
+reg pccap;				// flag 1=capture PC history
 reg [63:0] ErrorEPC;
-reg [63:0] EPC [0:15];
-reg [63:0] IPC [0:15];
-reg [63:0] PCS [0:15];
-reg [15:0] StatusEXL;
-reg [63:0] dpc,xpc,m1pc,m2pc,wpc;
-reg ipcv,dpcv,xpcv,m1pcv,m2pcv,wpcv;	// PC valid indicators
-wire [63:0] rfoa,rfob,rfoc;
+reg [63:0] EPC [0:15];	// Exception return address
+reg [63:0] IPC [0:15];	// Interrupt return address
+`ifdef SEGMENTATION
+reg [63:16] CS [0:15];	// Code segment
+reg [63:16] DS [0:15];	// Data segment
+reg [63:16] SS [0:15];	// Stack segment
+reg [63:16] ES [0:15];	// BSS segment
+`endif
+reg dStatusHWI,xStatusHWI,m1StatusHWI,m2StatusHWI;
+reg dIm,xIm,m1Im,m2Im;
+reg dNmi,xNmi,m1Nmi,m2Nmi,wNmi;
+reg [15:0] StatusEXL;	// 1= context in exception state
+reg [63:0] dpc,d1pc,xpc,m1pc,m2pc,wpc;		// PC's associated with instruction in pipeline
+wire [63:0] rfoa,rfob,rfoc;		// register file outputs
 wire [8:0] dRa,dRb,dRc;
-reg [8:0] wRt,m1Rt,m2Rt,tRt;
-wire [8:0] xRt;
-reg xRtZero;
-reg [63:0] ea;
-reg [4:0] cstate;
-reg dbranch_taken,xbranch_taken;
+reg [8:0] xRt,wRt,m1Rt,m2Rt,tRt;	// target register
+reg [63:0] ea;			// effective data address
+reg [4:0] cstate;		// cache state
+reg dbranch_taken,xbranch_taken;	// flag: 1=branch taken
 reg [63:0] mutex_gate;
-reg [63:0] TBA;		// Trap Base Address
-reg [8:0] dextype,xextype,m1extype,m2extype,wextype,textype;
+reg [63:0] TBA;			// Trap Base Address
+reg [8:0] dextype,d1extype,xextype,m1extype,m2extype,wextype,textype;
 reg [3:0] epat [0:255];
 reg [7:0] eptr;
-reg [3:0] dAXC,xAXC,m1AXC,m2AXC,wAXC;
+reg [3:0] dAXC,d1AXC,xAXC,m1AXC,m2AXC,wAXC;	// context active per pipeline stage
 wire [3:0] AXC = (eptr==8'h00) ? 4'h0 : epat[eptr];
-reg dtinit;
-reg dcache_on;
+reg dtinit;			// 1=data cache tags are being intialized
+reg dcache_on;		// 1= data cache is enabled
+wire [63:0] cdat;	// data cache output
 reg [63:32] nonICacheSeg;
-reg [1:0] FPC_rm;
+reg [1:0] FPC_rm;	// fp: rounding mode
 reg FPC_SL;			// result is negative (and non-zero)
 reg FPC_SE;			// result is zero
 reg FPC_SG;			// result is positive (and non-zero)
@@ -155,7 +162,6 @@ wire [31:0] FPC = {FPC_rm,1'b0,
 			FPC_SI,
 			16'd0
 			};
-wire [63:0] cdat;
 reg [63:0] wr_addr;
 reg [31:0] insn;
 reg clk_en;
@@ -172,6 +178,7 @@ reg [63:0] errorAddress;
 
 wire [6:0] iOpcode = insn[31:25];
 wire [6:0] iFunc = insn[6:0];
+wire [5:0] iFunc6 = insn[5:0];
 wire [6:0] dOpcode = dIR[31:25];
 wire [6:0] dFunc = dIR[6:0];
 wire [5:0] dFunc6 = dIR[5:0];
@@ -179,8 +186,14 @@ wire [6:0] xOpcode = xIR[31:25];
 wire [6:0] xFunc = xIR[6:0];
 wire [5:0] xFunc6 = xIR[5:0];
 wire [4:0] xFunc5 = xIR[4:0];
-reg [6:0] m1Opcode,m2Opcode,wOpcode;
-reg [6:0] m1Func,m2Func,wFunc;
+wire [6:0] m1Opcode,m2Opcode,wOpcode;
+assign m1Opcode = m1IR[31:25];
+assign m2Opcode = m2IR[31:25];
+assign wOpcode = wIR[31:25];
+wire [6:0] m1Func,m2Func,wFunc;
+assign m1Func = m1IR[6:0];
+assign m2Func = m2IR[6:0];
+assign wFunc = wIR[6:0];
 wire [5:0] m1Func6 = m1Func[5:0];
 wire [5:0] m2Func6 = m2Func[5:0];
 wire [5:0] wFunc6 = wIR[5:0];
@@ -188,20 +201,23 @@ reg [63:0] m1Data,m2Data,wData,tData;
 reg [63:0] m2Addr;
 reg [63:0] tick;
 reg [63:0] a,b,c,imm,m1b;
-reg [1:0] scale;
-reg prev_ihit;
-reg rsf;
-reg [63:5] resv_address;
+wire [1:0] scale = xIR[9:8];
+wire [1:0] offset2 = xIR[7:6];
+reg rsf;					// reserrved address flag
+reg [63:5] resv_address;	// reserved address
 reg dirqf,rirqf,m1irqf,m2irqf,wirqf,tirqf;
 reg xirqf;
 wire advanceX_edge;
 wire takb;
-wire advanceI,advanceR,advanceX,advanceM1,advanceW,advanceT;
+wire advanceI,advanceR,advanceR1,advanceX,advanceM1,advanceW,advanceT;	// Pipeline advance signals
 reg m1clkoff,m2clkoff,m3clkoff,m4clkoff,wclkoff;
-reg dFip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
+reg dFip,d1Fip,xFip,m1Fip,m2Fip,m3Fip,m4Fip,wFip;
 reg cyc1;
 reg LoadNOPs;
-reg dIRvalid,xIRvalid,m1IRvalid,m2IRvalid,wIRvalid,tIRvalid;
+reg m1IsLoad,m1IsStore;
+reg m2IsLoad,m2IsStore;
+reg wIsStore;
+reg m1IsOut,m1IsIn;
 
 function [63:0] fnIncPC;
 input [63:0] fpc;
@@ -210,10 +226,117 @@ fnIncPC = fpc + 64'd4;
 end
 endfunction
 
+function [7:0] fnSelect;
+input [6:0] opcode;
+input [2:0] addr;
+case(opcode)
+`LBU,`LB,`SB,`INB,`INBU,`OUTB:
+	case(addr)
+	3'b000:	fnSelect = 8'b00000001;
+	3'b001:	fnSelect = 8'b00000010;
+	3'b010:	fnSelect = 8'b00000100;
+	3'b011:	fnSelect = 8'b00001000;
+	3'b100:	fnSelect = 8'b00010000;
+	3'b101:	fnSelect = 8'b00100000;
+	3'b110:	fnSelect = 8'b01000000;
+	3'b111:	fnSelect = 8'b10000000;
+	endcase
+`LC,`LCU,`SC,`INCH,`INCU,`OUTC:
+	case(addr[2:1])
+	2'b00:	fnSelect = 8'b00000011;
+	2'b01:	fnSelect = 8'b00001100;
+	2'b10:	fnSelect = 8'b00110000;
+	2'b11:	fnSelect = 8'b11000000;
+	endcase
+`LHU,`LH,`SH,`LSH,`LF,`LFP,`SF,`SFP,`SSH,`INH,`INHU,`OUTH:
+	case(addr[2])
+	1'b0:	fnSelect = 8'b00001111;
+	1'b1:	fnSelect = 8'b11110000;
+	endcase
+`LW,`LWR,`LM,`LFD,`LSW,`LP,`LFDP,
+`SW,`SM,`SFD,`SSW,`SWC,`SP,`SFDP,`INW,`OUTW:
+	fnSelect = 8'b11111111;
+endcase
+endfunction
+
+reg [7:0] data8;
+reg [15:0] data16;
+reg [31:0] data32;
+reg [63:0] data64;
+
+always @(sel_o or dat_i)
+	case(sel_o)
+	8'b00000001:	data8 <= #1 dat_i[ 7: 0];
+	8'b00000010:	data8 <= #1 dat_i[15: 8];
+	8'b00000100:	data8 <= #1 dat_i[23:16];
+	8'b00001000:	data8 <= #1 dat_i[31:24];
+	8'b00010000:	data8 <= #1 dat_i[39:32];
+	8'b00100000:	data8 <= #1 dat_i[47:40];
+	8'b01000000:	data8 <= #1 dat_i[55:48];
+	8'b10000000:	data8 <= #1 dat_i[63:56];
+	default:	data8 <= 8'h00;
+	endcase
+
+always @(sel_o or dat_i)
+	case(sel_o)
+	8'b00000011:	data16 <= #1 dat_i[15: 0];
+	8'b00001100:	data16 <= #1 dat_i[31:16];
+	8'b00110000:	data16 <= #1 dat_i[47:32];
+	8'b11000000:	data16 <= #1 dat_i[63:48];
+	default:	data16 <= #1 16'hDEAD;			
+	endcase
+
+always @(sel_o or dat_i)
+	case(sel_o)
+	8'b00001111:	data32 <= #1 dat_i[31: 0];
+	8'b11110000:	data32 <= #1 dat_i[63:32];
+	default:	data32 <= #1 32'hDEADDEAD;			
+	endcase
+
+always @(sel_o or dat_i)
+	data64 <= #1 dat_i;
+
 assign KernelMode = StatusEXL[xAXC]|StatusHWI;
 
-wire iIsLSPair = iOpcode==`SP || iOpcode==`LP || iOpcode==`SFP || iOpcode==`LFP || iOpcode==`SFDP || iOpcode==`LFDP;
-wire dIsLSPair = dOpcode==`SP || dOpcode==`LP || dOpcode==`SFP || dOpcode==`LFP || dOpcode==`SFDP || dOpcode==`LFDP;
+//wire iIsLSPair = iOpcode==`SP || iOpcode==`LP || iOpcode==`SFP || iOpcode==`LFP || iOpcode==`SFDP || iOpcode==`LFDP || 
+//				(iOpcode==`MEMNDX && (iFunc6==`SPX || iFunc6==`LPX || iFunc6==`SFPX || iFunc6==`LFPX || iFunc6==`SFDPX || iFunc6==`LFDPX));
+//wire dIsLSPair = dOpcode==`SP || dOpcode==`LP || dOpcode==`SFP || dOpcode==`LFP || dOpcode==`SFDP || dOpcode==`LFDP ||
+//				(dOpcode==`MEMNDX && (dFunc6==`SPX || dFunc6==`LPX || dFunc6==`SFPX || dFunc6==`LFPX || dFunc6==`SFDPX || dFunc6==`LFDPX));
+//wire xIsLSPair = xOpcode==`SP || xOpcode==`LP || xOpcode==`SFP || xOpcode==`LFP || xOpcode==`SFDP || xOpcode==`LFDP ||
+//				 (xOpcode==`MEMNDX && (xFunc6==`SPX || xFunc6==`LPX || xFunc6==`SFPX || xFunc6==`LFPX || xFunc6==`SFDPX || xFunc6==`LFDPX));
+
+
+//-----------------------------------------------------------------------------
+// Segmentation
+//
+// If the upper nybble of the address is 'F' then segmentation is not applied.
+// This allows for bootstrapping and operating system use. Also when in kernel
+// mode the lowest 64k of memory is unsegmented to allow easier access to 
+// operating system variables.
+//
+// Otherwise: the CS register is always in use for code addresses.
+// Which segment is used for data addresses depends on the upper nybble of
+// the address.
+//-----------------------------------------------------------------------------
+`ifdef SEGMENTATION
+wire [63:0] spc;		// segmented PC
+reg [63:0] sea;			// segmented effective address
+assign spc = pc[63:60]==4'hF ? pc : {CS[AXC][63:16] + pc[59:16],pc[15:0]};
+always @(ea or KernelMode)
+if (KernelMode && ea[63:16]==48'h0)
+	sea <= ea;
+else
+	case(ea[63:60])
+	4'hF:	sea <= ea;
+	4'hE:	sea <= {SS[xAXC][63:16] + ea[59:16],ea[15:0]};
+	4'hD:	sea <= {ES[xAXC][63:16] + ea[59:16],ea[15:0]};
+	default:
+			sea <= {DS[xAXC][63:16] + ea[59:16],ea[15:0]};
+	endcase
+`else
+wire [63:0] spc = pc;
+wire [63:0] sea = ea;
+`endif
 
 //-----------------------------------------------------------------------------
 // TLB
@@ -225,22 +348,22 @@ wire [63:0] pea;
 wire [63:0] tlbo;
 `ifdef TLB
 wire [63:0] TLBVirtPage;
-wire wTlbp = wIRvalid && advanceW && wOpcode==`MISC && wFunc==`TLBP;
-wire wTlbrd = wIRvalid && advanceW && wOpcode==`MISC && wFunc==`TLBR;
-wire wTlbwr = wIRvalid && advanceW && wOpcode==`MISC && wFunc==`TLBWR;
-wire wTlbwi = wIRvalid && advanceW && wOpcode==`MISC && wFunc==`TLBWI;
-wire wMtspr = wIRvalid && advanceW && wOpcode==`R && wFunc==`MTSPR;
-wire xTlbrd = xIRvalid && advanceX && xOpcode==`MISC && xFunc==`TLBR;
-wire xTlbwr = xIRvalid && advanceX && xOpcode==`MISC && xFunc==`TLBWR;
-wire xTlbwi = xIRvalid && advanceX && xOpcode==`MISC && xFunc==`TLBWI;
+wire wTlbp = advanceW && wOpcode==`MISC && wFunc==`TLBP;
+wire wTlbrd = advanceW && wOpcode==`MISC && wFunc==`TLBR;
+wire wTlbwr = advanceW && wOpcode==`MISC && wFunc==`TLBWR;
+wire wTlbwi = advanceW && wOpcode==`MISC && wFunc==`TLBWI;
+wire wMtspr = advanceW && wOpcode==`R && wFunc==`MTSPR;
+wire xTlbrd = advanceX && xOpcode==`MISC && xFunc==`TLBR;
+wire xTlbwr = advanceX && xOpcode==`MISC && xFunc==`TLBWR;
+wire xTlbwi = advanceX && xOpcode==`MISC && xFunc==`TLBWI;
 wire ITLBMiss,DTLBMiss;
 
-Raptor64_TLB u22
+Raptor64_TLB u26
 (
 	.rst(rst_i),
 	.clk(clk),
-	.pc(pc),
-	.ea(ea),
+	.pc(spc),
+	.ea(sea),
 	.ppc(ppc),
 	.pea(pea),
 	.m1IsStore(advanceM1 && m1IsStore),
@@ -253,9 +376,9 @@ Raptor64_TLB u22
 	.xTlbwr(xTlbwr),
 	.xTlbwi(xTlbwi),
 	.wr(wMtspr),
-	.wregno(wIR[12:7]),
+	.wregno(wIR[11:6]),
 	.dati(wData),
-	.xregno(xIR[12:7]),
+	.xregno(xIR[11:6]),
 	.dato(tlbo),
 	.ITLBMiss(ITLBMiss),
 	.DTLBMiss(DTLBMiss),
@@ -263,8 +386,8 @@ Raptor64_TLB u22
 );
 
 `else
-assign ppc = pc;
-assign pea = ea;
+assign ppc = spc;
+assign pea = sea;
 `endif
 
 //-----------------------------------------------------------------------------
@@ -285,6 +408,7 @@ else begin
 	else
 		cpu_clk_en <= clk_en;
 end
+//assign clk = clk_i;
 
 //-----------------------------------------------------------------------------
 // Random number register:
@@ -317,6 +441,7 @@ reg [63:0] rando;
 // 
 // On a bus error, the instruction cache / buffer is loaded with a SYSCALL 509
 // instruction, which is a call to the bus error handler.
+// Line size is 16 half-words (64 bytes). Total cache size is 16kB.
 // 
 //-----------------------------------------------------------------------------
 //reg lfdir;
@@ -334,19 +459,18 @@ reg [31:0] insnkey;
 reg [63:0] icadr;
 
 // SYSCALL 509
-wire syscall509 = 32'b0000000_11000_0000_11111110_10010111;
+wire syscall509 = 32'b0000000_00000_0000_11111110_10010111;
 wire [63:0] bevect = {syscall509,syscall509};
 
-// Xilinx Core Generator Component
 Raptor64_icache_ram u1
 (
-	.clka(clk), // input clka
-	.wea(icaccess & (ack_i|err_i)), // input [0 : 0] wea
-	.addra(icadr[12:3]), // input [9 : 0] addra
-	.dina(err_i ? bevect : dat_i), // input [63 : 0] dina
-	.clkb(~clk), // input clkb
-	.addrb(pc[12:2]), // input [8 : 0] addrb
-	.doutb(insnbundle) // output [127 : 0] doutb
+	.wclk(clk),
+	.we(icaccess & (ack_i|err_i)),
+	.adr(icadr[13:0]),
+	.d(err_i ? bevect : dat_i),
+	.rclk(~clk),
+	.pc(pc[13:0]),
+	.insn(insnbundle)
 );
 
 always @(insnbundle or ICacheAct or insnbuf)
@@ -361,24 +485,25 @@ end
 always @(insn1,insnkey)
 	insn <= insn1 ^ insnkey;
 
-reg [63:13] tmem [127:0];
-reg [127:0] tvalid;
+reg [63:14] tmem [255:0];
+reg [255:0] tvalid;
 
 initial begin
-	for (n=0; n < 128; n = n + 1)
+	for (n=0; n < 256; n = n + 1)
 		tmem[n] = 0;
-	for (n=0; n < 128; n = n + 1)
+	for (n=0; n < 256; n = n + 1)
 		tvalid[n] = 0;
 end
 
-wire [64:13] tgout;
-assign tgout = {tvalid[pc[12:6]],tmem[pc[12:6]]};
-assign ihit = (tgout=={1'b1,ppc[63:13]});
+wire [64:14] tgout;
+assign tgout = {tvalid[pc[13:6]],tmem[pc[13:6]]};
+assign ihit = (tgout=={1'b1,ppc[63:14]});
 assign ibufrdy = ibufadr[63:2]==ppc[63:2];
 
 //-----------------------------------------------------------------------------
 // Data Cache
 // No-allocate on write
+// Line size is 8 words (64 bytes). Total cache size is 32kB
 //-----------------------------------------------------------------------------
 reg dcaccess;
 wire dhit;
@@ -388,43 +513,74 @@ reg wr_dcache;
 reg [14:0] dcadr;
 
 // cache RAM 32Kb
-// Xilinx Core Generator Component
 Raptor64_dcache_ram u10
 (
-	.clka(clk), // input clka
-	.ena(1'b1),
-	.wea(dcaccess ? {8{ack_i}} : wrhit ? sel_o : 8'h00), // input [7 : 0] wea
-	.addra(dcaccess ? dcadr[14:3] : adr_o[14:3]), // input [11 : 0] addra
-	.dina(dcaccess ? dat_i : dat_o), // input [63 : 0] dina
-
-	.clkb(~clk), // input clkb
-	.addrb(pea[14:3]), // input [11 : 0] addrb
-	.doutb(cdat) // output [63 : 0] doutb
+	.wclk(clk),
+	.wr(1'b1),
+	.sel(dcaccess ? {8{ack_i}} : wrhit ? sel_o : 8'h00),
+	.wadr(dcaccess ? dcadr[14:3] : adr_o[14:3]),
+	.i(dcaccess ? dat_i : dat_o),
+	.rclk(~clk),
+	.radr(pea[14:3]),
+	.o(cdat)
 );
 
-
-// Xilinx Core Generator Component
 // tag RAM 512 b
 Raptor64_dcache_tagram u11
 (
-	.clka(clk), // input clka
-	.ena(dtinit | (dcadr[5:3]==3'b111)), // input ena
-	.wea(dtinit | (dcaccess & ack_i)), // input [0 : 0] wea
-	.addra(dcadr[14:6]), // input [8 : 0] addra
-	.dina({~dtinit,adr_o[63:15]}), // input [49 : 0] dina
+	.wclk(clk),
+	.we(dtinit | (dcaccess && ack_i && dcadr[5:3]==3'b111)),
+	.adr(dcadr[14:6]),
+	.d({~dtinit,adr_o[63:15]}),
 
-	.clkb(~clk), // input clkb
-	.addrb(pea[14:6]), // input [8 : 0] addrb
-	.doutb(dtgout) // output [49 : 0] doutb
+	.rclk(~clk),
+	.ea(pea[14:6]),
+	.tago(dtgout)
 );
 
 assign dhit = (dtgout=={1'b1,pea[63:15]});
+
+reg [ 7:0] cdata8;
+reg [15:0] cdata16;
+reg [31:0] cdata32;
+reg [63:0] cdata64;
+
+always @(pea or cdat)
+	case(pea[2:0])
+	3'b000:	cdata8 <= cdat[ 7: 0];
+	3'b001:	cdata8 <= cdat[15: 8];
+	3'b010:	cdata8 <= cdat[23:16];
+	3'b011:	cdata8 <= cdat[31:24];
+	3'b100:	cdata8 <= cdat[39:32];
+	3'b101:	cdata8 <= cdat[47:40];
+	3'b110:	cdata8 <= cdat[55:48];
+	3'b111:	cdata8 <= cdat[63:56];
+	endcase
+
+always @(pea or cdat)
+	case(pea[2:1])
+	2'b00:	cdata16 <= cdat[15: 0];
+	2'b01:	cdata16 <= cdat[31:16];
+	2'b10:	cdata16 <= cdat[47:32];
+	2'b11:	cdata16 <= cdat[63:48];
+	endcase
+
+always @(pea or cdat)
+	case(pea[2])
+	1'b0:	cdata32 <= cdat[31: 0];
+	1'b1:	cdata32 <= cdat[63:32];
+	endcase
+
+always @(pea or cdat)
+	cdata64 <= cdat;
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 
 reg [64:0] xData;
-wire xisCacheElement = (xData[63:52] != 12'hFFD && xData[63:52]!=12'hFFF) && dcache_on;
+// Load word and reserve is never cached.
+wire xisCacheElement = (xData[63:52] != 12'hFFD && xData[63:52]!=12'hFFF &&
+						xOpcode!=`LWR && !(xOpcode==`MEMNDX && xFunc6==`LWRX)) && dcache_on;
 reg m1IsCacheElement;
 
 
@@ -433,7 +589,7 @@ wire [63:0] sqrt_out;
 wire [63:0] div_q;
 wire [63:0] div_r;
 wire sqrt_done,mult_done,div_done;
-wire isSqrt = xIRvalid && xOpcode==`R && xFunc==`SQRT;
+wire isSqrt =xOpcode==`R && xFunc==`SQRT;
 
 isqrt #(64) u14
 (
@@ -446,16 +602,16 @@ isqrt #(64) u14
 	.done(sqrt_done)
 );
 
-wire isMulu = xIRvalid && xOpcode==`RR && xFunc==`MULU;
-wire isMuls = xIRvalid && ((xOpcode==`RR && xFunc==`MULS) || xOpcode==`MULSI);
-wire isMuli = xIRvalid && (xOpcode==`MULSI || xOpcode==`MULUI);
-wire isMult = xIRvalid && (xOpcode==`MULSI || xOpcode==`MULUI || (xOpcode==`RR && (xFunc==`MULS || xFunc==`MULU)));
-wire isDivu = xIRvalid && (xOpcode==`RR && xFunc==`DIVU);
-wire isDivs = xIRvalid && ((xOpcode==`RR && xFunc==`DIVS) || xOpcode==`DIVSI);
-wire isDivi = xIRvalid && (xOpcode==`DIVSI || xOpcode==`DIVUI);
-wire isDiv = xIRvalid && (xOpcode==`DIVSI || xOpcode==`DIVUI || (xOpcode==`RR && (xFunc==`DIVS || xFunc==`DIVU)));
-wire isModu = xIRvalid && (xOpcode==`RR && xFunc==`MODU);
-wire isMods = xIRvalid && (xOpcode==`RR && xFunc==`MODS);
+wire isMulu = xOpcode==`RR && xFunc==`MULU;
+wire isMuls = ((xOpcode==`RR && xFunc==`MULS) || xOpcode==`MULSI);
+wire isMuli = (xOpcode==`MULSI || xOpcode==`MULUI);
+wire isMult = (xOpcode==`MULSI || xOpcode==`MULUI || (xOpcode==`RR && (xFunc==`MULS || xFunc==`MULU)));
+wire isDivu = (xOpcode==`RR && xFunc==`DIVU);
+wire isDivs = ((xOpcode==`RR && xFunc==`DIVS) || xOpcode==`DIVSI);
+wire isDivi = (xOpcode==`DIVSI || xOpcode==`DIVUI);
+wire isDiv = (xOpcode==`DIVSI || xOpcode==`DIVUI || (xOpcode==`RR && (xFunc==`DIVS || xFunc==`DIVU)));
+wire isModu = (xOpcode==`RR && xFunc==`MODU);
+wire isMods = (xOpcode==`RR && xFunc==`MODS);
 wire isMod = isModu|isMods;
 
 Raptor64Mult u18
@@ -496,6 +652,7 @@ wire [63:0] fpZLOut;
 wire [63:0] fpLooOut;
 wire fpLooDone;
 
+
 /*
 fpZLUnit #(64) u30 
 (
@@ -530,7 +687,109 @@ wire [63:0] d2f_result;
 wire f2i_iop,fpmul_iop,fpdiv_iop,fpaddsub_iop,fpcmp_iop;
 wire f2i_ovr,fpmul_ovr,fpdiv_ovr,fpaddsub_ovr;
 wire fpmul_uf,fpaddsub_uf,fpdiv_uf;
+wire [11:0] fcmp_result;
 
+`ifdef SIMD
+
+Raptor64_fpAdd21 u61
+(
+	.a(a[20:0]), 
+	.b(b[20:0]),
+	.operation(xFunc6),
+	.clk(clk),
+	.result(daddsub_result[20:0]) 
+);
+
+Raptor64_fpAdd21 u62
+(
+	.a(a[41:21]),
+	.b(b[41:21]),
+	.operation(xFunc6), 
+	.clk(clk),
+	.result(daddsub_result[41:21])
+);
+
+Raptor64_fpAdd21 u63
+(
+	.a(a[62:42]),
+	.b(b[62:42]),
+	.operation(xFunc6),
+	.clk(clk),
+	.result(daddsub_result[62:42])
+);
+
+Raptor64_fpMul21 u64
+(
+	.a(a[20:0]),
+	.b(b[20:0]),
+	.clk(clk),
+	.result(dmul_result[20:0])
+);
+
+Raptor64_fpMul21 u65
+(
+	.a(a[41:21]),
+	.b(b[41:21]),
+	.clk(clk),
+	.result(dmul_result[41:21])
+);
+
+Raptor64_fpMul21 u66
+(
+	.a(a[62:42]),
+	.b(b[62:42]),
+	.clk(clk),
+	.result(dmul_result[62:42])
+);
+
+Raptor64_fpDiv21 u67
+(
+	.a(a[20:0]),
+	.b(b[20:0]),
+	.clk(clk),
+	.result(ddiv_result[20:0])
+);
+
+Raptor64_fpDiv21 u68
+(
+	.a(a[41:21]),
+	.b(b[41:21]),
+	.clk(clk),
+	.result(ddiv_result[41:21])
+);
+
+Raptor64_fpDiv21 u69
+(
+	.a(a[62:42]),
+	.b(b[62:42]),
+	.clk(clk),
+	.result(ddiv_result[62:42])
+);
+
+Raptor64_fCmp21 u70
+(
+	.a(a[20:0]),
+	.b(b[20:0]),
+	.clk(clk),
+	.result(fcmp_result[3:0])
+);
+
+Raptor64_fCmp21 u71
+(
+	.a(a[41:21]),
+	.b(b[41:21]),
+	.clk(clk),
+	.result(fcmp_result[7:4])
+);
+
+Raptor64_fCmp21 u72
+(
+	.a(a[62:42]),
+	.b(b[62:42]),
+	.clk(clk),
+	.result(fcmp_result[11:8])
+);
+`endif
 
 `ifdef FLOATING_POINT
 // Xilinx Core Generator Components
@@ -607,7 +866,20 @@ else begin
 		FPC_overx <= fp_ovr;
 	end
 	if (advanceX) begin
-		if (xOpcode==`FP && xIRvalid) begin
+`ifdef SIMD
+		if (xOpcode==`SIMD) begin
+			case(xFunc6)
+			`SIMD_ADD:	fltctr <= 6'd10;
+			`SIMD_SUB:	fltctr <= 6'd10;
+			`SIMD_MUL:	fltctr <= 6'd7;
+			`SIMD_DIV:	fltctr <= 6'd19;
+			`SIMD_CMP:	fltctr <= 6'd2;
+			default:	fltctr <= 6'd1;
+			endcase
+		end
+		else
+`endif
+		if (xOpcode==`FP) begin
 			if (xFunc6==`FDADD)	// FDADD
 				fltctr <= 6'd12;
 			else if (xFunc6==`FDSUB)	// FDSUB
@@ -759,7 +1031,6 @@ Raptor64_BranchHistory u6
 	.rst(rst_i),
 	.clk(clk),
 	.advanceX(advanceX),
-	.xIRvalid(xIRvalid),
 	.xIR(xIR),
 	.pc(pc),
 	.xpc(xpc),
@@ -815,15 +1086,15 @@ wire lti = $signed(a) < $signed(imm);
 wire ltu = a < b;
 wire ltui = a < imm;
 
-always @(xOpcode or xFunc or xFunc5 or a or b or imm or xpc or aeqz or
-	sqrt_out or cntlzo or cntloo or tick or AXC or
+always @(xOpcode or xFunc or xFunc5 or a or b or c or imm or xpc or aeqz or xFunc6 or
+	sqrt_out or cntlzo or cntloo or tick or AXC or scale or
 	lt or eq or ltu or mult_out or lti or eqi or ltui or xIR or div_q or div_r or
 	shfto or masko or bcdmulo or fpLooOut or fpZLOut or m_z or m_w or
 `ifdef TLB
 	PageTableAddr or BadVAddr or ASID or tlbo or
 `endif
-	ASID or EPC or mutex_gate or IPC or TBA or xAXC or nonICacheSeg or rm or
-	rando or errorAddress
+	ASID or TBA or xAXC or nonICacheSeg or rm or
+	rando or errorAddress or insnkey or pchistoric
 )
 casex(xOpcode)
 `MISC:
@@ -889,6 +1160,12 @@ casex(xOpcode)
 		`PageTableAddr:	xData1 = {PageTableAddr,13'd0};
 		`BadVAddr:		xData1 = {BadVAddr,13'd0};
 `endif
+`ifdef SEGMENTATION
+		`CS:			xData1 = {CS[xAXC],16'h0};
+		`DS:			xData1 = {DS[xAXC],16'h0};
+		`ES:			xData1 = {ES[xAXC],16'b0};
+		`SS:			xData1 = {SS[xAXC],16'h0};
+`endif
 		`ASID:			xData1 = ASID;
 		`Tick:			xData1 = tick;
 		`EPC:			xData1 = EPC[xAXC];
@@ -916,8 +1193,8 @@ casex(xOpcode)
 	endcase
 `RR:
 	case(xFunc6)
-	`CMP:	xData1 = lt ? 64'hFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
-	`CMPU:	xData1 = ltu ? 64'hFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
+	`CMP:	xData1 = lt ? 64'hFFFFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
+	`CMPU:	xData1 = ltu ? 64'hFFFFFFFFFFFFFFFF : eq ? 64'd0 : 64'd1;
 	`MIN:	xData1 = lt ? a : b;
 	`MAX:	xData1 = lt ? b : a;
 	`MOVZ:	xData1 = b;
@@ -934,6 +1211,64 @@ casex(xOpcode)
 	`MFEP:	xData1 = epat[a[7:0]];
  	default:	xData1 = 64'd0;
 	endcase
+`ifdef SIMD
+`SIMD:
+	case(xFunc6)
+	`SIMD_ADD:	xData1 = daddsub_result;
+	`SIMD_SUB:	xData1 = daddsub_result;
+	`SIMD_MUL:	xData1 = dmul_result;
+	`SIMD_DIV:	xData1 = ddiv_result;
+	`SIMD_CMP:	xData1 = {fcmp_result[11:8],17'd0,fcmp_result[7:4],17'd0,fcmp_result[3:0]};
+	default:	xData1 = 64'd0;
+	endcase
+`endif
+`ifdef ISIMD
+`SIMD:
+	case(xFunc6)
+	`SIMD_ADD:
+		begin
+			xData1[15: 0] <= a[15: 0] + b[15: 0];
+			xData1[31:16] <= a[31:16] + b[31:16];
+			xData1[47:32] <= a[47:32] + b[47:32];
+			xData1[63:48] <= a[63:48] + b[63:48];
+		end
+	`SIMD_SUB:
+		begin
+			xData1[15: 0] <= a[15: 0] - b[15: 0];
+			xData1[31:16] <= a[31:16] - b[31:16];
+			xData1[47:32] <= a[47:32] - b[47:32];
+			xData1[63:48] <= a[63:48] - b[63:48];
+		end
+	`SIMD_MUL:
+		begin
+			xData1[15: 0] <= a[15: 0] * b[15: 0];
+			xData1[31:16] <= a[31:16] * b[31:16];
+			xData1[47:32] <= a[47:32] * b[47:32];
+			xData1[63:48] <= a[63:48] * b[63:48];
+		end
+	`SIMD_AND:
+		begin
+			xData1[15: 0] <= a[15: 0] & b[15: 0];
+			xData1[31:16] <= a[31:16] & b[31:16];
+			xData1[47:32] <= a[47:32] & b[47:32];
+			xData1[63:48] <= a[63:48] & b[63:48];
+		end
+	`SIMD_OR:
+		begin
+			xData1[15: 0] <= a[15: 0] | b[15: 0];
+			xData1[31:16] <= a[31:16] | b[31:16];
+			xData1[47:32] <= a[47:32] | b[47:32];
+			xData1[63:48] <= a[63:48] | b[63:48];
+		end
+	`SIMD_XOR:
+		begin
+			xData1[15: 0] <= a[15: 0] ^ b[15: 0];
+			xData1[31:16] <= a[31:16] ^ b[31:16];
+			xData1[47:32] <= a[47:32] ^ b[47:32];
+			xData1[63:48] <= a[63:48] ^ b[63:48];
+		end
+	endcase
+`endif
 `BTRR:
 	case(xFunc5)
 	`LOOP:	xData1 = b - 64'd1;
@@ -947,27 +1282,13 @@ casex(xOpcode)
 `SETLO:		xData1 = {{42{xIR[21]}},xIR[21:0]};
 `SETMID:	xData1 = {{20{xIR[21]}},xIR[21:0],a[21:0]};
 `SETHI:		xData1 = {xIR[19:0],a[43:0]};
-`CMPI:	xData1 = lti ? 64'hFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
-`CMPUI:	xData1 = ltui ? 64'hFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
+`CMPI:	xData1 = lti ? 64'hFFFFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
+`CMPUI:	xData1 = ltui ? 64'hFFFFFFFFFFFFFFFF : eqi ? 64'd0 : 64'd1;
 `MULSI:	xData1 = mult_out[63:0];
 `MULUI:	xData1 = mult_out[63:0];
 `DIVSI:	xData1 = div_q;
 `DIVUI:	xData1 = div_q;
-`INB,`INCH,`INH,`INW,`INCU,`INHU,`INBU:
-		xData1 = a + imm;
-`OUTB,`OUTC,`OUTH,`OUTW,`OUTBC:
-		xData1 = a + imm;
-`LW,`LH,`LC,`LB,`LHU,`LCU,`LBU,`LEA:
-		xData1 = a + imm;
-`SW,`SH,`SC,`SB:
-		xData1 = a + imm;
-`ifdef ADDRESS_RESERVATION
-`LWR:	xData1 = a + imm;
-`SWC:	xData1 = a + imm;
-`endif
 `ifdef FLOATING_POINT
-`LF,`LFD:	xData1 = a + imm;
-`SF,`SFD:	xData1 = a + imm;
 `LFP,`LFDP:	xData1 = a + imm + xIR[15];
 `SFP,`SFDP:	xData1 = a + imm + xIR[15];
 `endif
@@ -976,9 +1297,9 @@ casex(xOpcode)
 `MEMNDX:
 		case(xFunc6)
 //		`LPX,`LFPX,`LFDPX,`SPX,`SFPX,`SFDPX:
-//			xData1 = a + (b << scale) + imm + xIR[15];
+//			xData1 = a + (b << scale) + offset2 + xIR[15];
 		default:
-			xData1 = a + (b << scale) + imm;
+			xData1 = a + (b << scale) + offset2;
 		endcase
 `TRAPcc:	xData1 = fnIncPC(xpc);
 `TRAPcci:	xData1 = fnIncPC(xpc);
@@ -1016,17 +1337,19 @@ wire v_ri,v_rr;
 overflow u2 (.op(xOpcode==`SUBI), .a(a[63]), .b(imm[63]), .s(xAddsubo[63]), .v(v_ri));
 overflow u3 (.op(xOpcode==`RR && xFunc==`SUB), .a(a[63]), .b(b[63]), .s(xAddsubo[63]), .v(v_rr));
 
-wire dbz_error = xIRvalid && (((xOpcode==`DIVSI||xOpcode==`DIVUI) && imm==64'd0) || (xOpcode==`RR && (xFunc6==`DIVS || xFunc6==`DIVU) && b==64'd0));
-wire ovr_error = xIRvalid && (((xOpcode==`ADDI || xOpcode==`SUBI) && v_ri) || ((xOpcode==`RR && (xFunc6==`SUB || xFunc6==`ADD)) && v_rr));
+wire dbz_error = (((xOpcode==`DIVSI||xOpcode==`DIVUI) && imm==64'd0) || (xOpcode==`RR && (xFunc6==`DIVS || xFunc6==`DIVU) && b==64'd0));
+wire ovr_error = (((xOpcode==`ADDI || xOpcode==`SUBI) && v_ri) || ((xOpcode==`RR && (xFunc6==`SUB || xFunc6==`ADD)) && v_rr));
 // ToDo: add more priv violations
-wire priv_violation = xIRvalid && !KernelMode && (xOpcode==`MISC &&
+wire priv_violation = !KernelMode && (xOpcode==`MISC &&
 	(xFunc==`IRET || xFunc==`ERET || xFunc==`CLI || xFunc==`SEI ||
 	 xFunc==`TLBP || xFunc==`TLBR || xFunc==`TLBWR || xFunc==`TLBWI || xFunc==`IEPP
 	));
 // ToDo: detect illegal instructions in the hives (sub-opcodes)
-wire illegal_insn = xIRvalid && (
+wire illegal_insn = (
 		xOpcode==7'd19 ||
+`ifndef SIMD
 		xOpcode==7'd20 ||
+`endif
 		xOpcode==7'd28 ||
 		xOpcode==7'd29 ||
 		xOpcode==7'd30 ||
@@ -1053,6 +1376,30 @@ wire illegal_insn = xIRvalid && (
 // using regs. However the core is trickier to get working that way; decoding
 // in multiple stages is simpler.
 //-----------------------------------------------------------------------------
+//wire dIsFlowCtrl =
+//	dOpcode==`JAL || dOpcode==`RET ||
+//	dOpcode==`BTRI || dOpcode==`BTRR || dOpcode==`TRAPcci || dOpcode==`TRAPcc ||
+//	dOpcode==`BEQI || dOpcode==`BNEI ||
+//	dOpcode==`BLTI || dOpcode==`BLEI || dOpcode==`BGTI || dOpcode==`BGEI ||
+//	dOpcode==`BLTUI || dOpcode==`BLEUI || dOpcode==`BGTUI || dOpcode==`BGEUI ||
+//	(dOpcode==`MISC && (dFunc==`SYSCALL || dFunc==`IRET || dFunc==`ERET))
+//	;
+//wire xIsFlowCtrl =
+//	xOpcode==`JAL || xOpcode==`RET ||
+//	xOpcode==`BTRI || xOpcode==`BTRR || xOpcode==`TRAPcci || xOpcode==`TRAPcc ||
+//	xOpcode==`BEQI || xOpcode==`BNEI ||
+//	xOpcode==`BLTI || xOpcode==`BLEI || xOpcode==`BGTI || xOpcode==`BGEI ||
+//	xOpcode==`BLTUI || xOpcode==`BLEUI || xOpcode==`BGTUI || xOpcode==`BGEUI ||
+//	(xOpcode==`MISC && (xFunc==`SYSCALL || xFunc==`IRET || xFunc==`ERET))
+//	;
+//wire m1IsFlowCtrl = 
+//	(m1Opcode==`MISC && m1Func==`SYSCALL)
+//	;
+//wire m2IsFlowCtrl = 
+//	(m2Opcode==`MISC && m2Func==`SYSCALL)
+//	;
+//	
+//	
 //wire dIsLoad = dIRvalid && (
 //	dOpcode==`LW || dOpcode==`LH || dOpcode==`LB || dOpcode==`LWR ||
 //	dOpcode==`LHU || dOpcode==`LBU ||
@@ -1096,15 +1443,15 @@ wire illegal_insn = xIRvalid && (
 //-----------------------------------------------------------------------------
 // Pipeline advance and stall logic
 //-----------------------------------------------------------------------------
-wire xIsSqrt = xIRvalid && xOpcode==`R && xFunc6==`SQRT;
-wire xIsMult = xIRvalid && ((xOpcode==`RR && (xFunc6==`MULU || xFunc6==`MULS)) || xOpcode==`MULSI || xOpcode==`MULUI);
-wire xIsDiv = xIRvalid && ((xOpcode==`RR && (xFunc6==`DIVU || xFunc6==`DIVS || xFunc6==`MODU || xFunc6==`MODS)) || xOpcode==`DIVSI || xOpcode==`DIVUI);
-wire xIsCnt = xIRvalid && (xOpcode==`R && (xFunc6==`CTLZ || xFunc6==`CTLO || xFunc6==`CTPOP));
+wire xIsSqrt = xOpcode==`R && xFunc6==`SQRT;
+wire xIsMult = ((xOpcode==`RR && (xFunc6==`MULU || xFunc6==`MULS)) || xOpcode==`MULSI || xOpcode==`MULUI);
+wire xIsDiv = ((xOpcode==`RR && (xFunc6==`DIVU || xFunc6==`DIVS || xFunc6==`MODU || xFunc6==`MODS)) || xOpcode==`DIVSI || xOpcode==`DIVUI);
+wire xIsCnt = (xOpcode==`R && (xFunc6==`CTLZ || xFunc6==`CTLO || xFunc6==`CTPOP));
 reg m1IsCnt,m2IsCnt;
 reg m2IsCacheElement;
 
 // Have to set the xIsLoad/xIsStore flag to false when xIR is nopped out
-wire xIsLoad = xIRvalid && (
+wire xIsLoad = (
 	xOpcode==`LW || xOpcode==`LH || xOpcode==`LB || xOpcode==`LWR ||
 	xOpcode==`LHU || xOpcode==`LBU ||
 	xOpcode==`LC || xOpcode==`LCU || xOpcode==`LM ||
@@ -1120,7 +1467,7 @@ wire xIsLoad = xIRvalid && (
 	(xOpcode==`MISC && (xFunc==`SYSCALL))
 	)
 	;
-wire xIsStore = xIRvalid && (
+wire xIsStore = (
 	xOpcode==`SW || xOpcode==`SH || xOpcode==`SB || xOpcode==`SC || xOpcode==`SWC || xOpcode==`SM ||
 	xOpcode==`SF || xOpcode==`SFD || xOpcode==`SP || xOpcode==`SFP || xOpcode==`SFDP ||
 	xOpcode==`SSH || xOpcode==`SSW || xOpcode==`STBC ||
@@ -1131,8 +1478,8 @@ wire xIsStore = xIRvalid && (
 	))
 	)
 	;
-wire xIsSWC = xOpcode==`SWC && xIRvalid;
-wire xIsIn = xIRvalid && (
+wire xIsSWC = xOpcode==`SWC;
+wire xIsIn = (
 	xOpcode==`INW || xOpcode==`INH || xOpcode==`INCH || xOpcode==`INB ||
 	xOpcode==`INHU || xOpcode==`INCU || xOpcode==`INBU ||
 	(xOpcode==`MEMNDX && (
@@ -1141,26 +1488,23 @@ wire xIsIn = xIRvalid && (
 	))
 	)
 	;
-wire xIsOut = xIRvalid && (
+wire xIsOut = (
 	xOpcode==`OUTW || xOpcode==`OUTH || xOpcode==`OUTC || xOpcode==`OUTB || 
 	(xOpcode==`MEMNDX && (
 		xFunc6==`OUTWX || xFunc6==`OUTHX || xFunc6==`OUTCX || xFunc6==`OUTBX
 	)))
 	;
-reg m1IsLoad,m1IsStore;
-reg m2IsLoad,m2IsStore;
-reg wIsStore;
-reg m1IsOut,m1IsIn;
-
 //wire mIsSWC = mOpcode==`SWC;
 //reg m1IsIn;
 
 wire m2IsInW = m2Opcode==`INW;
 wire xIsIO = xIsIn || xIsOut;
 wire m1IsIO = m1IsIn || m1IsOut;
+wire xIsSetmid = xOpcode==`SETMID;
 
-wire xIsFPLoo = xIRvalid && xOpcode==`FPLOO;
-wire xIsFP = xIRvalid && xOpcode==`FP;
+wire xIsFPLoo = xOpcode==`FPLOO;
+wire xIsFP = xOpcode==`FP;
+wire xIsSIMD = xOpcode==`SIMD;
 wire xneedBus = xIsIO;
 //wire m1needBus = (m1IsLoad & !m1IsCacheElement) || m1IsStore || m1IsIO;
 wire m1needBus = m1IsLoad || m1IsStore || m1IsIO;
@@ -1171,22 +1515,37 @@ wire m1Rtz = m1Rt[4:0]==5'd0;
 wire m2Rtz = m2Rt[4:0]==5'd0;
 
 //wire StallI = dIsLSPair & ~dIR[15];
+wire intPending = nmi_edge || (irq_i & ~im);	// || ITLBMiss
+
+// Check if there are results being forwarded, to allow the pipeline to empty if result
+// forwarding isn't needed.
+wire tForwardingActive = tRt==dRa || tRt==dRb || tRt==dRc;
+wire wForwardingActive = wRt==dRa || wRt==dRb || wRt==dRc;
+wire m2ForwardingActive = m2Rt==dRa || m2Rt==dRb || m2Rt==dRc;
+wire m1ForwardingActive = m1Rt==dRa || m1Rt==dRb || m1Rt==dRc;
+wire xForwardingActive = xRt==dRa || xRt==dRb || xRt==dRc;
+wire memCycleActive = ((iocyc_o & !(ack_i|err_i)) || (cyc_o & !(ack_i|err_i)));
 wire StallI = 1'b0;
 
 // Stall on SWC allows rsf flag to be loaded for the next instruction
 // Could check for dRa,dRb,dRc==0, for non-stalling
-wire StallR =  	((( xIsLoad||xIsIn||xIsCnt) &&   (( xRt==dRa)||( xRt==dRb)||( xRt==dRc)) && !xRtz) || xIsSWC) ||
-				(((m1IsLoad||m1IsIn||m1IsCnt) && ((m1Rt==dRa)||(m1Rt==dRb)||(m1Rt==dRc)) && !m1Rtz)) ||
-				(((m2IsLoad||m2IsCnt) &&         ((m2Rt==dRa)||(m2Rt==dRb)||(m2Rt==dRc)) && !m2Rtz))
+wire StallR =  	((( xIsLoad||xIsIn||xIsCnt) &&   (xForwardingActive) && !xRtz) || xIsSWC) ||
+				(((m1IsLoad||m1IsIn||m1IsCnt) && (m1ForwardingActive) && !m1Rtz)) ||
+				(((m2IsLoad||m2IsCnt) &&         (m2ForwardingActive) && !m2Rtz))
 				;
-wire StallX = (xneedBus||xIsLoad||xIsStore) & (m1needBus|m2needBus|icaccess|dcaccess);
-wire StallM1 = (m1needBus & (m2needBus|icaccess|dcaccess)) ||
-				( m1IsLoad & m1IsCacheElement & (m2IsStore|wIsStore))	// wait for a preceding store to complete
+wire StallX = ((xneedBus||xIsLoad||xIsStore) & (m1needBus|m2needBus|icaccess));
+wire StallM1 = (m1needBus & (m2needBus|icaccess)) ||
+				( m1IsLoad & m1IsCacheElement & (m2IsStore|wIsStore)) ||	// wait for a preceding store to complete
+				memCycleActive
 				;
-wire StallM2 =  m2needBus & (icaccess|dcaccess);
+// We need to stall the pipeline stages *after* the memory load so that result forwarding
+// isn't lost during a data cache load.
+wire StallM2 =  (m2needBus & icaccess) || (m2ForwardingActive && (((m1IsLoad & m1IsCacheElement & !dhit) || memCycleActive)));
+wire StallW = (wForwardingActive && ((m1IsLoad & m1IsCacheElement & !dhit) || memCycleActive));
+wire StallT = (tForwardingActive && ((m1IsLoad & m1IsCacheElement & !dhit) || memCycleActive)) || dcaccess;
 
-assign advanceT = !resetA;
-assign advanceW = advanceT;
+assign advanceT = (state==RUN) && !StallT;
+assign advanceW = advanceT & !StallW;
 assign advanceM2 = advanceW && (cyc_o ? (ack_i|err_i) : 1'b1) && !StallM2;
 assign advanceM1 = advanceM2 &
 					(iocyc_o ? (ack_i|err_i) : 1'b1) &
@@ -1197,8 +1556,13 @@ assign advanceX = advanceM1 & (
 					xIsSqrt ? sqrt_done :
 					xIsMult ? mult_done :
 					xIsDiv ? div_done :
+`ifdef FLOATING_POINT
 					xIsFPLoo ? fpLooDone :
 					xIsFP ? fltdone :
+`endif
+`ifdef SIMD
+					xIsSIMD ? fltdone :
+`endif
 					1'b1) &
 					!StallX;
 assign advanceR = advanceX & !StallR;
@@ -1208,14 +1572,14 @@ assign advanceI = advanceR & (ICacheAct ? ihit : ibufrdy) & !StallI;
 // Cache loading control
 //-----------------------------------------------------------------------------
 wire pipelineEmpty = 
-						(dOpcode==`NOPI || !dIRvalid) &&			// and the pipeline is flushed
-						(xOpcode==`NOPI || !xIRvalid) &&
-						(m1Opcode==`NOPI || !m1IRvalid) &&
-						(m2Opcode==`NOPI || !m2IRvalid)
+						(dOpcode==`NOPI) &&			// and the pipeline is flushed
+						(xOpcode==`NOPI) &&
+						(m1Opcode==`NOPI) &&
+						(m2Opcode==`NOPI)
 						;
 wire triggerDCacheLoad = (m1IsLoad & m1IsCacheElement & !dhit) &&	// there is a miss
 						!(icaccess | dcaccess) && 	// caches are not active
-						(m2Opcode==`NOPI || !m2IRvalid);		// and the pipeline is free of memory-ops
+						(m2Opcode==`NOPI);		// and the pipeline is free of memory-ops
 						;
 wire triggerICacheLoad1 = ICacheAct && !ihit && !triggerDCacheLoad &&	// There is a miss
 						!(icaccess | dcaccess) && 	// caches are not active
@@ -1241,31 +1605,7 @@ reg prev_nmi,nmi_edge;
 //-----------------------------------------------------------------------------
 
 wire [63:0] nxt_a, nxt_b, nxt_c;
-
-Raptor64_regfile u5
-(
-	.clk(clk),
-	.advanceR(advanceR),
-	.advanceW(advanceW),
-	.wIRvalid(wIRvalid),
-	.dRa(dRa),
-	.dRb(dRb),
-	.dRc(dRc),
-	.dpc(dpc),
-	.xRt(xRt),
-	.m1Rt(m1Rt),
-	.m2Rt(m2Rt),
-	.wRt(wRt),
-	.tRt(tRt),
-	.xData(xData[63:0]),
-	.m1Data(m1Data),
-	.m2Data(m2Data),
-	.wData(wData),
-	.tData(tData),
-	.nxt_a(nxt_a),
-	.nxt_b(nxt_b),
-	.nxt_c(nxt_c)
-);
+wire [8:0] nxt_Ra,nxt_Rb,nxt_Rc;
 
 Raptor64_SetOperandRegs u7
 (
@@ -1281,20 +1621,107 @@ Raptor64_SetOperandRegs u7
 	.xIR(xIR),
 	.dRa(dRa),
 	.dRb(dRb),
-	.dRc(dRc)
+	.dRc(dRc),
+	.nxt_Ra(nxt_Ra),
+	.nxt_Rb(nxt_Rb),
+	.nxt_Rc(nxt_Rc)
 );
 
-Raptor64_SetTargetRegister u8
+syncRam512x64_1rw3r u5
 (
-	.rst(rst_i),
-	.clk(clk),
-	.advanceR(advanceR),
-	.advanceX(advanceX),
-	.dIRvalid(dIRvalid),
-	.dIR(dIR),
-	.dAXC(dAXC),
-	.xRt(xRt)
+	.wrst(1'b0),
+	.wclk(clk),
+	.wce(1'b1),		// advanceW
+	.we(1'b1),
+	.wadr(wRt),
+	.i(wData),
+	.wo(),
+	
+	.rrsta(1'b0),
+	.rclka(~clk),
+	.rcea(advanceR),
+	.radra(dRa),
+	.roa(rfoa),
+
+	.rrstb(1'b0),
+	.rclkb(~clk),
+	.rceb(advanceR),
+	.radrb(dRb),
+	.rob(rfob),
+
+	.rrstc(1'b0),
+	.rclkc(~clk),
+	.rcec(advanceR),
+	.radrc(dRc),
+	.roc(rfoc)
 );
+
+Raptor64_BypassMux u8
+(
+	.dpc(dpc),
+	.dRn(dRa),
+	.xRt(xRt),
+	.m1Rt(m1Rt),
+	.m2Rt(m2Rt),
+	.wRt(wRt),
+	.tRt(tRt),
+	.rfo(rfoa),
+	.xData(xData),
+	.m1Data(m1Data),
+	.m2Data(m2Data),
+	.wData(wData),
+	.tData(tData),
+	.nxt(nxt_a)
+);
+
+Raptor64_BypassMux u25
+(
+	.dpc(dpc),
+	.dRn(dRb),
+	.xRt(xRt),
+	.m1Rt(m1Rt),
+	.m2Rt(m2Rt),
+	.wRt(wRt),
+	.tRt(tRt),
+	.rfo(rfob),
+	.xData(xData),
+	.m1Data(m1Data),
+	.m2Data(m2Data),
+	.wData(wData),
+	.tData(tData),
+	.nxt(nxt_b)
+);
+
+Raptor64_BypassMux u24
+(
+	.dpc(dpc),
+	.dRn(dRc),
+	.xRt(xRt),
+	.m1Rt(m1Rt),
+	.m2Rt(m2Rt),
+	.wRt(wRt),
+	.tRt(tRt),
+	.rfo(rfoc),
+	.xData(xData),
+	.m1Data(m1Data),
+	.m2Data(m2Data),
+	.wData(wData),
+	.tData(tData),
+	.nxt(nxt_c)
+);
+
+// We need to zero out xRt because it'll match in the operand bypass multiplexers if it isn't zeroed out.
+//Raptor64_SetTargetRegister u8
+//(
+//	.rst(rst_i),
+//	.clk(clk),
+//	.advanceR(advanceR),
+//	.advanceX(advanceX),
+//	.dIRvalid(dIRvalid),
+//	.dIR(dIR),
+//	.dAXC(dAXC),
+//	.xRt(xRt)
+//);
 
 reg [5:0] pchi;
 vtdl #(64,64) u23
@@ -1305,6 +1732,12 @@ vtdl #(64,64) u23
 	.d(pc),
 	.q(pchistoric)
 );
+
+wire isxIRQ = ((xIR[15:7]>=`EX_IRQ && xIR[15:7] < `EX_IRQ+32) || xIR[15:7]==`EX_NMI) && xIR[16];
+wire isPipeIRQ = dextype==`EX_NMI || (dextype>=`EX_IRQ && dextype < `EX_IRQ+32);
+wire isxNonHWI = (xIR[15:7]!=`EX_NMI && 
+				!(xIR[15:7]>=`EX_IRQ && xIR[15:7] < `EX_IRQ+32) &&
+				xIR[15:7]!=`EX_TLBI || xIR[15:7]!=`EX_TLBD);
 
 always @(posedge clk)
 if (rst_i) begin
@@ -1324,13 +1757,11 @@ if (rst_i) begin
 	nonICacheSeg <= 32'hFFFF_FFFD;
 	TBA <= 64'd0;
 	pc <= `RESET_VECTOR;
-	m1Opcode <= `NOPI;
-	m2Opcode <= `NOPI;
+	dIR <= `NOP_INSN;
+	xIR <= `NOP_INSN;
 	m1IR <= `NOP_INSN;
 	m2IR <= `NOP_INSN;
 	wIR <= `NOP_INSN;
-	wOpcode <= `NOPI;
-	dIR <= `NOP_INSN;
 	m1IsLoad <= 1'b0;
 	m1IsStore <= 1'b0;
 	m2IsLoad <= 1'b0;
@@ -1338,7 +1769,6 @@ if (rst_i) begin
 	wIsStore <= 1'b0;
 	m1IsOut <= 1'b0;
 	m1IsIn <= 1'b0;
-	xRtZero <= 1'b0;
 	tRt <= 9'd0;
 	wRt <= 9'd0;
 	m1Rt <= 9'd0;
@@ -1349,19 +1779,16 @@ if (rst_i) begin
 	m2Data <= 64'd0;
 	icaccess <= 1'b0;
 	dcaccess <= 1'b0;
-	prev_ihit <= 1'b0;
 	wFip <= 1'b0;
 	m2Fip <= 1'b0;
 	m1Fip <= 1'b0;
 	xFip <= 1'b0;
 	dFip <= 1'b0;
 	dirqf <= 1'b0;
-	ipcv <= 1'b1;
-	dpcv <= 1'b0;
-	xpcv <= 1'b0;
-	m1pcv <= 1'b0;
-	m2pcv <= 1'b0;
-	wpcv <= 1'b0;
+	dNmi <= 1'b0;
+	xNmi <= 1'b0;
+	m1Nmi <= 1'b0;
+	m2Nmi <= 1'b0;
 	tick <= 64'd0;
 	cstate <= IDLE;
 	dAXC <= 4'd0;
@@ -1376,7 +1803,6 @@ if (rst_i) begin
 	m2extype <= 9'h00;
 	wextype <= 9'h00;
 	textype <= 9'h00;
-	xIR <= `NOP_INSN;
 	xpc <= 64'd0;
 	a <= 64'd0;
 	b <= 64'd0;
@@ -1384,7 +1810,6 @@ if (rst_i) begin
 	clk_en <= 1'b1;
 	StatusEXL <= 16'hFFFF;
 	StatusHWI <= 1'b0;
-	resetA <= 1'b1;
 	mutex_gate <= 64'h0;
 	dcache_on <= 1'b0;
 	ICacheOn <= 1'b0;
@@ -1392,7 +1817,6 @@ if (rst_i) begin
 	m1IsCacheElement <= 1'b0;
 	dtinit <= 1'b1;
 	ras_sp <= 6'd63;
-	im <= 1'b1;
 	im1 <= 1'b1;
 // These must be non-zero in order to produce random numbers
 // We set them here in case the user doesn't bother to set them.
@@ -1401,11 +1825,7 @@ if (rst_i) begin
 	insnkey <= 32'd0;
 	LoadNOPs <= 1'b0;
 	eptr <= 8'h00;
-	dIRvalid <= 1'b1;
-	xIRvalid <= 1'b1;
-	m1IRvalid <= 1'b0;
-	m2IRvalid <= 1'b0;
-	wIRvalid <= 1'b0;
+	ie_fuse <= 8'h00;
 end
 else begin
 
@@ -1418,11 +1838,9 @@ case(state)
 RESET:
 	begin
 		pc <= `RESET_VECTOR;
-		ipcv <= 1'b1;
 		adr_o[14:6] <= adr_o[14:6]+9'd1;
 		if (adr_o[14:6]==9'h1FF) begin
 			dtinit <= 1'b0;
-			resetA <= 1'b0;
 			state <= RUN;
 		end
 		epat[a[7:0]] <= b[3:0];		/// b=0, to make this line the same as MTEP
@@ -1430,6 +1848,8 @@ RESET:
 	end
 RUN:
 begin
+
+ie_fuse <= {ie_fuse[6:0],ie_fuse[0]};		// shift counter
 
 tick <= tick + 64'd1;
 
@@ -1462,51 +1882,47 @@ if (advanceI) begin
 	dextype <= `EX_NON;
 	// record instruction and associated pc value
 	dIR <= insn;
-	dIRvalid <= 1'b1;
 	dpc <= pc;
-	dpcv <= ipcv;
+	dIm <= im;
+	dStatusHWI <= StatusHWI;
+	// Interrupt: stomp on the incoming instruction and replace it with
+	// a system call.
 	if (nmi_edge & !StatusHWI) begin
 		$display("*****************");
 		$display("NMI edge detected");
 		$display("*****************");
+		ie_fuse <= 8'h00;
 		StatusHWI <= 1'b1;
-		nmi_edge <= 1'b0;
 		dextype <= `EX_NMI;
-		dIRvalid <= 1'b0;
-		LoadNOPs <= 1'b1;
+		dNmi <= 1'b1;
+		dIR <= {`MISC,9'd0,`EX_NMI,`SYSCALL};
 	end
 	else if (irq_i & !im & !StatusHWI) begin
 		$display("*****************");
 		$display("IRQ detected");
 		$display("*****************");
-		bu_im <= 1'b0;
-		im <= 1'b1;
+		ie_fuse <= 8'h00;
 		StatusHWI <= 1'b1;
-		dextype <= `EX_IRQ;
-		dIRvalid <= 1'b0;
-		LoadNOPs <= 1'b1;
+		dIR <= {`MISC,9'd0,`EX_IRQ|irq_no,`SYSCALL};
+		dextype <= `EX_IRQ|irq_no;
 	end
+`ifdef TLB
+	// A TLB miss is treated like a hardware interrupt.
+	else if (ITLBMiss) begin
+		$display("TLB miss on instruction fetch.");
+		dextype <= `EX_TLBI;
+		dIR <= {`MISC,9'd0,`EX_TLBI,`SYSCALL};
+		BadVAddr <= pc[63:13];
+	end
+`endif
 	// Are we filling the pipeline with NOP's as a result of a previous
 	// hardware interrupt ?
-	else if (|dFip|LoadNOPs)
-		dIRvalid <= 1'b0;
-`ifdef TLB
-	else if (ITLBMiss)
-		dIRvalid <= 1'b0;
-`endif
+	else if (|dFip|LoadNOPs) begin
+		dIR <= `NOP_INSN;
+	end
 	else begin
 `include "insn_dumpsc.v"
 	end
-`ifdef TLB
-	if (ITLBMiss) begin
-		$display("TLB miss on instruction fetch.");
-		StatusEXL <= 1'b1;
-		BadVAddr <= pc[63:13];
-		dextype <= `EX_TLBI;
-		EPC <= pc;
-	end
-	else
-`endif
 	begin
 		dbranch_taken <= 1'b0;
 		pc <= fnIncPC(pc);
@@ -1520,18 +1936,15 @@ if (advanceI) begin
 				ras[ras_sp] <= fnIncPC(pc);
 				ras_sp <= ras_sp - 6'd1;
 				pc <= jmp_tgt;
-				ipcv <= 1'b1;
 			end
 		`RET:
 			begin
 				pc <= ras[ras_sp + 6'd1];
 				ras_sp <= ras_sp + 6'd1;
-				ipcv <= 1'b1;
 			end
 		`JMP:
 			begin
 				pc <= jmp_tgt;
-				ipcv <= 1'b1;
 			end
 		`BTRR:
 			case(insn[4:0])
@@ -1540,7 +1953,6 @@ if (advanceI) begin
 //					$display("Taking predicted branch: %h",{pc[63:4] + {{42{insn[24]}},insn[24:7]},insn[6:5],2'b00});
 					dbranch_taken <= 1'b1;
 					pc <= pc + {{52{insn[14]}},insn[14:5],2'b00};
-					ipcv <= 1'b1;
 				end
 			default:	;
 			endcase
@@ -1558,7 +1970,6 @@ if (advanceI) begin
 			if (predict_taken) begin
 				dbranch_taken <= 1'b1;
 				pc <= btb[pc[7:2]];
-				ipcv <= 1'b1;
 			end
 `endif
 		`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
@@ -1566,7 +1977,6 @@ if (advanceI) begin
 				if (predict_taken) begin
 					dbranch_taken <= 1'b1;
 					pc <= pc + {{50{insn[19]}},insn[19:8],2'b00};
-					ipcv <= 1'b1;
 				end
 			end
 		default:	;
@@ -1576,12 +1986,9 @@ end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceR) begin
-	dbranch_taken <= 1'b0;
-	dextype <= `EX_NON;
-	dIRvalid <= 1'b0;
-	dpcv <= 1'b0;
+	dextype <= #1 `EX_NON;
+	dIR <= #1 `NOP_INSN;
 end
-
 
 //-----------------------------------------------------------------------------
 // RFETCH:
@@ -1594,16 +2001,16 @@ end
 //-----------------------------------------------------------------------------
 //
 if (advanceR) begin
+	xIm <= dIm;
+	xNmi <= dNmi;
+	xStatusHWI <= dStatusHWI;
 	xAXC <= dAXC;
 	xFip <= dFip;
 	xextype <= dextype;
 	xpc <= dpc;
-	xpcv <= dpcv;
 	xbranch_taken <= dbranch_taken;
-	xRtZero <= 1'b0;
-	xIRvalid <= dIRvalid;
-	if (dOpcode==`R && dFunc==`MYST && dIRvalid)
-		xIR <= nxt_c;
+	if (dOpcode==`R && dFunc==`MYST)
+		xIR <= nxt_c[31:0];
 	else
 		xIR <= dIR;
 	a <= nxt_a;
@@ -1613,25 +2020,71 @@ if (advanceR) begin
 	c <= nxt_c;
 
 	case(dOpcode)
-	`BTRI:	imm <= {{53{dIR[10]}},dIR[10:0]};
+	`BTRI:
+		imm <= {{53{dIR[7]}},dIR[10:0]};
 	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
 		imm <= {{56{dIR[7]}},dIR[7:0]};
-	`RET:	imm <= {49'h00000000,dIR[14:3],3'b000};
-	`MEMNDX:	imm <= dIR[7:6];
-	default:	imm <= {{49{dIR[14]}},dIR[14:0]};
+	`MEMNDX:
+		imm <= dIR[7:6];
+	default:
+		imm <= {{49{dIR[14]}},dIR[14:0]};
 	endcase
-	scale <= dIR[9:8];
+
+	casex(dOpcode)
+	`MISC:
+		case(dFunc)
+		`SYSCALL:	xRt <= 9'd0;
+		default:	xRt <= 9'd0;
+		endcase
+	`R:
+		case(dFunc)
+		`MTSPR,`CMG,`CMGI,`EXEC:
+					xRt <= 9'd0;
+		default:	xRt <= {dAXC,dIR[19:15]};
+		endcase
+	`MYST,`MUX:	xRt <= {dAXC,dIR[ 9: 5]};
+	`SETLO:		xRt <= {dAXC,dIR[26:22]};
+	`SETMID:	xRt <= {dAXC,dIR[26:22]};
+	`SETHI:		xRt <= {dAXC,dIR[26:22]};
+	`RR,`FP:	xRt <= {dAXC,dIR[14:10]};
+	`BTRI:		xRt <= 9'd0;
+	`BTRR:
+		case(dIR[4:0])
+		`LOOP:	xRt <= {dAXC,dIR[19:15]};
+		default: xRt <= 9'd0;
+		endcase
+	`TRAPcc:	xRt <= 9'd0;
+	`TRAPcci:	xRt <= 9'd0;
+	`JMP:		xRt <= 9'd00;
+	`CALL:		xRt <= {dAXC,5'd31};
+	`RET:		xRt <= {dAXC,5'd30};
+	`MEMNDX:
+		case(dFunc[5:0])
+		`LSHX,`LSWX,
+		`SWX,`SHX,`SCX,`SBX,`SFX,`SFDX,`SPX,`SFPX,`SFDPX,`SSHX,`SSWX,
+		`OUTWX,`OUTHX,`OUTCX,`OUTBX:
+				xRt <= 9'd0;
+		default:	xRt <= {dAXC,dIR[14:10]};
+		endcase
+	`LSH,`LSW,
+	`SW,`SH,`SC,`SB,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP,	// but not SWC!
+	`OUTW,`OUTH,`OUTC,`OUTB:
+				xRt <= 9'd0;
+	`NOPI:		xRt <= 9'd0;
+	`BEQI,`BNEI,`BLTI,`BLEI,`BGTI,`BGEI,`BLTUI,`BLEUI,`BGTUI,`BGEUI:
+				xRt <= 9'd0;
+	default:	xRt <= {dAXC,dIR[19:15]};
+	endcase
+
 //	if (dIsLSPair & ~dIR[15])
 //		dIR <= dIR|32'h8000;
 end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceX) begin
-	xRtZero <= #1 1'b1;
+	xRt <= #1 9'd0;
 	xextype <= #1 `EX_NON;
-	xbranch_taken <= #1 1'b0;
-	xIRvalid <= #1 1'b0;
-	xpcv <= #1 1'b0;
+	xIR <= #1 `NOP_INSN;
 	xFip <= #1 1'b0;
 end
 
@@ -1643,24 +2096,23 @@ end
 // - m1???? signals to M1 stage
 //---------------------------------------------------------
 if (advanceX) begin
+	m1StatusHWI <= xStatusHWI;
+	m1Im <= xIm;
+	m1Nmi <= xNmi;
 	m1extype <= xextype;
 	m1Fip <= xFip;
-	m1Func <= xFunc;
-	m1pcv <= xpcv;
 	m1pc <= xpc;
 	m1IR <= xIR;
 	m1IsCnt <= xIsCnt;
-	m1Opcode <= xOpcode;
-	m1IsLoad <= xIsLoad & xIRvalid;
-	m1IsStore <= xIsStore & xIRvalid;
-	m1IsOut <= xIsOut & xIRvalid;
-	m1IsIn <= xIsIn & xIRvalid;
-	m1Rt <= xRtZero ? 9'd0 : xRt;
+	m1IsLoad <= xIsLoad;
+	m1IsStore <= xIsStore;
+	m1IsOut <= xIsOut;
+	m1IsIn <= xIsIn;
+	m1Rt <= xRt;
 	m1Data <= xData;
 	m1IsCacheElement <= xisCacheElement;
-	m1IRvalid <= xIRvalid;
 	m1AXC <= xAXC;
-	if (xOpcode==`RR && xIRvalid) begin
+	if (xOpcode==`RR) begin
 		if (xFunc6==`MOVZ && !aeqz) begin
 			m1Rt <= 9'd0;
 			m1Data <= 64'd0;
@@ -1679,36 +2131,42 @@ if (advanceX) begin
 		end
 	end
 
-	if (xIRvalid) begin
+	begin
 		case(xOpcode)
 		`MISC:
 			case(xFunc)
-			`SEI:	im <= 1'b1;
-			`CLI:	im <= 1'b0;
+			`SEI:	begin ie_fuse <= 8'h00; end
+			`CLI:	begin ie_fuse[0] <= 1'b1; end
 			`WAIT:	m1clkoff <= 1'b1;
 			`ICACHE_ON:		ICacheOn <= 1'b1;
 			`ICACHE_OFF:	ICacheOn <= 1'b0;
 			`DCACHE_ON:		dcache_on <= 1'b1;
 			`DCACHE_OFF:	dcache_on <= 1'b0;
 			`FIP:	begin
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b0;
+					// In case we stomped on am interrupt, we have to re-enable
+					// interrupts which were disable in the I-Stage. We go backwards
+					// in time and set the interrupt status to what it used to be
+					// when this instruction is executed.
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 					dFip <= 1'b1;
 					xFip <= 1'b1;
 					m1Fip <= 1'b1;
 					end
 			`IEPP:	begin
 					eptr <= eptr + 8'd1;
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b0;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 					dFip <= 1'b1;
 					xFip <= 1'b1;
 					m1Fip <= 1'b1;
@@ -1726,25 +2184,25 @@ if (advanceX) begin
 			`IRET:
 				if (StatusHWI) begin
 					StatusHWI <= 1'b0;
-					im <= 1'b0;
+					ie_fuse[0] <= 1'b1;
 					pc <= IPC[xAXC];	//a;
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			`ERET:
 				if (StatusEXL[xAXC]) begin
 					StatusEXL[xAXC]	<= 1'b0;
 					pc <= EPC[xAXC];
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			// Note: we can't mask off the interrupts in the I-stage because this
 			// instruction might not be valid. Eg. a branch could occur causing
@@ -1758,25 +2216,28 @@ if (advanceX) begin
 			// end of the real IRQ routine would re-enable interrupts too soon.
 			`SYSCALL:
 				begin
-					if ((xIR[15:7]==`EX_NMI || xIR[15:7]==`EX_IRQ) && 	// Is this a IRQ SYSCALL ?
-						((dextype==`EX_NMI || dextype==`EX_IRQ) ||		// Is there an interrupt in the pipeline ?
-						(nmi_edge & !StatusHWI) || (irq_i & ~im & !StatusHWI))) begin	// OR about to happen
-						m1Opcode <= `NOPI;								// Then turn this into a NOP
-						m1IRvalid <= 1'b0;
+					if (isxIRQ && 	// Is this a software IRQ SYSCALL ?
+						(isPipeIRQ || intPending)) begin		// Is there an interrupt in the pipeline ? OR about to happen
+						m1IR <= `NOP_INSN;								// Then turn this into a NOP
+						m1Rt <= 9'd0;
 					end
 					else begin
-						if (xIR[15:7]!=`EX_NMI && xIR[15:7]!=`EX_IRQ)
+						if (isxNonHWI) begin
 							StatusEXL[xAXC] <= 1'b1;
+							StatusHWI <= xStatusHWI;
+							ie_fuse[0] <= ~xIm;
+						end
 						else begin
 							StatusHWI <= 1'b1;
-							im <= 1'b1;
+							ie_fuse <= 8'h00;
+							if (xNmi)
+								nmi_edge <= 1'b0;
 						end
-						dIRvalid <= 1'b0;
-						xIRvalid <= 1'b0;
-						xRtZero <= 1'b1;
-						xpcv <= 1'b0;
-						dpcv <= 1'b0;
-						ipcv <= 1'b0;
+						if (!xNmi&!dNmi) begin
+							dIR <= `NOP_INSN;
+							xIR <= `NOP_INSN;
+						end
+						xRt <= 9'd0;
 						ea <= {TBA[63:12],xIR[15:7],3'b000};
 						LoadNOPs <= 1'b1;
 						$display("EX SYSCALL thru %h",{TBA[63:12],xIR[15:7],3'b000});
@@ -1793,11 +2254,13 @@ if (advanceX) begin
 				begin
 					pc <= fnIncPC(xpc);
 					dIR <= b;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			`MTSPR:
 				begin
@@ -1816,7 +2279,7 @@ if (advanceX) begin
 				`SRAND2:		begin
 								m_w <= a;
 								end
-				`INSNKEY:		insnkey <= a[41:0];
+				`INSNKEY:		insnkey <= a[31:0];
 				`PCHI:			pchi <= a[5:0];
 				default:	;
 				endcase
@@ -1842,22 +2305,24 @@ if (advanceX) begin
 			if (dpc[63:2] != a[63:2] + imm[63:2]) begin
 				pc[63:2] <= a[63:2] + imm[63:2];
 				btb[xpc[7:2]] <= {a[63:2] + imm[63:2],2'b00};
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtzero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b1;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 			end
 `else
 			begin
 				pc[63:2] <= a[63:2] + imm[63:2];
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtZero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b1;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 			end
 `endif
 		// Check the pc of the instruction after the RET instruction (the dpc), to
@@ -1867,12 +2332,13 @@ if (advanceX) begin
 		`RET:
 			if (dpc[63:2]!=b[63:2]) begin
 				pc[63:2] <= b[63:2];
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtZero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b1;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 			end
 		`BTRR:
 			case(xFunc5)
@@ -1881,22 +2347,24 @@ if (advanceX) begin
 				if (!takb & xbranch_taken) begin
 					$display("Taking mispredicted branch %h",fnIncPC(xpc));
 					pc <= fnIncPC(xpc);
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 				else if (takb & !xbranch_taken) begin
 					$display("Taking branch %h",{xpc[63:2] + {{52{xIR[14]}},xIR[14:5]},2'b00});
 					pc[63:2] <= xpc[63:2] + {{52{xIR[14]}},xIR[14:5]};
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 		// BEQ r1,r2,r10
 			`BEQR,`BNER,`BLTR,`BLER,`BGTR,`BGER,`BLTUR,`BLEUR,`BGTUR,`BGEUR://,`BANDR,`BORR,`BNRR:
@@ -1906,12 +2374,13 @@ if (advanceX) begin
 `ifdef BTB
 					btb[xpc[7:2]] <= c;
 `endif
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			default:	;
 			endcase
@@ -1924,33 +2393,36 @@ if (advanceX) begin
 					pc[63:2] <= b[63:2];
 					pc[1:0] <= 2'b00;
 					btb[xpc[7:2]] <= b;
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtzero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			end
 			else if (xbranch_taken)	begin	// took the branch, and weren't supposed to
 				pc <= fnIncPC(xpc);
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtzero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b1;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 			end
 `else
 			if (takb) begin
 				pc[63:2] <= b[63:2];
 				pc[1:0] <= 2'b00;
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtZero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b1;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 			end
 `endif
 		// BEQI r1,#3,label
@@ -1958,88 +2430,56 @@ if (advanceX) begin
 			if (takb) begin
 				if (!xbranch_taken) begin
 					pc[63:2] <= xpc[63:2] + {{50{xIR[19]}},xIR[19:8]};
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			end
 			else begin
 				if (xbranch_taken) begin
 					$display("Taking mispredicted branch %h",fnIncPC(xpc));
 					pc <= fnIncPC(xpc);
-					dIRvalid <= 1'b0;
-					xIRvalid <= 1'b0;
-					xRtZero <= 1'b1;
-					xpcv <= 1'b0;
-					dpcv <= 1'b0;
-					ipcv <= 1'b1;
+					StatusHWI <= xStatusHWI;
+					ie_fuse[0] <= ~xIm;
+					if (!xNmi&!dNmi) begin
+						dIR <= `NOP_INSN;
+						xIR <= `NOP_INSN;
+					end
+					xRt <= 9'd0;
 				end
 			end
 		`TRAPcc,`TRAPcci:
 			if (takb) begin
 				StatusEXL[xAXC] <= 1'b1;
 				xextype <= `EX_TRAP;
-				dIRvalid <= 1'b0;
-				xIRvalid <= 1'b0;
-				xRtZero <= 1'b1;
-				xpcv <= 1'b0;
-				dpcv <= 1'b0;
-				ipcv <= 1'b0;
+				StatusHWI <= xStatusHWI;
+				ie_fuse[0] <= ~xIm;
+				if (!xNmi&!dNmi) begin
+					dIR <= `NOP_INSN;
+					xIR <= `NOP_INSN;
+				end
+				xRt <= 9'd0;
 				LoadNOPs <= 1'b1;
 			end
 
-		`INW:
+		`INW,`INH,`INHU,`INCH,`INCU,`INB,`INBU:
 				begin
 				iocyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				sel_o <= 8'hFF;
-				adr_o <= xData1;
-				end
-		`INH,`INHU:
-				begin
-				iocyc_o <= 1'b1;
-				stb_o <= 1'b1;
-				sel_o <= xData1[2] ? 8'b11110000 : 8'b00001111;
-				adr_o <= xData1;
-				end
-		`INCH,`INCU:
-				begin
-				iocyc_o <= 1'b1;
-				stb_o <= 1'b1;
-				case(xData1[2:1])
-				2'b00:	sel_o <= 8'b00000011;
-				2'b01:	sel_o <= 8'b00001100;
-				2'b10:	sel_o <= 8'b00110000;
-				2'b11:	sel_o <= 8'b11000000;
-				endcase
-				adr_o <= xData1;
-				end
-		`INB,`INBU:
-				begin
-				iocyc_o <= 1'b1;
-				stb_o <= 1'b1;
-				case(xData1[2:0])
-				3'b000:	sel_o <= 8'b00000001;
-				3'b001:	sel_o <= 8'b00000010;
-				3'b010:	sel_o <= 8'b00000100;
-				3'b011:	sel_o <= 8'b00001000;
-				3'b100:	sel_o <= 8'b00010000;
-				3'b101:	sel_o <= 8'b00100000;
-				3'b110:	sel_o <= 8'b01000000;
-				3'b111:	sel_o <= 8'b10000000;
-				endcase
-				adr_o <= xData1;
+				sel_o <= fnSelect(xOpcode,xData[2:0]);
+				adr_o <= xData;
 				end
 		`OUTW:
 				begin
 				iocyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
-				sel_o <= 8'hFF;
-				adr_o <= xData1;
+				sel_o <= fnSelect(xOpcode,xData[2:0]);
+				adr_o <= xData;
 				dat_o <= b;
 				end
 		`OUTH:
@@ -2047,8 +2487,8 @@ if (advanceX) begin
 				iocyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
-				sel_o <= xData1[2] ? 8'b11110000 : 8'b00001111;
-				adr_o <= xData1;
+				sel_o <= fnSelect(xOpcode,xData[2:0]);
+				adr_o <= xData;
 				dat_o <= {2{b[31:0]}};
 				end
 		`OUTC:
@@ -2056,13 +2496,8 @@ if (advanceX) begin
 				iocyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
-				case(xData1[2:1])
-				2'b00:	sel_o <= 8'b00000011;
-				2'b01:	sel_o <= 8'b00001100;
-				2'b10:	sel_o <= 8'b00110000;
-				2'b11:	sel_o <= 8'b11000000;
-				endcase
-				adr_o <= xData1;
+				sel_o <= fnSelect(xOpcode,xData[2:0]);
+				adr_o <= xData;
 				dat_o <= {4{b[15:0]}};
 				end
 		`OUTB:
@@ -2070,17 +2505,8 @@ if (advanceX) begin
 				iocyc_o <= 1'b1;
 				stb_o <= 1'b1;
 				we_o <= 1'b1;
-				case(xData1[2:0])
-				3'b000:	sel_o <= 8'b00000001;
-				3'b001:	sel_o <= 8'b00000010;
-				3'b010:	sel_o <= 8'b00000100;
-				3'b011:	sel_o <= 8'b00001000;
-				3'b100:	sel_o <= 8'b00010000;
-				3'b101:	sel_o <= 8'b00100000;
-				3'b110:	sel_o <= 8'b01000000;
-				3'b111:	sel_o <= 8'b10000000;
-				endcase
-				adr_o <= xData1;
+				sel_o <= fnSelect(xOpcode,xData[2:0]);
+				adr_o <= xData;
 				dat_o <= {8{b[7:0]}};
 				end
 	//	`OUTBC:
@@ -2102,15 +2528,15 @@ if (advanceX) begin
 	//			dat_o <= {8{xIR[19:12]}};
 	//			end
 		`LEA:	begin
-				$display("LEA %h", xData1);
-				m1Data <= xData1;
+				$display("LEA %h", xData);
+				m1Data <= xData;
 				end
 		`LB,`LBU,`LC,`LCU,`LH,`LHU,`LW,`LWR,`LF,`LFD,`LM,`LSH,`LSW,`LP,`LFP,`LFDP,
 		`SW,`SH,`SC,`SB,`SWC,`SF,`SFD,`SM,`SSW,`SP,`SFP,`SFDP:
 				begin
 				m1Data <= b;
-				ea <= xData1;
-				$display("EX MEMOP %h", xData1);
+				ea <= xData;
+				$display("EX MEMOP %h", xData);
 				end
 	//	`STBC:
 	//			begin
@@ -2127,10 +2553,10 @@ if (advanceX) begin
 		`CACHE:
 				begin
 				m1Data <= b;
-				ea <= xData1;
+				ea <= xData;
 				case(xIR[19:15])
 				`INVIL:		;		// handled in M1 stage
-				`INVIALL:	tvalid <= 128'd0;
+				`INVIALL:	tvalid <= 256'd0;
 				`ICACHEON:	ICacheOn <= 1'b1;
 				`ICACHEOFF:	ICacheOn <= 1'b0;
 				`DCACHEON:	dcache_on <= 1'b1;
@@ -2140,44 +2566,44 @@ if (advanceX) begin
 				end
 		`MEMNDX:
 				begin
-				m1Opcode <= 7'd32+xFunc6;
+				m1IR[31:25] <= 7'd32+xFunc6;
 				case(xFunc6)
 				`LEAX:
 					begin
-					$display("LEAX %h", xData1);
-					m1Data <= xData1;
+					$display("LEAX %h", xData);
+					m1Data <= xData;
 					end
 				`INWX:
 						begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
 						sel_o <= 8'hFF;
-						adr_o <= xData1;
+						adr_o <= xData;
 						end
 				`INHX,`INHUX:
 						begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
-						sel_o <= xData1[2] ? 8'b11110000 : 8'b00001111;
-						adr_o <= xData1;
+						sel_o <= xData[2] ? 8'b11110000 : 8'b00001111;
+						adr_o <= xData;
 						end
 				`INCX,`INCUX:
 						begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
-						case(xData1[2:1])
+						case(xData[2:1])
 						2'b00:	sel_o <= 8'b00000011;
 						2'b01:	sel_o <= 8'b00001100;
 						2'b10:	sel_o <= 8'b00110000;
 						2'b11:	sel_o <= 8'b11000000;
 						endcase
-						adr_o <= xData1;
+						adr_o <= xData;
 						end
 				`INBX,`INBUX:
 						begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
-						case(xData1[2:0])
+						case(xData[2:0])
 						3'b000:	sel_o <= 8'b00000001;
 						3'b001:	sel_o <= 8'b00000010;
 						3'b010:	sel_o <= 8'b00000100;
@@ -2187,7 +2613,7 @@ if (advanceX) begin
 						3'b110:	sel_o <= 8'b01000000;
 						3'b111:	sel_o <= 8'b10000000;
 						endcase
-						adr_o <= xData1;
+						adr_o <= xData;
 						end
 				`OUTWX:
 						begin
@@ -2195,7 +2621,7 @@ if (advanceX) begin
 						stb_o <= 1'b1;
 						we_o <= 1'b1;
 						sel_o <= 8'hFF;
-						adr_o <= xData1;
+						adr_o <= xData;
 						dat_o <= c;
 						end
 				`OUTHX:
@@ -2203,8 +2629,8 @@ if (advanceX) begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
 						we_o <= 1'b1;
-						sel_o <= xData1[2] ? 8'b11110000 : 8'b00001111;
-						adr_o <= xData1;
+						sel_o <= xData[2] ? 8'b11110000 : 8'b00001111;
+						adr_o <= xData;
 						dat_o <= {2{c[31:0]}};
 						end
 				`OUTCX:
@@ -2212,13 +2638,13 @@ if (advanceX) begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
 						we_o <= 1'b1;
-						case(xData1[2:1])
+						case(xData[2:1])
 						2'b00:	sel_o <= 8'b00000011;
 						2'b01:	sel_o <= 8'b00001100;
 						2'b10:	sel_o <= 8'b00110000;
 						2'b11:	sel_o <= 8'b11000000;
 						endcase
-						adr_o <= xData1;
+						adr_o <= xData;
 						dat_o <= {4{c[15:0]}};
 						end
 				`OUTBX:
@@ -2226,7 +2652,7 @@ if (advanceX) begin
 						iocyc_o <= 1'b1;
 						stb_o <= 1'b1;
 						we_o <= 1'b1;
-						case(xData1[2:0])
+						case(xData[2:0])
 						3'b000:	sel_o <= 8'b00000001;
 						3'b001:	sel_o <= 8'b00000010;
 						3'b010:	sel_o <= 8'b00000100;
@@ -2236,13 +2662,13 @@ if (advanceX) begin
 						3'b110:	sel_o <= 8'b01000000;
 						3'b111:	sel_o <= 8'b10000000;
 						endcase
-						adr_o <= xData1;
+						adr_o <= xData;
 						dat_o <= {8{c[7:0]}};
 						end
 				default:
 					begin
 					m1Data <= c;
-					ea <= xData1;
+					ea <= xData;
 					end
 				endcase
 				end
@@ -2250,7 +2676,7 @@ if (advanceX) begin
 		endcase
 	end
 `ifdef FLOATING_POINT
-	if (xOpcode==`FP && xIRvalid) begin
+	if (xOpcode==`FP) begin
 		case (xFunc6)
 		`FDADD,`FDSUB:	
 				begin
@@ -2294,45 +2720,58 @@ if (advanceX) begin
 `endif
 	if (dbz_error) begin
 		$display("Divide by zero error");
-		m1extype <= #1 `EX_DBZ;
 		LoadNOPs <= #1 1'b1;
-		xRtZero <= #1 1'b1;
-		xpcv <= #1 1'b0;
-		dpcv <= #1 1'b0;
-		ipcv <= 1'b0;
+		// Squash a pending IRQ, but not an NMI
+		m1extype <= #1 `EX_DBZ;
+		StatusHWI <= xStatusHWI;
+		ie_fuse[0] <= ~xIm;
+		if (!xNmi&!dNmi) begin
+			dIR <= `NOP_INSN;
+			xIR <= `NOP_INSN;
+		end
+		xRt <= #1 9'd0;
 	end
 	else if (ovr_error) begin
 		$display("Overflow error");
-		m1extype <= `EX_OFL;
 		LoadNOPs <= 1'b1;
-		xRtZero <= 1'b1;
-		xpcv <= 1'b0;
-		dpcv <= 1'b0;
-		ipcv <= 1'b0;
+		m1extype <= `EX_OFL;
+		StatusHWI <= xStatusHWI;
+		ie_fuse[0] <= ~xIm;
+		if (!xNmi&!dNmi) begin
+			dIR <= `NOP_INSN;
+			xIR <= `NOP_INSN;
+		end
+		xRt <= #1 9'd0;
 	end
 //	else if (priv_violation) begin
 //		$display("Priviledge violation");
-//		m1extype <= `EX_PRIV;
 //		LoadNOPs <= 1'b1;
-//		xRtZero <= 1'b1;
-//		xpcv <= 1'b0;
-//		dpcv <= 1'b0;
-//		ipcv <= 1'b0;
+//		if (!xNmi&!dNmi) begin
+//			m1extype <= `EX_PRIV;
+//			StatusHWI <= xStatusHWI;
+//			ie_fuse[0] <= ~xIm;
+//		end
+//		dIR <= #1 `NOP_INSN;
+//		xIR <= #1 `NOP_INSN;
+//		xRt <= #1 9'd0;
 //	end
 	else if (illegal_insn) begin
 		$display("Unimplemented Instruction");
-		m1extype <= `EX_UNIMP_INSN;
 		LoadNOPs <= 1'b1;
-		xRtZero <= 1'b1;
-		xpcv <= 1'b0;
-		dpcv <= 1'b0;
-		ipcv <= 1'b0;
+		m1extype <= `EX_UNIMP_INSN;
+		StatusHWI <= xStatusHWI;
+		ie_fuse[0] <= ~xIm;
+		if (!xNmi&!dNmi) begin
+			dIR <= `NOP_INSN;
+			xIR <= `NOP_INSN;
+		end
+		xRt <= #1 9'd0;
 	end
 end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceM1) begin
-	m1IRvalid <= #1 1'b0;
+	m1IR <= #1 `NOP_INSN;
 	m1IsLoad <= #1 1'b0;
 	m1IsStore <= #1 1'b0;
 	m1IsOut <= #1 1'b0;
@@ -2340,7 +2779,6 @@ else if (advanceM1) begin
 	m1Rt <= #1 9'd0;
 	m1clkoff <= #1 1'b0;
 	m1Fip <= #1 1'b0;
-	m1pcv <= #1 1'b0;
 	m1extype <= #1 `EX_NON;
 	m1IsCnt <= #1 1'b0;
 	m1IsCacheElement <= #1 1'b0;
@@ -2363,31 +2801,29 @@ end
 // - m2???? signals to M2 stage
 //-----------------------------------------------------------------------------
 if (advanceM1) begin
+	m2StatusHWI <= m1StatusHWI;
+	m2Im <= m1Im;
+	m2Nmi <= m1Nmi;
 	m2extype <= m1extype;
 	m2Addr <= pea;
 	m2Data <= m1Data;
 	m2Fip <= m1Fip;
 	m2pc <= m1pc;
-	m2pcv <= m1pcv;
 	m2IR <= m1IR;
-	m2Opcode <= m1Opcode;
-	m2Func <= m1Func;
 	m2IsCnt <= m1IsCnt;
-	m2Func <= m1Func;
 	m2Rt <= m1Rt;
 	m2clkoff <= m1clkoff;
 	m2AXC <= m1AXC;
 	m2IsCacheElement <= m1IsCacheElement;
-	m2IRvalid <= m1IRvalid;
-	m2IsLoad <= m1IsLoad & m1IRvalid;
-	m2IsStore <= m2IsStore & m1IRvalid;
+	m2IsLoad <= m1IsLoad;
+	m2IsStore <= m2IsStore;
 
-	if (m1IsIO & err_i & m1IRvalid) begin
+	if (m1IsIO & err_i) begin
 		m2extype <= `EX_DBERR;
 		errorAddress <= adr_o;
 	end
 
-	if (m1extype == `EX_NON && m1IRvalid) begin
+	if (m1extype == `EX_NON) begin
 		case(m1Opcode)
 		`MISC:
 			case(m1Func)
@@ -2401,10 +2837,9 @@ if (advanceM1) begin
 				end
 				else begin	// dhit must be true
 					$display("fetched vector: %h", {cdat[63:2],2'b00});
-					m2Opcode <= `NOPI;
+					m2IR <= `NOP_INSN;
 					m2IsLoad <= 1'b0;
 					pc <= {cdat[63:2],2'b00};
-					ipcv <= 1'b1;
 					LoadNOPs <= 1'b0;
 				end
 			endcase
@@ -2413,81 +2848,49 @@ if (advanceM1) begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				m2Data <= dat_i;
+				m2Data <= data64;
 			end
 		`INH:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				m2Data <= sel_o[7] ? {{32{dat_i[63]}},dat_i[63:32]}:{{32{dat_i[31]}},dat_i[31: 0]};
+				m2Data <= {{32{data32[31]}},data32};
 			end
 		`INHU:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				m2Data <= sel_o[7] ? dat_i[63:32] : dat_i[31: 0];
+				m2Data <= data32;
 			end
 		`INCH:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000011:	m2Data <= {{48{dat_i[15]}},dat_i[15: 0]};
-				8'b00001100:	m2Data <= {{48{dat_i[31]}},dat_i[31:16]};
-				8'b00110000:	m2Data <= {{48{dat_i[47]}},dat_i[47:32]};
-				8'b11000000:	m2Data <= {{48{dat_i[63]}},dat_i[63:48]};
-				default:	m2Data <= 64'hDEADDEADDEADDEAD;			
-				endcase
+				m2Data <= {{48{data16[15]}},data16};
 			end
 		`INCU:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000011:	m2Data <= dat_i[15: 0];
-				8'b00001100:	m2Data <= dat_i[31:16];
-				8'b00110000:	m2Data <= dat_i[47:32];
-				8'b11000000:	m2Data <= dat_i[63:48];
-				default:	m2Data <= 64'hDEADDEADDEADDEAD;			
-				endcase
+				m2Data <= data16;
 			end
 		`INB:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000001:	m2Data <= {{56{dat_i[ 7]}},dat_i[ 7: 0]};
-				8'b00000010:	m2Data <= {{56{dat_i[15]}},dat_i[15: 8]};
-				8'b00000100:	m2Data <= {{56{dat_i[23]}},dat_i[23:16]};
-				8'b00001000:	m2Data <= {{56{dat_i[31]}},dat_i[31:24]};
-				8'b00010000:	m2Data <= {{56{dat_i[39]}},dat_i[39:32]};
-				8'b00100000:	m2Data <= {{56{dat_i[47]}},dat_i[47:40]};
-				8'b01000000:	m2Data <= {{56{dat_i[55]}},dat_i[55:48]};
-				8'b10000000:	m2Data <= {{56{dat_i[63]}},dat_i[63:56]};
-				default:	m2Data <= 64'hDEADDEADDEADDEAD;
-				endcase
+				m2Data <= {{56{data8[7]}},data8};
 			end
 		`INBU:
 			begin
 				iocyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000001:	m2Data <= dat_i[ 7: 0];
-				8'b00000010:	m2Data <= dat_i[15: 8];
-				8'b00000100:	m2Data <= dat_i[23:16];
-				8'b00001000:	m2Data <= dat_i[31:24];
-				8'b00010000:	m2Data <= dat_i[39:32];
-				8'b00100000:	m2Data <= dat_i[47:40];
-				8'b01000000:	m2Data <= dat_i[55:48];
-				8'b10000000:	m2Data <= dat_i[63:56];
-				default:	m2Data <= 64'hDEADDEADDEADDEAD;
-				endcase
+				m2Data <= data8;
 			end
 		`OUTW,`OUTH,`OUTC,`OUTB,`OUTBC:
 			begin
@@ -2498,124 +2901,90 @@ if (advanceM1) begin
 			end
 		`CACHE:
 			case(m1IR[19:15])
-			`INVIL:	tvalid[pea[12:6]] <= 1'b0;
+			`INVIL:	tvalid[pea[13:6]] <= 1'b0;
 			default:	;
 			endcase
 			
-
 		`LW,`LM,`LFD,`LSW,`LP,`LFDP:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				sel_o <= 8'hFF;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				m2Data <= cdat;
+				m2IR <= `NOP_INSN;
+				m2Data <= cdata64;
 			end
 `ifdef ADDRESS_RESERVATION
 		`LWR:
-			if (!m1IsCacheElement) begin
+			begin
 				rsv_o <= 1'b1;
 				resv_address <= pea[63:5];
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				sel_o <= 8'hFF;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
-			end
-			else begin
-				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				m2Data <= cdat;
-				rsv_o <= 1'b1;	// ???
-				resv_address <= pea[63:5];
 			end
 `endif
 		`LH,`LF,`LFP:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				sel_o <= pea[2] ? 8'b11110000 : 8'b00001111;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				if (pea[2])
-					m2Data <= {{32{cdat[31]}},cdat[31:0]};
-				else
-					m2Data <= {{32{cdat[63]}},cdat[63:32]};
+				m2IR <= `NOP_INSN;
+				m2Data <= {{32{cdata32[31]}},cdata32};
 			end
 
 		`LHU,`LSH:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				sel_o <= pea[2] ? 8'b11110000 : 8'b00001111;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				if (pea[2])
-					m2Data <= {32'd0,cdat};
-				else
-					m2Data <= {32'd0,cdat[63:32]};
+				m2IR <= `NOP_INSN;
+				m2Data <= cdata32;
 			end
 
 		`LC:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				case(pea[2:1])
-				2'b00:	sel_o <= 8'b00000011;
-				2'b01:	sel_o <= 8'b00001100;
-				2'b10:	sel_o <= 8'b00110000;
-				2'b11:	sel_o <= 8'b11000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				$display("dhit=1, cdat=%h",cdat);
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				case(pea[2:1])
-				2'd0:	m2Data <= {{48{cdat[15]}},cdat[15:0]};
-				2'd1:	m2Data <= {{48{cdat[31]}},cdat[31:16]};
-				2'd2:	m2Data <= {{48{cdat[47]}},cdat[47:32]};
-				2'd3:	m2Data <= {{48{cdat[63]}},cdat[63:48]};
-				endcase
+				m2IR <= `NOP_INSN;
+				m2Data <= {{48{cdata16[15]}},cdata16};
 			end
 
 		`LCU:
 			if (!m1IsCacheElement) begin
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				case(pea[2:1])
-				2'b00:	sel_o <= 8'b00000011;
-				2'b01:	sel_o <= 8'b00001100;
-				2'b10:	sel_o <= 8'b00110000;
-				2'b11:	sel_o <= 8'b11000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				case(pea[2:1])
-				2'd0:	m2Data <= {48'd0,cdat[15: 0]};
-				2'd1:	m2Data <= {48'd0,cdat[31:16]};
-				2'd2:	m2Data <= {48'd0,cdat[47:32]};
-				2'd3:	m2Data <= {48'd0,cdat[63:48]};
-				endcase
+				m2IR <= `NOP_INSN;
+				m2Data <= cdata16;
 			end
 
 		`LB:
@@ -2623,66 +2992,29 @@ if (advanceM1) begin
 				$display("Load byte:");
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				case(pea[2:0])
-				3'b000:	sel_o <= 8'b00000001;
-				3'b001:	sel_o <= 8'b00000010;
-				3'b010:	sel_o <= 8'b00000100;
-				3'b011:	sel_o <= 8'b00001000;
-				3'b100:	sel_o <= 8'b00010000;
-				3'b101:	sel_o <= 8'b00100000;
-				3'b110:	sel_o <= 8'b01000000;
-				3'b111:	sel_o <= 8'b10000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				case(pea[2:0])
-				3'b000:	m2Data <= {{56{cdat[ 7]}},cdat[ 7: 0]};
-				3'b001:	m2Data <= {{56{cdat[15]}},cdat[15: 8]};
-				3'b010:	m2Data <= {{56{cdat[23]}},cdat[23:16]};
-				3'b011:	m2Data <= {{56{cdat[31]}},cdat[31:24]};
-				3'b100:	m2Data <= {{56{cdat[39]}},cdat[39:32]};
-				3'b101:	m2Data <= {{56{cdat[47]}},cdat[47:40]};
-				3'b110:	m2Data <= {{56{cdat[55]}},cdat[55:48]};
-				3'b111:	m2Data <= {{56{cdat[63]}},cdat[63:56]};
-				endcase
+				m2IR <= `NOP_INSN;
+				m2Data <= {{56{cdata8[7]}},cdata8};
 			end
-
 		`LBU:
 			if (!m1IsCacheElement) begin
 				$display("Load unsigned byte:");
 				cyc_o <= 1'b1;
 				stb_o <= 1'b1;
-				case(pea[2:0])
-				3'b000:	sel_o <= 8'b00000001;
-				3'b001:	sel_o <= 8'b00000010;
-				3'b010:	sel_o <= 8'b00000100;
-				3'b011:	sel_o <= 8'b00001000;
-				3'b100:	sel_o <= 8'b00010000;
-				3'b101:	sel_o <= 8'b00100000;
-				3'b110:	sel_o <= 8'b01000000;
-				3'b111:	sel_o <= 8'b10000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				m2Addr <= pea;
 			end
 			else begin
 				$display("m2IsLoad <= 0");
 				m2IsLoad <= 1'b0;
-				m2Opcode <= `NOPI;
-				case(pea[2:0])
-				3'b000:	m2Data <= {56'd0,cdat[ 7: 0]};
-				3'b001:	m2Data <= {56'd0,cdat[15: 8]};
-				3'b010:	m2Data <= {56'd0,cdat[23:16]};
-				3'b011:	m2Data <= {56'd0,cdat[31:24]};
-				3'b100:	m2Data <= {56'd0,cdat[39:32]};
-				3'b101:	m2Data <= {56'd0,cdat[47:40]};
-				3'b110:	m2Data <= {56'd0,cdat[55:48]};
-				3'b111:	m2Data <= {56'd0,cdat[63:56]};
-				endcase
+				m2IR <= `NOP_INSN;
+				m2Data <= cdata8;
 			end
 
 		`SW,`SM,`SFD,`SSW,`SP,`SFDP:
@@ -2697,7 +3029,7 @@ if (advanceM1) begin
 				cyc_o <= #1 1'b1;
 				stb_o <= #1 1'b1;
 				we_o <= #1 1'b1;
-				sel_o <= #1 8'hFF;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				dat_o <= #1 m1Data;
 			end
@@ -2713,7 +3045,7 @@ if (advanceM1) begin
 				cyc_o <= #1 1'b1;
 				stb_o <= #1 1'b1;
 				we_o <= #1 1'b1;
-				sel_o <= #1 pea[2] ? 8'b11110000 : 8'b00001111;
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				dat_o <= #1 {2{m1Data[31:0]}};
 			end
@@ -2730,12 +3062,7 @@ if (advanceM1) begin
 				cyc_o <= #1 1'b1;
 				stb_o <= #1 1'b1;
 				we_o <= #1 1'b1;
-				case(pea[2:1])
-				2'b00:	sel_o <= #1 8'b00000011;
-				2'b01:	sel_o <= #1 8'b00001100;
-				2'b10:	sel_o <= #1 8'b00110000;
-				2'b11:	sel_o <= #1 8'b11000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				dat_o <= #1 {4{m1Data[15:0]}};
 			end
@@ -2751,16 +3078,7 @@ if (advanceM1) begin
 				cyc_o <= #1 1'b1;
 				stb_o <= #1 1'b1;
 				we_o <= #1 1'b1;
-				case(pea[2:0])
-				3'b000:	sel_o <= #1 8'b00000001;
-				3'b001:	sel_o <= #1 8'b00000010;
-				3'b010:	sel_o <= #1 8'b00000100;
-				3'b011:	sel_o <= #1 8'b00001000;
-				3'b100:	sel_o <= #1 8'b00010000;
-				3'b101:	sel_o <= #1 8'b00100000;
-				3'b110:	sel_o <= #1 8'b01000000;
-				3'b111:	sel_o <= #1 8'b10000000;
-				endcase
+				sel_o <= fnSelect(m1Opcode,pea[2:0]);
 				adr_o <= pea;
 				dat_o <= #1 {8{m1Data[7:0]}};
 			end
@@ -2775,14 +3093,14 @@ if (advanceM1) begin
 					cyc_o <= #1 1'b1;
 					stb_o <= #1 1'b1;
 					we_o <= #1 1'b1;
-					sel_o <= #1 8'hFF;
+					sel_o <= fnSelect(m1Opcode,pea[2:0]);
 					adr_o <= pea;
 					dat_o <= #1 m1Data;
 					resv_address <= #1 59'd0;
 					rsf <= #1 1'b1;
 				end
 				else
-					m2Opcode <= #1 `NOPI;
+					m2IR <= `NOP_INSN;
 			end
 `endif
 		endcase
@@ -2795,24 +3113,26 @@ if (advanceM1) begin
 	//---------------------------------------------------------
 `ifdef TLB
 	if (m1IsLoad && m1Rt[4:0]==5'd0 && DTLBMiss) begin
-		m1Opcode <= `NOPI;
+		m1IR <= `NOP_INSN;
 	end
 	if ((m1IsLoad&&m1Rt[4:0]!=5'd0)|m1IsStore) begin
 		if (DTLBMiss) begin
 			$display("DTLB miss on address: %h",ea);
+			cyc_o <= 1'b0;
+			stb_o <= 1'b0;
+			we_o <= 1'b0;
+			sel_o <= 8'h00;
 			m1extype <= `EX_TLBD;
-			StatusEXL <= 1'b1;
+			StatusHWI <= 1'b1;
 			BadVAddr <= ea[63:13];
-			m1Opcode <= `NOPI;
+			if (!xNmi&!dNmi) begin
+				dIR <= `NOP_INSN;
+				xIR <= `NOP_INSN;
+			end
+			m1IR <= `NOP_INSN;
 			m1Rt <= 9'd0;
-			pc <= 64'hC;
-			xIR <= `NOP_INSN;
-			xRtzero <= 1'b1;
-			dIR <= `NOP_INSN;
-			m1pcv <= 1'b0;
-			xpcv <= 1'b0;
-			dpcv <= 1'b0;
-			dhwxtype <= 2'b11;
+			xRt <= #1 9'd0;
+			LoadNOPs <= 1'b1;
 		end
 	end
 `endif
@@ -2821,16 +3141,14 @@ end
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceM2) begin
 	m2Rt <= #1 9'd0;
-	m2IRvalid <= 1'b0;
+	m2IR <= #1 `NOP_INSN;
 	m2IsCnt <= #1 1'b0;
 	m2IsLoad <= #1 1'b0;
 	m2IsStore <= #1 1'b0;
-	m2Func <= #1 7'd0;
 	m2Addr <= 64'd0;
 	m2Data <= #1 64'd0;
 	m2clkoff <= #1 1'b0;
 	m2Fip <= #1 1'b0;
-	m2pcv <= #1 1'b0;
 	m2extype <= #1 `EX_NON;
 	m2IsCacheElement <= 1'b0;
 end
@@ -2848,25 +3166,21 @@ end
 if (advanceM2) begin
 	wextype <= #1 m2extype;
 	wpc <= #1 m2pc;
-	wpcv <= #1 m2pcv;
 	wFip <= #1 m2Fip;
 	wIR <= #1 m2IR;
-	wIsStore <= #1 m2IsStore & m2IRvalid;
-	wOpcode <= #1 m2Opcode;
-	wFunc <= #1 m2Func;
+	wIsStore <= #1 m2IsStore;
 	wData <= #1 m2Data;
 	wRt <= #1 m2Rt;
 	wclkoff <= #1 m2clkoff;
 	wAXC <= #1 m2AXC;
-	wIRvalid <= m2IRvalid;
 	
 	// There's not an error is a prefetch is taking place (m2Rt=0).
-	if (((m2IsLoad&&m2Rt[4:0]!=5'd0)|m2IsStore) & err_i & m2IRvalid) begin
+	if (((m2IsLoad&&m2Rt[4:0]!=5'd0)|m2IsStore) & err_i) begin
 		wextype <= #1 `EX_DBERR;
 		errorAddress <= #1 adr_o;
 	end
 	
-	if (m2extype==`EX_NON & m2IRvalid) begin
+	if (m2extype==`EX_NON) begin
 		case(m2Opcode)
 		`MISC:
 			if (m2Func==`SYSCALL)
@@ -2874,10 +3188,9 @@ if (advanceM2) begin
 					cyc_o <= #1 1'b0;
 					stb_o <= #1 1'b0;
 					sel_o <= #1 8'h00;
-					pc <= #1 {dat_i[63:2],2'b00};
-					ipcv <= 1'b1;
+					pc <= #1 {data64[63:2],2'b00};
 					LoadNOPs <= 1'b0;
-					$display("M2 Fetched vector: %h",{dat_i[63:2],2'b00});
+					$display("M2 Fetched vector: %h",{data64[63:2],2'b00});
 				end
 		`SH,`SC,`SB,`SW,`SWC,`SF,`SFD,`SSH,`SSW,`SP,`SFP,`SFDP:
 			begin
@@ -2891,81 +3204,49 @@ if (advanceM2) begin
 				cyc_o <= #1 1'b0;
 				stb_o <= #1 1'b0;
 				sel_o <= #1 8'h00;
-				wData <= #1 sel_o[7] ? {{32{dat_i[63]}},dat_i[63:32]}:{{32{dat_i[31]}},dat_i[31: 0]};
+				wData <= #1 {{32{data32[31]}},data32};
 			end
 		`LW,`LWR,`LFD,`LSW,`LP,`LFDP:
 			begin
 				cyc_o <= #1 1'b0;
 				stb_o <= #1 1'b0;
 				sel_o <= #1 8'h00;
-				wData <= #1 dat_i;
+				wData <= #1 data64;
 			end
 		`LHU:
 			begin
 				cyc_o <= #1 1'b0;
 				stb_o <= #1 1'b0;
 				sel_o <= #1 8'h00;
-				wData <= #1 sel_o[7] ? dat_i[63:32] : dat_i[31: 0];
+				wData <= #1 data32;
 			end
 		`LC:
 			begin
 				cyc_o <= #1 1'b0;
 				stb_o <= #1 1'b0;
 				sel_o <= #1 8'h00;
-				case(sel_o)
-				8'b00000011:	wData <= #1 {{48{dat_i[15]}},dat_i[15: 0]};
-				8'b00001100:	wData <= #1 {{48{dat_i[31]}},dat_i[31:16]};
-				8'b00110000:	wData <= #1 {{48{dat_i[47]}},dat_i[47:32]};
-				8'b11000000:	wData <= #1 {{48{dat_i[63]}},dat_i[63:48]};
-				default:	wData <= #1 64'hDEADDEADDEADDEAD;			
-				endcase
+				wData <= #1 {{48{data16[15]}},data16};
 			end
 		`LCU:
 			begin
 				cyc_o <= #1 1'b0;
 				stb_o <= #1 1'b0;
 				sel_o <= #1 8'h00;
-				case(sel_o)
-				8'b00000011:	wData <= #1 dat_i[15: 0];
-				8'b00001100:	wData <= #1 dat_i[31:16];
-				8'b00110000:	wData <= #1 dat_i[47:32];
-				8'b11000000:	wData <= #1 dat_i[63:48];
-				default:	wData <= #1 64'hDEADDEADDEADDEAD;
-				endcase
+				wData <= #1 data16;
 			end
 		`LB:
 			begin
 				cyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000001:	wData <= {{56{dat_i[ 7]}},dat_i[ 7: 0]};
-				8'b00000010:	wData <= {{56{dat_i[15]}},dat_i[15: 8]};
-				8'b00000100:	wData <= {{56{dat_i[23]}},dat_i[23:16]};
-				8'b00001000:	wData <= {{56{dat_i[31]}},dat_i[31:24]};
-				8'b00010000:	wData <= {{56{dat_i[39]}},dat_i[39:32]};
-				8'b00100000:	wData <= {{56{dat_i[47]}},dat_i[47:40]};
-				8'b01000000:	wData <= {{56{dat_i[55]}},dat_i[55:48]};
-				8'b10000000:	wData <= {{56{dat_i[63]}},dat_i[63:56]};
-				default:	wData <= 64'hDEADDEADDEADDEAD;
-				endcase
+				wData <= {{56{data8[7]}},data8};
 			end
 		`LBU:
 			begin
 				cyc_o <= 1'b0;
 				stb_o <= 1'b0;
 				sel_o <= 8'h00;
-				case(sel_o)
-				8'b00000001:	wData <= dat_i[ 7: 0];
-				8'b00000010:	wData <= dat_i[15: 8];
-				8'b00000100:	wData <= dat_i[23:16];
-				8'b00001000:	wData <= dat_i[31:24];
-				8'b00010000:	wData <= dat_i[39:32];
-				8'b00100000:	wData <= dat_i[47:40];
-				8'b01000000:	wData <= dat_i[55:48];
-				8'b10000000:	wData <= dat_i[63:56];
-				default:	wData <= 64'hDEADDEADDEADDEAD;
-				endcase
+				wData <= data8;
 			end
 		default:	;
 		endcase
@@ -2977,14 +3258,13 @@ end
 // Stage tail
 // Pipeline annul for when a bubble in the pipeline occurs.
 else if (advanceW) begin
+	wIR <= #1 `NOP_INSN;
 	wextype <= `EX_NON;
 	wRt <= 9'd0;
 	wData <= 64'd0;
 	wIsStore <= 1'b0;
-	wIRvalid <= 1'b0;
 	wclkoff <= 1'b0;
 	wFip <= 1'b0;
-	wpcv <= 1'b0;
 end
 
 
@@ -3000,46 +3280,55 @@ end
 //-----------------------------------------------------------------------------
 //
 if (advanceW) begin
-	textype <= wextype;
-	tRt <= wRt;
-	tData <= wData;
+	// Hold onto the last register update
+	if (wRt[4:0]!=5'd0 && wRt[4:0]!=5'd29) begin
+		tRt <= wRt;
+		tData <= wData;
+	end
 	if (wRt!=5'd0) begin
 		$display("Writing regfile[%d:%d] with %h", wRt[8:5],wRt[4:0], wData);
 	end
-	if (wIRvalid) begin
-		case(wOpcode)
-		`LSH:
-			case (wRt)
-			`SR:	begin
-					bu_im <= wData[31];
-					im <= wData[15];
-					FXE <= wData[12];
-					end
-			default:	;
-			endcase
-		`MISC:
-			case(wFunc)
-			`SYSCALL:
-				if (wIR[15:7]==`EX_NMI || wIR[15:7]==`EX_IRQ)
-					IPC[wAXC] <= wData;
+	case(wOpcode)
+	`LSH:
+		case (wRt)
+		`SR:	begin
+				bu_im <= wData[31];
+				if (wData[15])
+					ie_fuse <= 8'h00;
 				else
-					EPC[wAXC] <= wData;
+					ie_fuse[0] <= 1'b1;
+				FXE <= wData[12];
+				end
+		default:	;
+		endcase
+	`MISC:
+		case(wFunc)
+		`SYSCALL:
+			if (wIR[15:7]==`EX_NMI || (wIR[15:7]>=`EX_IRQ && wIR[15:7]<`EX_IRQ+32) || wIR[15:7]==`EX_TLBI || wIR[15:7]==`EX_TLBD)
+				IPC[wAXC] <= wData;
+			else
+				EPC[wAXC] <= wData;
+		default:	;
+		endcase
+	`R:
+		case(wFunc6)
+		`MTSPR:
+			case(wIR[11:6])
+`ifdef SEGMENTATION
+			`CS:	CS[wAXC][63:16] <= wData[63:16];
+			`DS:	DS[wAXC][63:16] <= wData[63:16];
+			`ES:	ES[wAXC][63:16] <= wData[63:16];
+			`SS:	SS[wAXC][63:16] <= wData[63:16];
+`endif
+			`IPC:	begin
+					$display("mtspr IPC[%d]=%h",wAXC,wData);
+					IPC[wAXC] <= wData;
+					end
+			`EPC:	EPC[wAXC] <= wData;
 			default:	;
-			endcase
-		`R:
-			case(wFunc6)
-			`MTSPR:
-				case(wIR[11:6])
-				`IPC:	begin
-						$display("mtspr IPC[%d]=%h",wAXC,wData);
-						IPC[wAXC] <= wData;
-						end
-				`EPC:	EPC[wAXC] <= wData;
-				default:	;
-				endcase
 			endcase
 		endcase
-	end
+	endcase
 	if (wclkoff)
 		clk_en <= 1'b0;
 	else
@@ -3053,7 +3342,6 @@ if (advanceW) begin
 		xFip <= 1'b0;
 		dFip <= 1'b0;
 		pc <= fnIncPC(wpc);
-		ipcv <= 1'b1;
 	end
 	//---------------------------------------------------------
 	// WRITEBACK (WB') - part two:
@@ -3077,57 +3365,64 @@ if (advanceW) begin
 		pc <= `RESET_VECTOR;
 		end
 	// Hardware exceptions
-	`EX_NMI,`EX_IRQ:
+	`EX_NMI,`EX_IRQ,`EX_TLBI,`EX_TLBD,
+	`EX_IRQ+1,`EX_IRQ+2,`EX_IRQ+3,`EX_IRQ+4,`EX_IRQ+5,`EX_IRQ+6,`EX_IRQ+7,
+	`EX_IRQ+8,`EX_IRQ+9,`EX_IRQ+10,`EX_IRQ+11,`EX_IRQ+12,`EX_IRQ+13,`EX_IRQ+14,
+	`EX_IRQ+15,`EX_IRQ+16,`EX_IRQ+17,`EX_IRQ+18,`EX_IRQ+19,`EX_IRQ+20,`EX_IRQ+21,
+	`EX_IRQ+22,`EX_IRQ+23,`EX_IRQ+24,`EX_IRQ+25,`EX_IRQ+26,`EX_IRQ+27,`EX_IRQ+28,
+	`EX_IRQ+29,`EX_IRQ+30,`EX_IRQ+31:
 		begin
-		$display("Stuffing SYSCALL %d",wextype);
-		dIR <= {`MISC,5'd25,4'd0,wextype,`SYSCALL};
-		dIRvalid <= 1'b1;
+		dNmi <= 1'b0;
+		xNmi <= 1'b0;
+		m1Nmi <= 1'b0;
+		m2Nmi <= 1'b0;
+//		$display("Stuffing SYSCALL %d",wextype);
+//		dIR <= {`MISC,9'd0,wextype,`SYSCALL};
 		// One of the following pc's MUST be valid.
 		// wpc will be valid if the interrupt occurred outside of a branch
 		// shadow. m1pc or m2pc (the branch target address) will be valid
 		// depending on where in the branch shadow the interrupt falls.
 		// Syscall has a larger shadow than a branch because it loads the
-		// vector from memory. Eventually syscall flags the pc valid.
-		case(1'b1)
-		wpcv:	dpc <= wpc;
-		m2pcv:	dpc <= m2pc;
-		m1pcv: 	dpc <= m1pc;
-		xpcv:	dpc <= xpc;
-		dpcv:	dpc <= dpc;
-		default:	dpc <= pc;
-		endcase
-		dpcv <= 1'b1;
+		// vector from memory. xpc or dpc should be valid depending on
+		// whether or not the vector is cached. Eventually syscall flags
+		// the pc valid. If none of the PC's are valid, then there is a
+		// hardware problem.
+//		dpc <= wpc;
+//		case(1'b1)
+//		wpcv:	dpc <= wpc;
+//		m2pcv:	dpc <= m2pc;
+//		m1pcv: 	dpc <= m1pc;
+//		xpcv:	dpc <= xpc;
+//		dpcv:	dpc <= dpc;
+//		ipcv:	dpc <= pc;
+//		default:	dpc <= `RESET_VECTOR;	// Can't happen
+//		endcase
+//		dpcv <= 1'b1;
 		end
 	// Software exceptions
 	// We probably want to return to the excepting instruction.
-	`EX_TLBD,`EX_DBERR:
+	`EX_DBERR:
 		begin
 		pccap <= 1'b0;
-		dIR <= {`MISC,5'd24,4'd0,wextype,`SYSCALL};
-		dIRvalid <= 1'b1;
+		dIR <= {`MISC,9'd0,wextype,`SYSCALL};
 		dpc <= wpc;
-		dpcv <= 1'b1;
 		end
 	default:
 		begin
-		dIR <= {`MISC,5'd24,4'd0,wextype,`SYSCALL};
-		dIRvalid <= 1'b1;
+		pccap <= 1'b0;
+		dIR <= {`MISC,9'd0,wextype,`SYSCALL};
 		dpc <= wpc;
-		dpcv <= 1'b1;
 		end
 	endcase
 end
-// Stage tail
-// Pipeline annul for when a bubble in the pipeline occurs.
-// T and W advance together, meaning an else would never be executed.
 
-//-----------------------------------------------------------------------------
-// TRAILER:
-// - placeholder to allow the use of synchronous register memory
-//-----------------------------------------------------------------------------
-if (advanceT) begin
-end
-
+// Hold onto the last register update
+//begin
+//	if (tRt[4:0]!=5'd0 && tRt[4:0]!=5'd29) begin
+//		uRt <= tRt;
+//		uData <= tData;
+//	end
+//end
 
 //=============================================================================
 // Cache loader
@@ -3178,8 +3473,8 @@ ICACT1:
 			cyc_o <= 1'b0;
 			stb_o <= 1'b0;
 			sel_o <= 8'h00;
-			tmem[adr_o[12:6]] <= {1'b1,adr_o[63:13]};	// This will cause ihit to go high
-			tvalid[adr_o[12:6]] <= 1'b1;
+			tmem[adr_o[13:6]] <= adr_o[63:14];	// This will cause ihit to go high
+			tvalid[adr_o[13:6]] <= 1'b1;
 			icaccess <= 1'b0;
 			cstate <= IDLE;
 		end

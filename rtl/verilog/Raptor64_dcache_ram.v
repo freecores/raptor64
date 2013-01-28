@@ -21,18 +21,37 @@
 //                                                                          
 // ============================================================================
 //
-module Raptor64_dcache_ram(clk,wr,sel,wadr,i,radr,o);
-input clk;
+module Raptor64_dcache_ram(wclk,wr,sel,wadr,i,rclk,radr,o);
+input wclk;
 input wr;
-input [3:0] sel;
-input [13:2] wadr;
-input [31:0] i;
-input [13:3] radr;
+input [7:0] sel;
+input [14:3] wadr;
+input [63:0] i;
+input rclk;
+input [14:3] radr;
 output [63:0] o;
 
-reg [7:0] mem0 [2047:0];
-reg [31:0] memH [2047:0];
+reg [63:0] mem [0:4095];
+reg [14:3] rradr;
 
+always @(posedge wclk)
+	if (wr) begin
+		if (sel[0]) mem[wadr][ 7: 0] <= i[ 7: 0];
+		if (sel[1]) mem[wadr][15: 8] <= i[15: 8];
+		if (sel[2]) mem[wadr][23:16] <= i[23:16];
+		if (sel[3]) mem[wadr][31:24] <= i[31:24];
+		if (sel[4]) mem[wadr][39:32] <= i[39:32];
+		if (sel[5]) mem[wadr][47:40] <= i[47:40];
+		if (sel[6]) mem[wadr][55:48] <= i[55:48];
+		if (sel[7]) mem[wadr][63:56] <= i[63:56];
+	end
+
+always @(posedge rclk)
+	rradr <= radr[14:3];
+
+assign o = mem[rradr];
+
+/*
 syncRam2kx8_1rw1r u1
 (
 	.wrst(1'b0),
@@ -161,5 +180,5 @@ syncRam2kx8_1rw1r u8
 	.o(o[63:56])
 );
 
-endmodule
+*/endmodule
 

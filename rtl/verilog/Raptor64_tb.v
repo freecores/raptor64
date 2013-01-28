@@ -32,6 +32,8 @@ wire pic_ack;
 reg pulse1000Hz,pulse100Hz;
 wire [7:0] config_rec;
 reg [7:0] config_reco;
+//wire sm_ack;
+wire [7:0] sm_dato;
 
 wire uart_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_0A);
 wire rast_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDA_01);
@@ -41,19 +43,44 @@ wire Led_ack =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_06);
 wire dt_ack  =  sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC_04);
 wire p100ack =  sys_iocyc && sys_stb && (sys_adr[23:0]==24'hDCFFFC);
 wire p1000ack =  sys_iocyc && sys_stb && (sys_adr[23:0]==24'hDCFFFD);
-wire config_rec_ack = sys_iocyc && sys_stb && sys_adr[23:0]==24'hDCFFFF;
+wire config_rec_ack = sys_iocyc && sys_stb && sys_adr[23:3]==21'b1101_1100_1111_1111_1111_0;
 wire perr_ack = sys_iocyc && sys_stb && sys_adr[23:0]==24'hDCFFFE;
 wire tmp_ack = sys_iocyc && sys_stb && (sys_adr[23:8]==16'hDC03);
+wire sm_ack =  sys_iocyc && sys_stb && (sys_adr[23:16]==8'hDB);
 
-assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
-assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|AC97_ack|spr_ack|Led_ack|dt_ack|p100ack|p1000ack|config_rec_ack|tmp_ack|perr_ack;
+//assign ram_ack = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
 
 assign config_rec = 8'b0000_0111;
 
 always @(config_rec_ack)
 	config_reco <= config_rec_ack ? config_rec : 8'd0;
 
+wire cs_ram = sys_cyc && sys_stb && (sys_adr[63:32]==32'd1);
+reg [63:0] sysram [0:16000];
+always @(posedge clk)
+if (cs_ram & sys_we) begin
+	$display("Wrote ram[%h]=%h", sys_adr, sys_dbo);
+	sysram[sys_adr[15:3]] <= sys_dbo;
+end
+wire [63:0] ramo = cs_ram ? sysram[sys_adr[15:3]] : 64'd0;
+reg ack1,ack2,ack3,ack4,ack5,ack6,ack7,ack8;
+always @(posedge clk)
+begin
+	ack1 <= cs_ram;
+	ack2 <= ack1 & cs_ram;
+	ack3 <= ack2 & cs_ram;
+	ack4 <= ack3 & cs_ram;
+	ack5 <= ack4 & cs_ram;
+	ack6 <= ack5 & cs_ram;
+	ack7 <= ack6 & cs_ram;
+	ack8 <= ack7 & cs_ram;
+end
+wire ram_ack = cs_ram & ack8;
 
+assign sys_ack = br_ack|stk_ack|scr_ack|tc_ack|pic_ack|ram_ack|uart_ack|rast_ack|
+	AC97_ack|spr_ack|Led_ack|dt_ack|
+	p100ack|p1000ack|config_rec_ack|tmp_ack|perr_ack|sm_ack;
+ 
 initial begin
 	clk = 1;
 	pulse1000Hz = 0;
@@ -93,6 +120,19 @@ else begin
 		pulse100HzB <= 1'b0;
 	end
 end
+
+//sema_mem usm
+//(
+//	.rst_i(rst),
+//	.clk_i(clk),
+//	.cyc_i(sys_iocyc),
+//	.stb_i(sys_stb),
+//	.ack_o(sm_ack),
+//	.we_i(sys_we),
+//	.adr_i(sys_adr[23:0]),
+//	.dat_i(sys_dbo[7:0]),
+//	.dat_o(sm_dato)
+//);
 
 
 rtfTextController tc1
@@ -830,7 +870,8 @@ case(sys_adr)// | 64'hFFFF_FFFF_FFFF_0000)
 64'hFFFFFFFFFFFFFFF8:	romout <= 64'h37800000000DE000;
 default:	romout <= 64'd0;
 endcase
-assign sys_dbi = br_dato|keybdout|stk_dato|scr_dato| {4{tc_dato}} | {4{pic_dato}} | {8{config_reco}};
+assign sys_dbi = br_dato|keybdout|stk_dato|scr_dato| {4{tc_dato}}
+	| {4{pic_dato}} | {8{config_reco}} | ramo | {8{sm_dato}};
 
 
 Raptor64sc u1

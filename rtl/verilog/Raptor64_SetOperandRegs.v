@@ -28,7 +28,7 @@
 // avoided, which would otherwise occur.
 //=============================================================================
 
-module Raptor64_SetOperandRegs(rst, clk, advanceI, advanceR, advanceX, b, AXC, xAXC, insn, xIR, dRa, dRb, dRc);
+module Raptor64_SetOperandRegs(rst, clk, advanceI, advanceR, advanceX, b, AXC, xAXC, insn, xIR, dRa, dRb, dRc, nxt_Ra, nxt_Rb, nxt_Rc);
 input rst;
 input clk;
 input advanceI;
@@ -45,11 +45,126 @@ output [8:0] dRb;
 reg [8:0] dRb;
 output [8:0] dRc;
 reg [8:0] dRc;
+output [8:0] nxt_Ra;
+reg [8:0] nxt_Ra;
+output [8:0] nxt_Rb;
+reg [8:0] nxt_Rb;
+output [8:0] nxt_Rc;
+reg [8:0] nxt_Rc;
 
 wire [6:0] iOpcode = insn[31:25];
 wire [6:0] xOpcode = xIR[31:25];
 wire [5:0] xFunc = xIR[5:0];
 wire [6:0] iFunc7 = insn[6:0];
+
+
+always @*
+begin
+	nxt_Ra <= dRa;
+	nxt_Rb <= dRb;
+	nxt_Rc <= dRc;
+	if (advanceI) begin
+		// Default settings, to be overridden
+		nxt_Ra <= {AXC,insn[24:20]};
+		nxt_Rb <= {AXC,insn[19:15]};
+		nxt_Rc <= {AXC,insn[14:10]};
+		casex(iOpcode)
+		`MISC:
+			case(iFunc7)
+			`IRET:	begin
+					nxt_Ra <= {AXC,5'd25};
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+			`ERET:	begin
+					nxt_Ra <= {AXC,5'd24};
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+			default:
+					begin
+					nxt_Ra <= 9'd0;
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+			endcase
+		`R:	begin nxt_Rb <= 9'd0; nxt_Rc <= 9'd0; end
+		`RR: nxt_Rc <= 9'd0;
+		`TRAPcc:	nxt_Rc <= 9'd0;
+		`TRAPcci:	begin nxt_Rb <= 9'd0; nxt_Rc <= 9'd0; end
+		`CALL,`JMP,`NOPI:
+					begin
+					nxt_Ra <= 9'd0;
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`RET:		begin
+					nxt_Ra <= {AXC,5'd30};
+					nxt_Rb <= {AXC,5'd31};
+					nxt_Rc <= 9'd0;
+					end
+		`LB,`LBU,`LH,`LHU,`LC,`LCU,`LW,`LP,`LSH,`LSW,`LF,`LFD,`LFP,`LFDP,`LWR:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`SB,`SC,`SH,`SW,`SP,`SSH,`SSW,`SF,`SFD,`SFP,`SFDP,`SWC:
+					nxt_Rc <= 9'd0;
+		`INB,`INBU,`INCH,`INCU,`INH,`INHU,`INW:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`OUTB,`OUTC,`OUTH,`OUTW:
+					nxt_Rc <= 9'd0;
+		`BLTI,`BLEI,`BGTI,`BGEI,
+		`BLTUI,`BLEUI,`BGTUI,`BGEUI,
+		`BEQI,`BNEI:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`BTRI:		nxt_Rc <= 9'd0;
+		`SLTI,`SLEI,`SGTI,`SGEI,
+		`SLTUI,`SLEUI,`SGTUI,`SGEUI,
+		`SEQI,`SNEI:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`ADDI,`ADDUI,`SUBI,`SUBUI,`CMPI,`CMPUI,
+		`ANDI,`XORI,`ORI,`MULUI,`MULSI,`DIVUI,`DIVSI:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`JAL:
+					begin
+					nxt_Rb <= 9'd0;
+					nxt_Rc <= 9'd0;
+					end
+		`SETLO:		begin nxt_Ra <= {AXC,insn[26:22]}; nxt_Rb <= 9'd0; nxt_Rc <= 9'd0; end
+		`SETMID:	begin nxt_Ra <= {AXC,insn[26:22]}; nxt_Rb <= 9'd0; nxt_Rc <= 9'd0; end
+		`SETHI:		begin nxt_Ra <= {AXC,insn[26:22]}; nxt_Rb <= 9'd0; nxt_Rc <= 9'd0; end
+		default:	nxt_Ra <= {AXC,insn[24:20]};
+		endcase
+	end
+	else if (advanceR) begin
+		nxt_Ra <= 9'd0;
+		nxt_Rb <= 9'd0;
+		nxt_Rc <= 9'd0;
+	end
+	// no else here
+	if (advanceX) begin
+		if (xOpcode==`R) begin
+			if (xFunc==`EXEC) begin
+				nxt_Ra <= {xAXC,b[24:20]};
+				nxt_Rb <= {xAXC,b[19:15]};
+				nxt_Rc <= {xAXC,b[14:10]};
+			end
+		end
+	end
+end
 
 always @(posedge clk)
 if (rst) begin
@@ -58,107 +173,9 @@ if (rst) begin
 	dRc <= 9'd0;
 end
 else begin
-	if (advanceI) begin
-		// Default settings, to be overridden
-		dRa <= {AXC,insn[24:20]};
-		dRb <= {AXC,insn[19:15]};
-		dRc <= {AXC,insn[14:10]};
-		casex(iOpcode)
-		`MISC:
-			case(iFunc7)
-			`IRET:	begin
-					dRa <= {AXC,5'd25};
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-			`ERET:	begin
-					dRa <= {AXC,5'd24};
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-			default:
-					begin
-					dRa <= 9'd0;
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-			endcase
-		`R:	begin dRb <= 9'd0; dRc <= 9'd0; end
-		`RR: dRc <= 9'd0;
-		`TRAPcc:	dRc <= 9'd0;
-		`TRAPcci:	begin dRb <= 9'd0; dRc <= 9'd0; end
-		`CALL,`JMP,`NOPI:
-					begin
-					dRa <= 9'd0;
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`RET:		begin
-					dRa <= {AXC,5'd30};
-					dRb <= {AXC,5'd31};
-					dRc <= 9'd0;
-					end
-		`LB,`LBU,`LH,`LHU,`LC,`LCU,`LW,`LP,`LSH,`LSW,`LF,`LFD,`LFP,`LFDP,`LWR:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`SB,`SC,`SH,`SW,`SP,`SSH,`SSW,`SF,`SFD,`SFP,`SFDP,`SWC:
-					dRc <= 9'd0;
-		`INB,`INBU,`INCH,`INCU,`INH,`INHU,`INW:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`OUTB,`OUTC,`OUTH,`OUTW:
-					dRc <= 9'd0;
-		`BLTI,`BLEI,`BGTI,`BGEI,
-		`BLTUI,`BLEUI,`BGTUI,`BGEUI,
-		`BEQI,`BNEI:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`BTRI:		dRc <= 9'd0;
-		`SLTI,`SLEI,`SGTI,`SGEI,
-		`SLTUI,`SLEUI,`SGTUI,`SGEUI,
-		`SEQI,`SNEI:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`ADDI,`ADDUI,`SUBI,`SUBUI,`CMPI,`CMPUI,
-		`ANDI,`XORI,`ORI,`MULUI,`MULSI,`DIVUI,`DIVSI:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`JAL:
-					begin
-					dRb <= 9'd0;
-					dRc <= 9'd0;
-					end
-		`SETLO:		begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
-		`SETMID:	begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
-		`SETHI:		begin dRa <= {AXC,insn[26:22]}; dRb <= 9'd0; dRc <= 9'd0; end
-		default:	dRa <= {AXC,insn[24:20]};
-		endcase
-	end
-	else if (advanceR) begin
-		dRa <= 9'd0;
-		dRb <= 9'd0;
-		dRc <= 9'd0;
-	end
-	// no else here
-	if (advanceX) begin
-		if (xOpcode==`R) begin
-			if (xFunc==`EXEC) begin
-				dRa <= {xAXC,b[24:20]};
-				dRb <= {xAXC,b[19:15]};
-				dRc <= {xAXC,b[14:10]};
-			end
-		end
-	end
+	dRa <= nxt_Ra;
+	dRb <= nxt_Rb;
+	dRc <= nxt_Rc;
 end
 
 endmodule
