@@ -214,6 +214,7 @@ TYP *nameref(ENODE **node)
 {
 	SYM             *sp;
     TYP             *tp;
+	char stnm[200];
     sp = gsearch(lastid);
     if( sp == NULL ) {
         while( isspace(lastch) )
@@ -242,8 +243,19 @@ TYP *nameref(ENODE **node)
             }
             switch( sp->storage_class ) {
                     case sc_static:
-                            *node = makeinode(en_labcon,sp->value.i);
-                            (*node)->constflag = TRUE;
+						if (sp->tp->type==bt_func || sp->tp->type==bt_ifunc) {
+								strcpy(stnm,GetNamespace());
+								strcat(stnm,"_");
+								strcat(stnm,sp->name);
+								*node = makesnode(en_nacon,litlate(stnm));
+								(*node)->constflag = TRUE;
+								//*node = makesnode(en_nacon,sp->name);
+								//(*node)->constflag = TRUE;
+							}
+							else {
+								*node = makeinode(en_labcon,sp->value.i);
+								(*node)->constflag = TRUE;
+							}
                             break;
                     case sc_global:
                     case sc_external:
@@ -327,9 +339,15 @@ int IsBeginningOfTypecast(int st)
  */
 TYP *ParsePrimaryExpression(ENODE **node)
 {
-	ENODE    *pnode, *qnode, *rnode, *snode;
+	ENODE    *pnode, *qnode, *rnode, *snode, *rnode1, *pnode1, *qnode1, *qnode2;
+	__int64 i ;
+	int sza[10];
+	int brcount;
         SYM             *sp;
         TYP             *tptr;
+		brcount = 0;
+		qnode1 = NULL;
+		qnode2 = NULL;
         switch( lastst ) {
 
                 case id:
@@ -343,7 +361,7 @@ TYP *ParsePrimaryExpression(ENODE **node)
                         break;
                 case sconst:
                         tptr = &stdstring;
-                        pnode = makenode(en_labcon,stringlit(laststr),NULL);
+                        pnode = makenodei(en_labcon,NULL,stringlit(laststr));
                         pnode->constflag = TRUE;
                         NextToken();
                         break;
@@ -372,6 +390,7 @@ TYP *ParsePrimaryExpression(ENODE **node)
         for(;;) {
                 switch( lastst ) {
                         case openbr:    /* build a subscript reference */
+							brcount++;
 							if (tptr==NULL) {
 								error(ERR_UNDEFINED);
 								goto fini;
@@ -381,23 +400,50 @@ TYP *ParsePrimaryExpression(ENODE **node)
                                 else
                                         tptr = tptr->btp;
                                 NextToken();
-                                qnode = makeinode(en_icon,tptr->size);
-                                qnode->constflag = TRUE;
-                                expression(&rnode);
-/*
+								if (tptr->val_flag && (tptr->size==1 || tptr->size==2 || tptr->size==4 || tptr->size==8)) {
+									expression(&rnode);
+									pnode = makenode(en_add,rnode,pnode);
+									pnode->constflag = rnode->constflag && pnode->p[1]->constflag;
+									pnode->scale = tptr->size;
+								}
+								else {
+									sza[brcount-1] = tptr->size;
+									qnode = makeinode(en_icon,tptr->size);
+									// swap sizes for array indexing
+									if (brcount==3) {
+										qnode->i = sza[0];
+										qnode2->i = sza[1];
+										qnode1->i = sza[2];
+									}
+									else if (brcount==2) {
+										qnode->i = sza[0];
+										qnode1->i = sza[1];
+									}
+									if (qnode1==NULL)
+										qnode1 = qnode;
+									else
+										qnode2 = qnode;
+									qnode->constflag = TRUE;
+									expression(&rnode);
+									needpunc(closebr);
+	/*
  *      we could check the type of the expression here...
  */
-                                qnode = makenode(en_mulu,qnode,rnode);
-                                qnode->constflag = rnode->constflag && qnode->p[0]->constflag;
-                                pnode = makenode(en_add,qnode,pnode);
-                                pnode->constflag = qnode->constflag && pnode->p[1]->constflag;
+									qnode = makenode(en_mulu,qnode,rnode);
+									qnode->constflag = rnode->constflag && qnode->p[0]->constflag;
+									pnode = makenode(en_add,qnode,pnode);
+									pnode->constflag = qnode->constflag && pnode->p[1]->constflag;
+									pnode->scale = 1;
+									//if( tptr->val_flag == 0 )
+									//	tptr = deref(&pnode,tptr);
+								}
                                 ////snode = makenode(en_mul,qnode,rnode);
                                 ////snode->constflag = rnode->constflag && snode->p[0]->constflag;
                                 ////pnode = makenode(en_add,snode,pnode);
                                 ////pnode->constflag = snode->constflag && pnode->p[1]->constflag;
                                 if( tptr->val_flag == FALSE )
                                     tptr = deref(&pnode,tptr);
-                                needpunc(closebr);
+//                                needpunc(closebr);
                                 break;
 
                         case pointsto:
@@ -655,15 +701,29 @@ TYP *ParseUnaryExpression(ENODE **node)
                                 else
                                         i = 1;
                                 if( lastst == autoinc) {
-                                    if( IsLValue(ep1) )
-                                        ep1 = makenodei(en_ainc,ep1,i);
+									if( IsLValue(ep1) ) {
+										if (tp->type == bt_pointer)
+											ep2 = makeinode(en_icon,tp->btp->size);
+										else
+											ep2 = makeinode(en_icon,1);
+										ep2->constflag = TRUE;
+										ep1 = makenode(en_asadd,ep1,ep2);
+//                                        ep1 = makenodei(en_ainc,ep1,i);
+									}
                                     else
                                         error(ERR_LVALUE);
                                     NextToken();
                                 }
                                 else if( lastst == autodec ) {
-                                        if( IsLValue(ep1) )
-                                                ep1 = makenodei(en_adec,ep1,i);
+									if( IsLValue(ep1) ) {
+										if (tp->type == bt_pointer)
+											ep2 = makeinode(en_icon,tp->btp->size);
+										else
+											ep2 = makeinode(en_icon,1);
+										ep2->constflag = TRUE;
+										ep1 = makenode(en_assub,ep1,ep2);
+//                                                ep1 = makenodei(en_adec,ep1,i);
+										}
                                         else
                                                 error(ERR_LVALUE);
                                         NextToken();

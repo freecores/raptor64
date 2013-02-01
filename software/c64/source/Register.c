@@ -100,23 +100,61 @@ void PushOnRstk(int reg)
 		printf("DIAG - register stack underflow.\r\n");
 }
 
+//int SaveTempRegs()
+//{
+//	if (popcnt(regmask)==1) {
+//		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(8));
+//		GenerateTriadic(op_sw,0,make_mask(regmask),make_indirect(30),NULL);
+//	}
+//	else if (regmask != 0) {
+//		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(popcnt(regmask)*8));
+//		GenerateTriadic(op_sm,0,make_indirect(30),make_mask(regmask),NULL);
+//	}
+//	return regmask;
+//}
+//
+
 int SaveTempRegs()
 {
+	int n;
+	int rm;
+
 	if (regmask != 0) {
 		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(popcnt(regmask)*8));
-		GenerateTriadic(op_sm,0,make_indirect(30),make_mask(regmask),NULL);
+		for (n = 1, rm = regmask; rm != 0; n = n + 1,rm = rm >> 1)
+			if (rm & 1)
+				GenerateDiadic(op_sw,0,makereg(n),make_indexed((popcnt(rm)-1)*8,30));
 	}
 	return regmask;
 }
 
+
 void RestoreTempRegs(int rgmask)
 {
+	int n;
+	int rm;
+
 	if (rgmask != 0) {
-		GenerateTriadic(op_lm,0,make_indirect(30),make_mask(rgmask),NULL);
+		for (n = 1, rm = rgmask; rm != 0; n = n + 1,rm = rm >> 1)
+			if (rm & 1)
+				GenerateDiadic(op_lw,0,makereg(n),make_indexed((popcnt(rm)-1)*8,30));
 		GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(popcnt(rgmask)*8));
 	}
 }
 
+
+//void RestoreTempRegs(int rgmask)
+//{
+//	if (popcnt(rgmask)==1) {
+//		GenerateTriadic(op_lw,0,make_mask(rgmask),make_indirect(30),NULL);
+//		GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(8));
+//	}
+//	else if (rgmask != 0) {
+//		GenerateTriadic(op_lm,0,make_indirect(30),make_mask(rgmask),NULL);
+//		GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(popcnt(rgmask)*8));
+//	}
+//}
+//
 void ReleaseTempRegister(struct amode *ap)
 {
 	if (ap==NULL) {

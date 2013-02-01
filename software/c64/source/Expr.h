@@ -46,6 +46,7 @@ struct enode {
     __int8 constflag;
 	__int8 bit_width;
 	__int8 bit_offset;
+	__int8 scale;
 	// The following could be in a value union
     __int64 i;
     double f;

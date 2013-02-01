@@ -34,9 +34,11 @@ int options(char *);
 int openfiles(char *);
 void closefiles();
 
-char            infile[20],
-                listfile[20],
-                outfile[20];
+char            infile[32],
+                listfile[32],
+                outfile[32],
+				outfileG[32];
+
 extern TABLE    tagtable;
 int		mainflag;
 extern int      total_errors;
@@ -75,12 +77,16 @@ int	options(char *s)
 
 int     openfiles(char *s)
 {
-	int     ofl;
+	int     ofl,oflg;
+	int i;
         strcpy(infile,s);
         strcpy(listfile,s);
         strcpy(outfile,s);
+		strcpy(outfileG,s);
+		_splitpath(s,NULL,NULL,nmspace[0],NULL);
         makename(listfile,".lis");
         makename(outfile,".s");
+		makename(outfileG,".sg");
         if( (input = fopen(infile,"r")) == 0) {
                 printf(" cant open %s\n",infile);
                 return 0;
@@ -92,15 +98,29 @@ int     openfiles(char *s)
                 fclose(input);
                 return 0;
                 }
+        oflg = _creat(outfileG,-1);
+        if( oflg < 0 )
+                {
+                printf(" cant create %s\n",outfileG);
+                fclose(input);
+                return 0;
+                }
         if( (output = _fdopen(ofl,"w")) == 0) {
                 printf(" cant open %s\n",outfile);
                 fclose(input);
+                return 0;
+                }
+        if( (outputG = _fdopen(oflg,"w")) == 0) {
+                printf(" cant open %s\n",outfileG);
+                fclose(input);
+                fclose(output);
                 return 0;
                 }
         if( (list = fopen(listfile,"w")) == 0) {
                 printf(" cant open %s\n",listfile);
                 fclose(input);
                 fclose(output);
+                fclose(outputG);
                 return 0;
                 }
         return 1;
@@ -126,5 +146,11 @@ void closefiles()
 {       
 	fclose(input);
     fclose(output);
+	fclose(outputG);
     fclose(list);
+}
+
+char *GetNamespace()
+{
+	return nmspace[incldepth];
 }

@@ -526,49 +526,99 @@ void GenerateSpinlock(Statement *stmt)
 {
 	int lab1, lab2, lab3, lab4;
 	AMODE *ap1, *ap2;
+	AMODE *ap;
 
 	lab1 = nextlabel++;
-	ap1 = GetTempRegister();
-	ap2 = GetTempRegister();
-	if (stmt->exp) {
-		lab2 = nextlabel++;
-		GenerateTriadic(op_ori,0,ap2,makereg(0),make_immed(stmt->exp));
-	    GenerateLabel(lab1);
-		GenerateTriadic(op_beq,0,ap2,makereg(0),make_label(lab2));
-		GenerateTriadic(op_subui,0,ap2,ap2,make_immed(1));
-		GenerateTriadic(op_lwr,0,ap1,make_string(stmt->label),NULL);
-		GenerateTriadic(op_bne,0,ap1,makereg(0),make_label(lab1),NULL);
-		GenerateTriadic(op_not,0,ap1,ap1,NULL);
-		GenerateTriadic(op_swc,0,ap1,make_string(stmt->label),NULL);
-		GenerateTriadic(op_bnr,0,make_label(lab1),NULL,NULL);
-	}
-	else {
+	lab2 = nextlabel++;
+	lab3 = nextlabel++;
+
+    if( stmt != NULL && stmt->exp != NULL )
+	{
+		initstack();
+		ap1 = GetTempRegister();
+		ap2 = GetTempRegister();
+		ap = GenerateExpression(stmt->exp,F_REG,8);
+		if (stmt->initExpr)
+			GenerateTriadic(op_ori, 0, ap1,makereg(0),make_immed(stmt->initExpr));
 		GenerateLabel(lab1);
-		GenerateTriadic(op_lwr,0,ap1,make_string(stmt->label),NULL);
-		GenerateTriadic(op_bne,0,ap1,makereg(0),make_label(lab1),NULL);
-		GenerateTriadic(op_not,0,ap1,ap1,NULL);
-		GenerateTriadic(op_swc,0,ap1,make_string(stmt->label),NULL);
-		GenerateTriadic(op_bnr,0,make_label(lab1),NULL,NULL);
+		if (stmt->initExpr) {
+			GenerateTriadic(op_sub, 0, ap1, ap1, make_immed(1));
+			GenerateTriadic(op_beq, 0, ap1, makereg(0), make_label(lab2));
+		}
+		GenerateDiadic(op_inbu, 0, ap2, make_indexed(stmt->incrExpr,ap->preg));
+		GenerateTriadic(op_beq, 0, ap2, makereg(0), make_label(lab1));
+		ReleaseTempRegister(ap2);
+		GenerateStatement(stmt->s1);
+		// unlock
+		GenerateDiadic(op_outb, 0, makereg(0), make_indexed(stmt->incrExpr,ap->preg));
+		if (stmt->initExpr) {
+			GenerateTriadic(op_bra,0,make_label(lab3),NULL,NULL);
+			GenerateLabel(lab2);
+			GenerateStatement(stmt->s2);
+			GenerateLabel(lab3);
+		}
+		else {
+			printf("Warning: The lockfail code is unreachable because spinlock tries are infinite.\r\n");
+		}
 	}
-	ReleaseTempRegister(ap1);
-	ReleaseTempRegister(ap2);
-	GenerateStatement(stmt->s1);
-	GenerateDiadic(op_sb,0,makereg(0),make_string(stmt->label));
-	if (stmt->exp) {
-		lab3 = nextlabel++;
-		GenerateTriadic(op_bra,0,make_label(lab3),NULL,NULL);
-		GenerateLabel(lab2);
-		GenerateStatement(stmt->s2);
-		GenerateLabel(lab3);
-	}
-	else {
-		printf("Warning: The lockfail code is unreachable because spinlock tries are infinite.\r\n");
-	}
+
+	//ap1 = GetTempRegister();
+	//ap2 = GetTempRegister();
+	//if (stmt->exp) {
+	//	lab2 = nextlabel++;
+	//	GenerateTriadic(op_ori,0,ap2,makereg(0),make_immed(stmt->exp));
+	//    GenerateLabel(lab1);
+	//	GenerateTriadic(op_beq,0,ap2,makereg(0),make_label(lab2));
+	//	GenerateTriadic(op_subui,0,ap2,ap2,make_immed(1));
+	//	GenerateTriadic(op_lwr,0,ap1,make_string(stmt->label),NULL);
+	//	GenerateTriadic(op_bne,0,ap1,makereg(0),make_label(lab1),NULL);
+	//	GenerateTriadic(op_not,0,ap1,ap1,NULL);
+	//	GenerateTriadic(op_swc,0,ap1,make_string(stmt->label),NULL);
+	//	GenerateTriadic(op_bnr,0,make_label(lab1),NULL,NULL);
+	//}
+	//else {
+	//	GenerateLabel(lab1);
+	//	GenerateTriadic(op_lwr,0,ap1,make_string(stmt->label),NULL);
+	//	GenerateTriadic(op_bne,0,ap1,makereg(0),make_label(lab1),NULL);
+	//	GenerateTriadic(op_not,0,ap1,ap1,NULL);
+	//	GenerateTriadic(op_swc,0,ap1,make_string(stmt->label),NULL);
+	//	GenerateTriadic(op_bnr,0,make_label(lab1),NULL,NULL);
+	//}
+	//ReleaseTempRegister(ap1);
+	//ReleaseTempRegister(ap2);
+	//GenerateStatement(stmt->s1);
+	//GenerateDiadic(op_sb,0,makereg(0),make_string(stmt->label));
+	//if (stmt->exp) {
+	//	lab3 = nextlabel++;
+	//	GenerateTriadic(op_bra,0,make_label(lab3),NULL,NULL);
+	//	GenerateLabel(lab2);
+	//	GenerateStatement(stmt->s2);
+	//	GenerateLabel(lab3);
+	//}
+	//else {
+	//	printf("Warning: The lockfail code is unreachable because spinlock tries are infinite.\r\n");
+	//}
 }
 
 void GenerateSpinUnlock(struct snode *stmt)
 {
-	GenerateDiadic(op_sb,0,makereg(0),make_string(stmt->label));
+	AMODE *ap;
+
+    if( stmt != NULL && stmt->exp != NULL )
+	{
+		initstack();
+		ap = GenerateExpression(stmt->exp,F_REG|F_IMMED,8);
+		// Force return value into register 1
+		if( ap->preg != 1 ) {
+			if (ap->mode == am_immed)
+				GenerateTriadic(op_ori, 0, makereg(1),makereg(0),ap);
+			else
+				GenerateDiadic(op_mov, 0, makereg(1),ap);
+			GenerateDiadic(op_outb, 0, makereg(0),make_indexed(stmt->incrExpr,1));
+		}
+	}
+
+//	GenerateDiadic(op_sb,0,makereg(0),make_string(stmt->label));
 }
 /*
  *      genstmt will generate a statement and follow the next pointer

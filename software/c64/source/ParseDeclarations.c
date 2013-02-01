@@ -334,6 +334,7 @@ void ParseDeclarationSuffix()
         head = temp1;
         if( lastst == closepa) {
             NextToken();
+            temp1->type = bt_ifunc;			// this line wasn't present
             if(lastst == begin)
                 temp1->type = bt_ifunc;
         }
@@ -380,6 +381,7 @@ int declare(TABLE *table,int al,int ilc,int ztype)
 { 
 	SYM *sp, *sp1, *sp2;
     TYP *dhead;
+	char stnm[200];
 
     static long old_nbytes;
     int nbytes;
@@ -393,7 +395,7 @@ int declare(TABLE *table,int al,int ilc,int ztype)
         ParseDeclarationPrefix(ztype==bt_union);
         if( declid != 0) {      /* otherwise just struct tag... */
             sp = allocSYM();
-            sp->name = declid;
+			sp->name = declid;
             sp->storage_class = al;
 			if (bit_width > 0 && bit_offset > 0) {
 				// share the storage word with the previously defined field
@@ -413,8 +415,9 @@ int declare(TABLE *table,int al,int ilc,int ztype)
                 }
                 ++nbytes;
             }
-            if( al == sc_static)
+			if( al == sc_static) {
 				sp->value.i = nextlabel++;
+			}
 			else if( ztype == bt_union)
                 sp->value.i = ilc;
             else if( al != sc_auto )
@@ -526,7 +529,11 @@ void ParseGlobalDeclarations()
                 break;
         case kw_extern:
                 NextToken();
-				if (lastst==kw_oscall || lastst==kw_interrupt || lastst==kw_nocall)
+				if (lastst==kw_pascal) {
+					isPascal = TRUE;
+					NextToken();
+				}
+				else if (lastst==kw_oscall || lastst==kw_interrupt || lastst==kw_nocall)
 					NextToken();
                 ++global_flag;
                 declare(&gsyms,sc_external,0,bt_struct);

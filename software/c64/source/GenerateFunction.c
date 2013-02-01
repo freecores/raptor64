@@ -56,8 +56,8 @@ void GenerateFunction(SYM *sym, Statement *stmt)
 	while( lc_auto & 7 )	/* round frame size to word */
 		++lc_auto;
 	if (sym->IsInterrupt) {
-		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(30*8));
-		GenerateDiadic(op_sm,0,make_indirect(30), make_mask(0x9FFFFFFE));
+		//GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(30*8));
+		//GenerateDiadic(op_sm,0,make_indirect(30), make_mask(0x9FFFFFFE));
 	}
 	if (!sym->IsNocall) {
 		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(24));
@@ -65,7 +65,9 @@ void GenerateFunction(SYM *sym, Statement *stmt)
 		if (sym->IsLeaf)
 			GenerateDiadic(op_sw,0,makereg(27),make_indirect(30));
 		else {
-			GenerateDiadic(op_sm, 0, make_indirect(30), make_mask(0x98000000));
+			GenerateDiadic(op_sw, 0, makereg(27), make_indexed(0,30));
+			GenerateDiadic(op_sw, 0, makereg(28), make_indexed(8,30));
+			GenerateDiadic(op_sw, 0, makereg(31), make_indexed(16,30));
 			GenerateDiadic(op_lea,0,makereg(28),make_label(throwlab));
 		}
 		GenerateDiadic(op_mov,0,makereg(27),makereg(30));
@@ -85,8 +87,8 @@ void GenerateFunction(SYM *sym, Statement *stmt)
 		}
 	}
 	else {
-		GenerateDiadic(op_lw,0,makereg(31),make_indexed(16,27));		// load throw return address from stack into LR
-		GenerateDiadic(op_sw,0,makereg(31),make_indirect(27));		// and store it back (so it can be loaded with the lm)
+		GenerateDiadic(op_lw,0,makereg(31),make_indexed(8,27));		// load throw return address from stack into LR
+		GenerateDiadic(op_sw,0,makereg(31),make_indexed(16,27));		// and store it back (so it can be loaded with the lm)
 		GenerateDiadic(op_bra,0,make_label(retlab),NULL);				// goto regular return cleanup code
 	}
 }
@@ -99,6 +101,7 @@ void GenerateReturn(SYM *sym, Statement *stmt)
 	AMODE *ap;
 	int nn;
 	int lab1;
+	int cnt;
 
     if( stmt != NULL && stmt->exp != NULL )
 	{
@@ -124,21 +127,25 @@ void GenerateReturn(SYM *sym, Statement *stmt)
 			return;
 		// Restore registers used as register variables.
 		if( save_mask != 0 ) {
-			if (bitsset(save_mask) < 2) {
-			for (nn = 31; nn >=1 ; nn--)
-				if (save_mask & (1 << nn))
-					GenerateTriadic(op_lw,0,makereg(nn),make_indirect(30),NULL);
+			cnt = (bitsset(save_mask)-1)*8;
+			for (nn = 31; nn >=1 ; nn--) {
+				if (save_mask & (1 << nn)) {
+					GenerateTriadic(op_lw,0,makereg(nn),make_indexed(cnt,30),NULL);
+					cnt -= 8;
+				}
 			}
-			else
-				GenerateTriadic(op_lm,0,make_indirect(30),make_mask(save_mask),NULL);
+			GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(popcnt(save_mask)*8));
 		}
 		// Unlink the stack
 		// For a leaf routine the link register and exception link register doesn't need to be saved/restored.
 		GenerateDiadic(op_mov,0,makereg(30),makereg(27));
 		if (sym->IsLeaf)
 			GenerateDiadic(op_lw,0,makereg(27),make_indirect(30));
-		else
-			GenerateDiadic(op_lm,0,make_indirect(30),make_mask(0x98000000));
+		else {
+			GenerateDiadic(op_lw,0,makereg(27),make_indirect(30));
+			GenerateDiadic(op_lw,0,makereg(28),make_indexed(8,30));
+			GenerateDiadic(op_lw,0,makereg(31),make_indexed(16,30));
+		}
 		//if (isOscall) {
 		//	GenerateDiadic(op_move,0,makereg(0),make_string("_TCBregsave"));
 		//	gen_regrestore();
@@ -146,10 +153,10 @@ void GenerateReturn(SYM *sym, Statement *stmt)
 		// Generate the return instruction. For the Pascal calling convention pop the parameters
 		// from the stack.
 		if (sym->IsInterrupt) {
-			GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(24));
-			GenerateDiadic(op_lm,0,make_indirect(30),make_mask(0x9FFFFFFE));
-			GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(popcnt(0x9FFFFFFE)*8));
-			GenerateDiadic(op_iret,0,NULL,NULL);
+			//GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(24));
+			//GenerateDiadic(op_lm,0,make_indirect(30),make_mask(0x9FFFFFFE));
+			//GenerateTriadic(op_addui,0,makereg(30),makereg(30),make_immed(popcnt(0x9FFFFFFE)*8));
+			GenerateMonadic(op_iret,0,NULL);
 			return;
 		}
 		if (sym->IsPascal)
@@ -232,10 +239,10 @@ AMODE *GenerateFunctionCall(ENODE *node, int flags)
 			if (sym->tp->btp->type==bt_void)
 				;
 			else
-				GenerateTriadic(op_or,0,result,makereg(1),makereg(0));
+				GenerateDiadic(op_mov,0,result,makereg(1));
 		}
 		else
-			GenerateTriadic(op_or,0,result,makereg(1),makereg(0));
+			GenerateDiadic(op_mov,0,result,makereg(1));
     return result;
 }
 

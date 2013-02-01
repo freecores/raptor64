@@ -39,13 +39,21 @@ void endinit();
 int InitializeArray(TYP *tp);
 
 void doinit(SYM *sp)
-{       
-	dseg();                 /* initialize into data segment */
-    nl();                   /* start a new line in object */
-	if(sp->storage_class == sc_static)
+{
+	if (sp->storage_class == sc_static || lastst==assign) {
+		seg(dataseg);          /* initialize into data segment */
+		nl();                   /* start a new line in object */
+	}
+	else {
+		seg(bssseg);            /* initialize into data segment */
+		nl();                   /* start a new line in object */
+	}
+	if(sp->storage_class == sc_static) {
 		put_label(sp->value.i);
-	else
+	}
+	else {
 		gen_strlab(sp->name);
+	}
 	if( lastst != assign) {
 		genstorage(sp->tp->size);
 	}

@@ -242,6 +242,8 @@ static void scanexpr(ENODE *node, int duse)
         case en_eq:     case en_ne:
         case en_gt:     case en_ge:
         case en_lt:     case en_le:
+        case en_ugt:    case en_uge:
+        case en_ult:    case en_ule:
         case en_asmul:  case en_asdiv:
         case en_asmod:  case en_aslsh:
 		case en_asrsh:
@@ -307,6 +309,7 @@ static void scan(Statement *block)
                     break;
             case st_spinlock:
                     scan(block->s1);
+                    scan(block->s2);
                     break;
         }
         block = block->next;
@@ -372,6 +375,7 @@ void AllocateRegisterVars()
     int reg, mask, rmask;
     AMODE *ap, *ap2;
 	int nn;
+	int cnt;
 
 	reg = 11;
     mask = 0;
@@ -381,7 +385,7 @@ void AllocateRegisterVars()
     while( csp != NULL ) {
         if( OptimizationDesireability(csp) < 3 )	// was < 3
             csp->reg = -1;
-//        else if( csp->duses > csp->uses / 8 && reg < 18 )	// was / 4
+//        else if( csp->duses > csp->uses / 4 && reg < 18 )
         else if( reg < 18 )	// was / 4
             csp->reg = reg++;
         else
@@ -394,17 +398,18 @@ void AllocateRegisterVars()
         csp = csp->next;
     }
 	if( mask != 0 ) {
-		if (bitsset(rmask) < 2) {
-			for (nn = 0; nn < 32; nn++)
-				if (rmask & (0x80000000 >> nn)) {
-					GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(8));
-					GenerateTriadic(op_sw,0,makereg(nn&31),make_indirect(30),NULL);
-				}
+		cnt = 0;
+		GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(bitsset(rmask)*8));
+		for (nn = 0; nn < 32; nn++) {
+			if (rmask & (0x80000000 >> nn)) {
+				GenerateTriadic(op_sw,0,makereg(nn&31),make_indexed(cnt,30),NULL);
+				cnt+=8;
+			}
 		}
-		else {
-			GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(popcnt(mask)*8));
-            GenerateDiadic(op_sm,0,make_indirect(30),make_mask(mask),NULL);
-		}
+		//else {
+		//	GenerateTriadic(op_subui,0,makereg(30),makereg(30),make_immed(popcnt(mask)*8));
+  //          GenerateDiadic(op_sm,0,make_indirect(30),make_mask(mask),NULL);
+		//}
 	}
     save_mask = mask;
     csp = olist;
@@ -495,6 +500,8 @@ void repexpr(ENODE *node)
                 case en_eq:     case en_ne:
                 case en_lt:     case en_le:
                 case en_gt:     case en_ge:
+				case en_ult:	case en_ule:
+				case en_ugt:	case en_uge:
                 case en_cond:   case en_void:
                 case en_asadd:  case en_assub:
                 case en_asmul:  case en_asdiv:

@@ -32,7 +32,8 @@
 FILE            *input = 0,
                 *list = 0,
                 *output = 0;
-
+FILE			*outputG = 0;
+int incldepth = 0;
 int             lineno = 0;
 int             nextlabel = 0;
 int             lastch = 0;
@@ -45,7 +46,7 @@ double          rval = 0.0;
 TABLE           gsyms[257],// = {0,0},
 	           lsyms = {0,0};
 SYM             *lasthead = NULL;
-struct slit     *strtab = 0;
+struct slit     *strtab = NULL;
 int             lc_static = 0;
 int             lc_auto = 0;
 struct snode    *bodyptr = 0;
@@ -62,4 +63,8 @@ int optimize = TRUE;
 int exceptions = FALSE;
 SYM *currentFn = NULL;
 int callsFn = FALSE;
+
+char nmspace[20][100];
+
+
 

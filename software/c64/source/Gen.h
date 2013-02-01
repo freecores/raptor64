@@ -21,6 +21,7 @@ typedef struct amode {
 	unsigned int tempflag : 1;
 	int deep;           /* stack depth on allocation */
 	struct enode *offset;
+	__int8 scale;
 } AMODE;
 
 /*      output code structure   */
@@ -41,7 +42,7 @@ enum e_op {
 		op_tas, op_bmi, op_subu, op_lwr, op_swc, op_loop, op_iret,
 		op_sext32,op_sext16,op_sext8, op_dw, op_cache,
 		op_subui, op_addui, op_sei,
-		op_sw, op_sh, op_sc, op_sb,
+		op_sw, op_sh, op_sc, op_sb, op_outb, op_inb, op_inbu,
 		op_call, op_jal, op_beqi, op_bnei,
 		op_lw, op_lh, op_lc, op_lb, op_ret, op_sm, op_lm,
         op_rts, op_bra, op_bf, op_beq, op_bne, op_blt, op_ble, op_bgt, op_bge,

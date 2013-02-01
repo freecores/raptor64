@@ -234,22 +234,33 @@ Statement *ParseSpinlockStatement()
 	snp = NewStatement(st_spinlock, TRUE); 
 	if (lastst==openpa)
 		NextToken();
-    if( lastst != id ) { 
-        error(ERR_IDEXPECT); 
-        return 0; 
-    }
-    if( (sp = search(lastid,&gsyms[0])) == NULL ) { 
-            error( ERR_UNDEFINED ); 
-			return 0;
-            }
-	NextToken();
+    if( NonCommaExpression(&(snp->exp)) == 0 ) 
+        error(ERR_EXPREXPECT); 
+	snp->incrExpr = 1;
+	snp->initExpr = 0;
+	//if( lastst != id ) { 
+ //       error(ERR_IDEXPECT); 
+ //       return 0; 
+ //   }
+ //   if( (sp = search(lastid,&gsyms[0])) == NULL ) { 
+ //           error( ERR_UNDEFINED ); 
+	//		return 0;
+ //           }
+//	NextToken();
 	if (lastst==comma) {
 		NextToken();
-		snp->exp = GetIntegerExpression();
+		snp->incrExpr = GetIntegerExpression();
+		if (snp->incrExpr < 1 || snp->incrExpr > 15)
+			error(ERR_SEMA_INCR);
+		snp->incrExpr = (int)snp->incrExpr & 15;
+	}
+	if (lastst==comma) {
+		NextToken();
+		snp->initExpr = GetIntegerExpression();
 	}
 	if (lastst==closepa)
 		NextToken();
-    snp->label = sp->name; 
+//    snp->label = sp->name; 
     snp->next = 0; 
 	snp->s1 = ParseStatement();
 	if (lastst==kw_lockfail) {
@@ -265,20 +276,30 @@ Statement *ParseSpinunlockStatement()
 	SYM *sp;
 
     snp = NewStatement(st_spinunlock, TRUE); 
+	snp->incrExpr = 1;
 	if (lastst==openpa)
 		NextToken();
-    if( lastst != id ) { 
-        error(ERR_IDEXPECT); 
-        return 0; 
-    }
-    if( (sp = search(lastid,&gsyms[0])) == NULL ) { 
-        error( ERR_UNDEFINED ); 
-		return 0;
-    }
+    if( expression(&(snp->exp)) == 0 ) 
+        error(ERR_EXPREXPECT); 
+	if (lastst==comma) {
+		NextToken();
+		snp->incrExpr = GetIntegerExpression();
+		if (snp->incrExpr < 1 || snp->incrExpr > 15)
+			error(ERR_SEMA_INCR);
+		snp->incrExpr = (int)snp->incrExpr & 15;
+	}
+    //if( lastst != id ) { 
+    //    error(ERR_IDEXPECT); 
+    //    return 0; 
+    //}
+  //  if( (sp = search(lastid,&gsyms[0])) == NULL ) { 
+  //      error( ERR_UNDEFINED ); 
+		//return 0;
+  //  }
 	NextToken();
 	if (lastst==closepa)
 		NextToken();
-    snp->label = sp->name; 
+    //snp->label = sp->name; 
     snp->next = 0; 
 	return snp;
 }

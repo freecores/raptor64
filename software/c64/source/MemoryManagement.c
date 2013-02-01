@@ -124,7 +124,7 @@ void ReleaseGlobalMemory()
     int             blkcnt;
     bp1 = glbblk;
     blkcnt = 0;
-    while( bp1 != 0 ) {
+    while( bp1 != NULL ) {
         bp2 = bp1->next;
         free(bp1);
         ++blkcnt;
@@ -136,7 +136,7 @@ void ReleaseGlobalMemory()
 //	gsyms.tail = NULL;
 	memset(gsyms,0,sizeof(gsyms));
     printf(" releasing %d bytes global tables.\n",blkcnt * BLKSIZE);
-    strtab = 0;             /* clear literal table */
+    strtab = NULL;             /* clear literal table */
 }
 
 SYM *allocSYM() { return (SYM *)xalloc(sizeof(SYM)); };

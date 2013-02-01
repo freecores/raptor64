@@ -33,6 +33,7 @@ static char *errtextstr[] = {
 	"Floating point",
 	"Illegal type",
 	"Undefined symbol",
+	"Duplicate symbol",
 	"Bad punctuation",
 	"Identifier expected",
 	"No initializer",
@@ -60,7 +61,9 @@ static char *errtextstr[] = {
 	"Expression too complex",
 	"Asm statement too long - break into multiple statements",
 	"Too many case constants",
-	"Attempting to catch a structure - aggregates may not be caught - use a pointer to struct"
+	"Attempting to catch a structure - aggregates may not be caught - use a pointer to struct",
+	"Semaphore increment / decrement limited to 1 to 15."
+	"Semaphore address must be 16 byte aligned."
 };
 
 char *errtext(int errnum)

@@ -28,9 +28,9 @@
 	robfinch@opencores.org
 *******************************************************/
 
-int GetIntegerExpression()       /* simple integer value */
+__int64 GetIntegerExpression()       /* simple integer value */
 { 
-	int temp;
+	__int64 temp;
     SYM *sp;
 
 	if(lastst == id) {

@@ -35,7 +35,7 @@ void align(int n);
 /*      variable initialization         */
 
 enum e_gt { nogen, bytegen, chargen, halfgen, wordgen, longgen };
-enum e_sg { noseg, codeseg, dataseg };
+//enum e_sg { noseg, codeseg, dataseg, bssseg, idataseg };
 
 int	       gentype = nogen;
 int	       curseg = noseg;
@@ -45,8 +45,8 @@ struct oplst {
         char    *s;
         int     ov;
         }       opl[] =
-{       {"move",op_move}, {"add",op_add}, {"addu", op_addu}, {"mov", op_mov},
-		{"add",op_addi}, {"sub",op_sub}, {"subu", op_subu},
+{       {"move",op_move}, {"addu",op_add}, {"addu", op_addu}, {"mov", op_mov},
+		{"add",op_addi}, {"subu",op_sub}, {"subu", op_subu},
                 {"subi",op_subi}, {"and",op_and},
 		{"sext8",op_sext8}, {"sext16", op_sext16}, {"sext32", op_sext32},
 		{"subui",op_subui}, {"shru", op_shru}, {"divsi", op_divsi}, {"not", op_not},
@@ -72,7 +72,7 @@ struct oplst {
                 {"bra",op_bra}, {"pea",op_pea},
 				{"cmp",op_cmpi}, {"tst",op_tst},
 		{"stop", op_stop},
-		{"bmi", op_bmi},
+		{"bmi", op_bmi}, {"outb", op_outb}, {"inb", op_inb}, {"inbu", op_inbu},
 				{"dc",op_dc},
 		{"",op_empty}, {"",op_asm},
                 {0,0} };
@@ -189,16 +189,22 @@ void PutAddressMode(AMODE *ap)
             fprintf(output,"******[a%d]",ap->preg);
             break;
     case am_indx:
-            PutConstant(ap->offset);
+			if (ap->offset->i != 0)
+				PutConstant(ap->offset);
             fprintf(output,"[%s]",RegMoniker(ap->preg));
             break;
     case am_indx2:
-            PutConstant(ap->offset);
-            fprintf(output,"[%s+%s]",RegMoniker(ap->preg),RegMoniker(ap->sreg));
+			if (ap->offset->i != 0)
+				PutConstant(ap->offset);
+			if (ap->scale==1)
+	            fprintf(output,"[%s+%s]",RegMoniker(ap->sreg),RegMoniker(ap->preg));
+			else
+		        fprintf(output,"[%s+%s*%d]",RegMoniker(ap->sreg),RegMoniker(ap->preg),ap->scale);
             break;
     case am_indx3:
-            PutConstant(ap->offset);
-            fprintf(output,"[%s+%s]",RegMoniker(ap->preg),RegMoniker(ap->sreg));
+			if (ap->offset->i != 0)
+	            PutConstant(ap->offset);
+            fprintf(output,"[%s+%s]",RegMoniker(ap->sreg),RegMoniker(ap->preg));
             break;
     case am_mask:
             put_mask(ap->offset);
@@ -317,7 +323,7 @@ void GenerateChar(int val)
 
 void genhalf(int val)
 {
-	if( gentype == bytegen && outcol < 60) {
+	if( gentype == halfgen && outcol < 60) {
         fprintf(output,",%d",val & 0xffffffff);
         outcol += 10;
     }
@@ -337,14 +343,15 @@ void GenerateWord(__int64 val)
     }
     else {
         nl();
-        fprintf(output,"\tdw\t%I64d",val);
+        fprintf(output,"\tdh\t%I64d",val);
         gentype = wordgen;
         outcol = 33;
     }
 }
 
 void GenerateLong(__int64 val)
-{       if( gentype == longgen && outcol < 56) {
+{ 
+	if( gentype == longgen && outcol < 56) {
                 fprintf(output,",%I64d",val);
                 outcol += 10;
                 }
@@ -408,7 +415,7 @@ int     stringlit(char *s)
 {      
 	struct slit *lp;
 
-    ++global_flag;          /* always AllocateRegisterVars from global space. */
+    ++global_flag;          /* always allocate from global space. */
     lp = (struct slit *)xalloc(sizeof(struct slit));
     lp->label = nextlabel++;
     lp->str = litlate(s);
@@ -474,4 +481,28 @@ void dseg()
     }
 }
 
-
+void seg(int sg)
+{    
+	if( curseg != sg) {
+		nl();
+		switch(sg) {
+		case bssseg:
+			fprintf(output,"\tbss\n");
+			fprintf(output,"\talign\t8\n");
+			break;
+		case dataseg:
+			fprintf(output,"\tdata\n");
+			fprintf(output,"\talign\t8\n");
+			break;
+		case idataseg:
+			fprintf(output,"\tidata\n");
+			fprintf(output,"\talign\t8\n");
+			break;
+		case codeseg:
+			fprintf(output,"\tcode\n");
+			fprintf(output,"\talign\t16\n");
+			break;
+		}
+		curseg = sg;
+    }
+}

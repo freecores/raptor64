@@ -31,7 +31,7 @@
 *******************************************************/
 
 FILE            *inclfile[10];
-int             incldepth = 0;
+//int             incldepth = 0;
 int             inclline[10];
 char            *lptr;
 extern char     inpline[132];
@@ -82,6 +82,7 @@ int doinclude()
             rv = getline(incldepth == 0);
             }
     else    {
+			_splitpath(laststr,NULL,NULL,nmspace[incldepth],NULL);
             rv = getline(incldepth == 1);
             lineno = -32768;        /* dont list include files */
             }

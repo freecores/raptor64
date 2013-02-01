@@ -140,6 +140,8 @@ typedef struct typ {
 #define ERR_ASMTOOLONG	32
 #define ERR_TOOMANYCASECONSTANTS	33
 #define ERR_CATCHSTRUCT		34
+#define ERR_SEMA_INCR	35
+#define ERR_SEMA_ADDR	36
 
 /*      alignment sizes         */
 

@@ -21,7 +21,8 @@
 extern FILE             *input,
                         *list,
                         *output;
-
+extern FILE *outputG;
+extern int incldepth;
 extern int              lineno;
 extern int              nextlabel;
 extern int              lastch;
@@ -94,7 +95,7 @@ extern void doinit(SYM *sp);
 // Func.c
 extern void funcbody(SYM *sp);
 // Intexpr.c
-extern int GetIntegerExpression();
+extern __int64 GetIntegerExpression();
 // Expr.c
 extern ENODE *makenode(int nt, ENODE *v1, ENODE *v2);
 extern ENODE *makeinode(int nt, __int64 v1);
@@ -117,7 +118,7 @@ extern void GenerateByte(int val);
 extern void GenerateChar(int val);
 extern void genhalf(int val);
 extern void GenerateWord(__int64 val);
-extern void GenerateLong(int val);
+extern void GenerateLong(__int64 val);
 extern void genstorage(int nbytes);
 extern void GenerateReference(SYM *sp,int offset);
 extern void GenerateLabelReference(int n);
@@ -147,5 +148,8 @@ extern int preprocess();
 extern AMODE *make_indirect(int i);
 extern AMODE *make_indexed(__int64 o, int i);
 extern void GenerateFalseJump(struct enode *node,int label);
+extern char *GetNamespace();
+extern char nmspace[20][100];
+enum e_sg { noseg, codeseg, dataseg, bssseg, idataseg };
 
 

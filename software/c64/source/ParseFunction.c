@@ -175,11 +175,19 @@ void funcbottom()
 
 void ParseFunctionBody(SYM *sp)
 {    
+	char lbl[200];
+
 	needpunc(begin);
     ParseAutoDeclarations();
 	cseg();
 	if (sp->storage_class == sc_static)
-		put_label((unsigned int) sp->value.i);
+	{
+		strcpy(lbl,GetNamespace());
+		strcat(lbl,"_");
+		strcat(lbl,sp->name);
+		gen_strlab(lbl);
+	}
+	//	put_label((unsigned int) sp->value.i);
 	else
 		gen_strlab(sp->name);
 	currentFn = sp;

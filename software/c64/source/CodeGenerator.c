@@ -295,6 +295,7 @@ AMODE *GenerateIndex(ENODE *node)
         ap1->mode = am_indx2;
         ap1->sreg = ap2->preg;
 		ap1->offset = makeinode(en_icon,0);
+		ap1->scale = node->scale;
         return ap1;
     }
     ap1 = GenerateExpression(node->p[0],F_REG | F_IMMED,8);
@@ -322,6 +323,7 @@ AMODE *GenerateIndex(ENODE *node)
     ap1->mode = am_indx2;            /* make indirect */
 	ap1->sreg = ap2->preg;
 	ap1->offset = makeinode(en_icon,0);
+	ap1->scale = node->scale;
 //  ReleaseTempRegister(ap2);                    /* release any temps in ap2 */
 //	ReleaseTempRegister(ap1);
     return ap1;                     /* return indirect */
@@ -478,17 +480,19 @@ AMODE *GenerateBinary(ENODE *node,int flags, int size, int op)
  */
 AMODE *GenerateModDiv(ENODE *node,int flags,int size, int op)
 {
-	AMODE *ap1, *ap2;
+	AMODE *ap1, *ap2, *ap3;
 
     if( node->p[0]->nodetype == en_icon )
          swap_nodes(node);
     ap1 = GenerateExpression(node->p[0],F_REG,8);
     ap2 = GenerateExpression(node->p[1],F_REG | F_IMMED,8);
-	GenerateTriadic(op,0,ap1,ap1,ap2);
-    GenerateDiadic(op_ext,0,ap1,0);
-    MakeLegalAmode(ap1,flags,4);
+	ap3 = GetTempRegister();
+	GenerateTriadic(op,0,ap3,ap1,ap2);
+//    GenerateDiadic(op_ext,0,ap3,0);
+    MakeLegalAmode(ap3,flags,4);
+    ReleaseTempRegister(ap1);
     ReleaseTempRegister(ap2);
-    return ap1;
+    return ap3;
 }
 
 /*
