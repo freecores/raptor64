@@ -1,5 +1,5 @@
 //		$display("%d Fetched pc=%h.%h insn: %h", $time, {pc[63:4],4'h0},pc[3:2], insn);
-		$display("Fetched pc=%h insn: %h", {pc[63:2],2'h0}, insn);
+		$display("Fetched pc=%h insn: %h HWI:%d", {pc[63:2],2'h0}, insn, StatusHWI);
 		casex(insn[31:25])
 		`MISC:
 			begin

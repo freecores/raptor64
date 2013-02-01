@@ -106,11 +106,13 @@ module RaptorPIC
 	output irqo,	// normally connected to the processor irq
 	input nmii,		// nmi input connected to nmi requester
 	output nmio,	// normally connected to the nmi of cpu
-	output reg [3:0] irqenc
+	output [8:0] vecno
 );
+parameter pVECNO = 9'd448;
 
 reg [15:0] ie;		// interrupt enable register
 reg ack1;
+reg [3:0] irqenc;
 
 wire cs = cyc_i && stb_i && adr_i[23:4]==20'hDC_0FF;
 assign vol_o = cs;
@@ -136,6 +138,9 @@ always @(posedge clk_i)
 
 // read registers
 always @(posedge clk_i)
+begin
+	if (irqenc!=4'd0)
+		$display("PIC: %d",irqenc);
 	if (cs)
 		case (adr_i[2:1])
 		2'd0:	dat_o <= {12'b0,irqenc};
@@ -143,6 +148,7 @@ always @(posedge clk_i)
 		endcase
 	else
 		dat_o <= 16'h0000;
+end
 
 assign irqo = irqenc != 4'h0;
 assign nmio = nmii & ie[0];
@@ -169,5 +175,7 @@ always @(posedge clk_i)
 	i15&ie[15]:		irqenc <= 4'd15;
 	default:	irqenc <= 4'd0;
 	endcase
+
+assign vecno = pVECNO|irqenc;
 
 endmodule
