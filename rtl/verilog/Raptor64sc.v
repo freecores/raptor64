@@ -32,6 +32,7 @@
 //`define TLB		1
 //`define SIMD		1
 `define SEGMENTATION	1
+`define SIMPLE_MMU		1
 
 `define RESET_VECTOR	64'hFFFF_FFFF_FFFF_FFF0
 
@@ -52,8 +53,7 @@
 `include "Raptor64_opcodes.v"
 
 module Raptor64sc(rst_i, clk_i, nmi_i, irq_i, irq_no, bte_o, cti_o, bl_o, iocyc_o,
-	cyc_o, stb_o, ack_i, err_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr,
-	advanceI, advanceR, advanceX, advanceM1, advanceM2, advanceW, advanceT
+	cyc_o, stb_o, ack_i, err_i, we_o, sel_o, rsv_o, adr_o, dat_i, dat_o, sys_adv, sys_adr
 );
 parameter IDLE = 5'd1;
 parameter ICACT = 5'd2;
@@ -99,18 +99,11 @@ reg [63:0] dat_o;
 input sys_adv;
 input [63:5] sys_adr;
 
-output advanceI;
-output advanceR;
-output advanceX;
-output advanceM1;
-output advanceM2;
-output advanceW;
-output advanceT;
-
 wire clk;	
 reg [3:0] state;
 reg [5:0] fltctr;
 wire fltdone = fltctr==6'd0;
+reg inta;
 reg bu_im;			// interrupt mask
 reg im1;			// temporary interrupt mask for LM/SM
 reg [7:0] ie_fuse;	// interrupt enable fuse
@@ -128,10 +121,7 @@ reg [63:0] ErrorEPC;
 reg [63:0] EPC [0:15];	// Exception return address
 reg [63:0] IPC [0:15];	// Interrupt return address
 `ifdef SEGMENTATION
-reg [63:16] CS [0:15];	// Code segment
-reg [63:16] DS [0:15];	// Data segment
-reg [63:16] SS [0:15];	// Stack segment
-reg [63:16] ES [0:15];	// BSS segment
+reg [63:12] segs [0:255];
 `endif
 reg dStatusHWI,xStatusHWI,m1StatusHWI,m2StatusHWI;
 reg dIm,xIm,m1Im,m2Im;
@@ -147,7 +137,7 @@ reg dbranch_taken,xbranch_taken;	// flag: 1=branch taken
 reg [63:0] mutex_gate;
 reg [63:0] TBA;			// Trap Base Address
 reg [8:0] dextype,d1extype,xextype,m1extype,m2extype,wextype,textype;
-reg [3:0] epat [0:255];
+reg [3:0] epat [0:255];	// execution pattern table
 reg [7:0] eptr;
 reg [3:0] dAXC,d1AXC,xAXC,m1AXC,m2AXC,wAXC;	// context active per pipeline stage
 wire [3:0] AXC = (eptr==8'h00) ? 4'h0 : epat[eptr];
@@ -185,6 +175,10 @@ integer n;
 reg [63:13] BadVAddr;
 reg [63:13] PageTableAddr;
 reg [63:0] errorAddress;
+wire mmu_ack;
+wire [15:0] mmu_dato;
+wire ack_i1 = ack_i | mmu_ack;
+wire [63:0] dat_i1 = dat_i|{4{mmu_dato}};
 
 wire [6:0] iOpcode = insn[31:25];
 wire [6:0] iFunc = insn[6:0];
@@ -274,37 +268,37 @@ reg [15:0] data16;
 reg [31:0] data32;
 reg [63:0] data64;
 
-always @(sel_o or dat_i)
+always @(sel_o or dat_i1)
 	case(sel_o)
-	8'b00000001:	data8 <= #1 dat_i[ 7: 0];
-	8'b00000010:	data8 <= #1 dat_i[15: 8];
-	8'b00000100:	data8 <= #1 dat_i[23:16];
-	8'b00001000:	data8 <= #1 dat_i[31:24];
-	8'b00010000:	data8 <= #1 dat_i[39:32];
-	8'b00100000:	data8 <= #1 dat_i[47:40];
-	8'b01000000:	data8 <= #1 dat_i[55:48];
-	8'b10000000:	data8 <= #1 dat_i[63:56];
+	8'b00000001:	data8 <= #1 dat_i1[ 7: 0];
+	8'b00000010:	data8 <= #1 dat_i1[15: 8];
+	8'b00000100:	data8 <= #1 dat_i1[23:16];
+	8'b00001000:	data8 <= #1 dat_i1[31:24];
+	8'b00010000:	data8 <= #1 dat_i1[39:32];
+	8'b00100000:	data8 <= #1 dat_i1[47:40];
+	8'b01000000:	data8 <= #1 dat_i1[55:48];
+	8'b10000000:	data8 <= #1 dat_i1[63:56];
 	default:	data8 <= 8'h00;
 	endcase
 
-always @(sel_o or dat_i)
+always @(sel_o or dat_i1)
 	case(sel_o)
-	8'b00000011:	data16 <= #1 dat_i[15: 0];
-	8'b00001100:	data16 <= #1 dat_i[31:16];
-	8'b00110000:	data16 <= #1 dat_i[47:32];
-	8'b11000000:	data16 <= #1 dat_i[63:48];
+	8'b00000011:	data16 <= #1 dat_i1[15: 0];
+	8'b00001100:	data16 <= #1 dat_i1[31:16];
+	8'b00110000:	data16 <= #1 dat_i1[47:32];
+	8'b11000000:	data16 <= #1 dat_i1[63:48];
 	default:	data16 <= #1 16'hDEAD;			
 	endcase
 
-always @(sel_o or dat_i)
+always @(sel_o or dat_i1)
 	case(sel_o)
-	8'b00001111:	data32 <= #1 dat_i[31: 0];
-	8'b11110000:	data32 <= #1 dat_i[63:32];
+	8'b00001111:	data32 <= #1 dat_i1[31: 0];
+	8'b11110000:	data32 <= #1 dat_i1[63:32];
 	default:	data32 <= #1 32'hDEADDEAD;			
 	endcase
 
-always @(sel_o or dat_i)
-	data64 <= #1 dat_i;
+always @(sel_o or dat_i1)
+	data64 <= #1 dat_i1;
 
 assign KernelMode = StatusEXL[xAXC]|StatusHWI;
 
@@ -319,33 +313,49 @@ assign KernelMode = StatusEXL[xAXC]|StatusHWI;
 //-----------------------------------------------------------------------------
 // Segmentation
 //
-// If the upper nybble of the address is 'F' then segmentation is not applied.
-// This allows for bootstrapping and operating system use. Also when in kernel
-// mode the lowest 64k of memory is unsegmented to allow easier access to 
-// operating system variables.
-//
-// Otherwise: the CS register is always in use for code addresses.
-// Which segment is used for data addresses depends on the upper nybble of
-// the address.
+// Paradoxically, it's less expensive to provide an array of 16 segment
+// registers as opposed to several independent registers. The 16 registers
+// are lower cost than the independent CS,DS,ES, and SS registers were.
 //-----------------------------------------------------------------------------
 `ifdef SEGMENTATION
 wire [63:0] spc;		// segmented PC
-reg [63:0] sea;			// segmented effective address
-assign spc = pc[63:60]==4'hF ? pc : {CS[AXC][63:16] + pc[59:16],pc[15:0]};
-always @(ea or KernelMode)
-if (KernelMode && ea[63:16]==48'h0)
-	sea <= ea;
-else
-	case(ea[63:60])
-	4'hF:	sea <= ea;
-	4'hE:	sea <= {SS[xAXC][63:16] + ea[59:16],ea[15:0]};
-	4'hD:	sea <= {ES[xAXC][63:16] + ea[59:16],ea[15:0]};
-	default:
-			sea <= {DS[xAXC][63:16] + ea[59:16],ea[15:0]};
-	endcase
+wire [63:0] sea;		// segmented effective address
+assign spc = {segs[{pc[63:60], AXC}][63:12] + pc[59:12],pc[11:0]};
+assign sea = {segs[{ea[63:60],xAXC}][63:12] + ea[59:12],ea[11:0]};
+initial begin
+	for (n = 0; n < 256; n = n + 1)
+		segs[n] = 52'd0;
+end
 `else
 wire [63:0] spc = pc;
 wire [63:0] sea = ea;
+`endif
+
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
+`ifdef SIMPLE_MMU
+SimpleMMU ummu1
+(
+	.num(3'd0),
+	.rst_i(rst_i),
+	.clk_i(clk),
+	.dma_i(1'b0),
+	.kernel_mode(KernelMode),
+	.cyc_i(iocyc_o),
+	.stb_i(stb_o),
+	.ack_o(mmu_ack),
+	.we_i(we_o),
+	.adr_i(adr_o[23:0]),
+	.dat_i(dat_o[15:0]),
+	.dat_o(mmu_dato),
+	.rclk(~clk),
+	.pc_i(spc[27:0]),
+	.pc_o(ppc[27:0]),
+	.ea_i(sea[27:0]),
+	.ea_o(pea[27:0])
+);
+assign pea[63:28]=sea[63:28];
+assign ppc[63:28]=spc[63:28];
 `endif
 
 //-----------------------------------------------------------------------------
@@ -396,8 +406,10 @@ Raptor64_TLB u26
 );
 
 `else
+`ifndef SIMPLE_MMU
 assign ppc = spc;
 assign pea = sea;
+`endif
 `endif
 
 //-----------------------------------------------------------------------------
@@ -479,7 +491,7 @@ Raptor64_icache_ram u1
 	.adr(icadr[13:0]),
 	.d(err_i ? bevect : dat_i),
 	.rclk(~clk),
-	.pc(pc[13:0]),
+	.pc(ppc[13:0]),
 	.insn(insnbundle)
 );
 
@@ -506,7 +518,7 @@ initial begin
 end
 
 wire [64:14] tgout;
-assign tgout = {tvalid[pc[13:6]],tmem[pc[13:6]]};
+assign tgout = {tvalid[ppc[13:6]],tmem[ppc[13:6]]};
 assign ihit = (tgout=={1'b1,ppc[63:14]});
 assign ibufrdy = ibufadr[63:2]==ppc[63:2];
 
@@ -1095,6 +1107,7 @@ wire lt = $signed(a) < $signed(b);
 wire lti = $signed(a) < $signed(imm);
 wire ltu = a < b;
 wire ltui = a < imm;
+wire [7:0] segndx = xFunc6==`MFSEG ? {xIR[9:6],xAXC} : {a[63:60],xAXC};
 
 always @(xOpcode or xFunc or xFunc5 or a or b or c or imm or xpc or aeqz or xFunc6 or
 	sqrt_out or cntlzo or cntloo or tick or AXC or scale or
@@ -1170,12 +1183,6 @@ casex(xOpcode)
 		`PageTableAddr:	xData1 = {PageTableAddr,13'd0};
 		`BadVAddr:		xData1 = {BadVAddr,13'd0};
 `endif
-`ifdef SEGMENTATION
-		`CS:			xData1 = {CS[xAXC],16'h0};
-		`DS:			xData1 = {DS[xAXC],16'h0};
-		`ES:			xData1 = {ES[xAXC],16'b0};
-		`SS:			xData1 = {SS[xAXC],16'h0};
-`endif
 		`ASID:			xData1 = ASID;
 		`Tick:			xData1 = tick;
 		`EPC:			xData1 = EPC[xAXC];
@@ -1192,6 +1199,10 @@ casex(xOpcode)
 		`PCHISTORIC:	xData1 = pchistoric;
 		default:	xData1 = 64'd0;
 		endcase
+`ifdef SEGMENTATION
+	`MFSEG,`MFSEGI:		xData1 = segs[segndx];
+	`MTSEG:		xData1 = a;
+`endif
 	`OMG:		xData1 = mutex_gate[a[5:0]];
 	`CMG:		xData1 = mutex_gate[a[5:0]];
 	`OMGI:		begin
@@ -1219,6 +1230,9 @@ casex(xOpcode)
 	`MODS:	xData1 = div_r;
 	`BCD_MUL:	xData1 = bcdmulo;
 	`MFEP:	xData1 = epat[a[7:0]];
+`ifdef SEGMENTATION
+	`MTSEGI:		xData1 = b;
+`endif
  	default:	xData1 = 64'd0;
 	endcase
 `ifdef SIMD
@@ -1536,7 +1550,7 @@ wire wForwardingActive = (wRt==dRa || wRt==dRb || wRt==dRc) & !wRtz;
 wire m2ForwardingActive = (m2Rt==dRa || m2Rt==dRb || m2Rt==dRc) & !m2Rtz;
 wire m1ForwardingActive = (m1Rt==dRa || m1Rt==dRb || m1Rt==dRc) & !m1Rtz;
 wire xForwardingActive = (xRt==dRa || xRt==dRb || xRt==dRc) & !xRtz;
-wire memCycleActive = ((iocyc_o & !(ack_i|err_i)) || (cyc_o & !(ack_i|err_i)));
+wire memCycleActive = ((iocyc_o & !(ack_i1|err_i)) || (cyc_o & !(ack_i1|err_i)));
 wire StallI = 1'b0;
 
 // Stall on SWC allows rsf flag to be loaded for the next instruction
@@ -1558,9 +1572,9 @@ wire StallT = (tForwardingActive && ((m1IsLoad & m1IsCacheElement & !dhit) || me
 
 assign advanceT = (state==RUN) && !StallT;
 assign advanceW = advanceT & !StallW;
-assign advanceM2 = advanceW && (cyc_o ? (ack_i|err_i) : 1'b1) && !StallM2;
+assign advanceM2 = advanceW && (cyc_o ? (ack_i1|err_i) : 1'b1) && !StallM2;
 assign advanceM1 = advanceM2 &
-					(iocyc_o ? (ack_i|err_i) : 1'b1) &
+					(iocyc_o ? (ack_i1|err_i) : 1'b1) &
 					((m1IsLoad & m1IsCacheElement) ? dhit : 1'b1) & 
 					!StallM1
 					;
@@ -1801,6 +1815,7 @@ if (rst_i) begin
 	wData <= 64'd0;
 	m1Data <= 64'd0;
 	m2Data <= 64'd0;
+	wData <= 64'd0;
 	icaccess <= 1'b0;
 	dcaccess <= 1'b0;
 	wFip <= 1'b0;
@@ -1809,6 +1824,7 @@ if (rst_i) begin
 	xFip <= 1'b0;
 	dFip <= 1'b0;
 	dirqf <= 1'b0;
+	inta <= 1'b0;
 	dNmi <= 1'b0;
 	xNmi <= 1'b0;
 	m1Nmi <= 1'b0;
@@ -1857,11 +1873,12 @@ else begin
 // Initialize program counters
 // Initialize data tags to zero.
 // Initialize execution pattern register to zero.
+// Initialize segment registers to zero.
 //---------------------------------------------------------
 case(state)
 RESET:
 	begin
-		pc <= `RESET_VECTOR;
+		$display("Resetting %h",adr_o[14:6]);
 		adr_o[14:6] <= adr_o[14:6]+9'd1;
 		if (adr_o[14:6]==9'h1FF) begin
 			dtinit <= 1'b0;
@@ -1869,6 +1886,9 @@ RESET:
 		end
 		epat[a[7:0]] <= b[3:0];		/// b=0, to make this line the same as MTEP
 		a[7:0] <= a[7:0] + 8'h1;
+		wIR[9:6] <= a[7:4];
+		wAXC <= wAXC + 4'd1;
+		segs[{wIR[9:6],wAXC}] <= wData;		// same line as in WB stage, wData =0
 	end
 RUN:
 begin
@@ -1876,6 +1896,7 @@ begin
 ie_fuse <= {ie_fuse[6:0],ie_fuse[0]};		// shift counter
 
 tick <= tick + 64'd1;
+$display("tick: %d", tick[31:0]);
 
 prev_nmi <= nmi_i;
 if (!prev_nmi & nmi_i)
@@ -2303,6 +2324,7 @@ if (advanceX) begin
 		`RR:
 			case(xFunc6)
 			`MTEP:	epat[a[7:0]] <= b[3:0];
+			`MTSEGI:	m1IR[9:6] <= a[63:60];
 			default:	;
 			endcase
 		// JMP and CALL change the program counter immediately in the IF stage.
@@ -3294,12 +3316,6 @@ if (advanceW) begin
 		case(wFunc6)
 		`MTSPR:
 			case(wIR[11:6])
-`ifdef SEGMENTATION
-			`CS:	CS[wAXC][63:16] <= wData[63:16];
-			`DS:	DS[wAXC][63:16] <= wData[63:16];
-			`ES:	ES[wAXC][63:16] <= wData[63:16];
-			`SS:	SS[wAXC][63:16] <= wData[63:16];
-`endif
 			`IPC:	begin
 					$display("mtspr IPC[%d]=%h",wAXC,wData);
 					IPC[wAXC] <= wData;
@@ -3307,7 +3323,18 @@ if (advanceW) begin
 			`EPC:	EPC[wAXC] <= wData;
 			default:	;
 			endcase
+`ifdef SEGMENTATION
+		`MTSEG:		segs[{wIR[9:6],wAXC}] <= wData[63:12];
+`endif
 		endcase
+	`RR:
+		case(wFunc6)
+`ifdef SEGMENTATION
+		`MTSEGI:	segs[{wIR[9:6],wAXC}] <= wData[63:12];
+`endif
+		default:	;
+		endcase
+	default:	;
 	endcase
 	if (wclkoff)
 		clk_en <= 1'b0;
@@ -3435,6 +3462,7 @@ IDLE:
 			cstate <= ICACT1;
 		end
 		else begin
+			$display("Fetching %h", {ppc[31:2],2'b00});
 			cti_o <= 3'b000;
 			bl_o <= 5'd0;
 			adr_o <= {ppc[63:2],2'b00};
@@ -3468,6 +3496,7 @@ ICACT2:
 				insnbuf <= syscall509;
 			else
 				insnbuf <= adr_o[2] ? dat_i[63:32] : dat_i[31:0];
+			$display("Fetched: %h", adr_o[2] ? dat_i[63:32] : dat_i[31:0]);
 			cti_o <= 3'b000;	// back to non-burst mode
 			cyc_o <= 1'b0;
 			stb_o <= 1'b0;

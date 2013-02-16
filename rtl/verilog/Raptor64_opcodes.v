@@ -110,6 +110,9 @@
 `define			INSNKEY			6'd37
 `define			PCHI			6'd62
 `define         PCHISTORIC		6'd63
+`define 	MFSEG	6'd42
+`define 	MTSEG	6'd43
+`define 	MFSEGI	6'd44	
 `define		OMG		6'd50
 `define 	CMG		6'd51
 `define		OMGI	6'd52
@@ -130,6 +133,7 @@
 `define		NOR		6'd13
 `define 	XNOR	6'd14
 `define		ORC		6'd15
+`define		AVG		6'd19
 `define		MIN		6'd20
 `define		MAX		6'd21
 `define		MULU	6'd24
@@ -142,6 +146,8 @@
 `define		MOVNZ	6'd31
 `define		MOVPL	6'd32
 `define		MOVMI	6'd33
+
+`define 	MTSEGI	6'd35
 
 `define 	SHL		6'd40
 `define 	SHRU	6'd41
